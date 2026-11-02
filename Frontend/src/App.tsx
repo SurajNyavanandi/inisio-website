@@ -11,6 +11,7 @@ import { ContactSection } from './components/ContactSection';
 import { WhyChooseInisio } from './components/WhyChooseInisio';
 import { HowItWorks } from './components/HowItWorks';
 import { FAQSection } from './components/FAQSection';
+import { FinalCTA } from './components/FinalCTA';
 import { Footer } from './components/Footer';
 import { FloatingContactButtons } from './components/FloatingContactButtons';
 import { DashboardSkeleton, LoadingSpinner } from './components/common';
@@ -155,6 +156,12 @@ export default function App() {
       if (window.location.hash === '#admin' || window.location.search.includes('admin')) {
         setAdminModalOpen(true);
       }
+      const anchor = window.location.hash.replace('#', '');
+      if (['solutions', 'industries', 'faqs', 'contact'].includes(anchor)) {
+        setTimeout(() => {
+          document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }
     };
     checkAdminHash();
 
@@ -227,11 +234,23 @@ export default function App() {
     // Track initial page view
     recordPageView('Home / Greenfield Landing', currentUser?.email);
 
-    // Keyboard shortcut Ctrl+Shift+A or Cmd+Shift+A to open Admin Desk secretly
+    // Keyboard shortcut Ctrl+Shift+S or Cmd+Shift+S to open Admin Portal
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+      const isModifierActive = e.ctrlKey || e.metaKey;
+      const isShift = e.shiftKey;
+      const key = e.key ? e.key.toLowerCase() : '';
+      const code = e.code || '';
+
+      if (isModifierActive && isShift && (key === 's' || code === 'KeyS')) {
         e.preventDefault();
-        setAdminModalOpen((prev) => !prev);
+        const isAdmin = currentUser && ['superadmin', 'admin', 'admin1', 'admin2', 'admin3'].includes(currentUser.role);
+        if (isAdmin) {
+          setActiveTab('admin-dashboard');
+          window.history.pushState({}, '', '/admin-dashboard');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setAdminModalOpen((prev) => !prev);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -346,9 +365,43 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const scrollToAnchor = (anchorId: string) => {
+    const el = document.getElementById(anchorId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const handleSelectTab = (tab: string, blogSlug?: string) => {
     if (tab === 'assessment') {
       handleOpenAssessment();
+      return;
+    }
+
+    // Single-page anchor navigation (solutions, industries, faqs, contact)
+    const singlePageAnchors = ['solutions', 'industries', 'faqs', 'faq', 'contact', 'how-it-works', 'about'];
+    if (singlePageAnchors.includes(tab)) {
+      const targetAnchor = tab === 'faq' ? 'faqs' : tab === 'how-it-works' || tab === 'about' ? 'solutions' : tab;
+      setEditingProjectForAssessment(null);
+      if (activeTab !== 'home') {
+        setActiveTab('home');
+        window.history.pushState({}, '', `/#${targetAnchor}`);
+        setTimeout(() => scrollToAnchor(targetAnchor), 80);
+      } else {
+        window.history.pushState({}, '', `/#${targetAnchor}`);
+        scrollToAnchor(targetAnchor);
+      }
+      return;
+    }
+
+    if (tab === 'home') {
+      setActiveBlogSlug('');
+      setEditingProjectForAssessment(null);
+      if (activeTab !== 'home') {
+        setActiveTab('home');
+      }
+      window.history.pushState({}, '', '/');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -360,12 +413,12 @@ export default function App() {
         setActiveBlogSlug(blogSlug);
         window.history.pushState({}, '', `/blogs/${blogSlug}`);
       } else {
-        setActiveBlogSlug('');
-        window.history.pushState({}, '', '/blogs');
+        // Direct to blogs section on single-page home
+        setActiveTab('home');
+        window.history.pushState({}, '', '/#faqs');
+        setTimeout(() => scrollToAnchor('faqs'), 80);
+        return;
       }
-    } else if (tab === 'home') {
-      setActiveBlogSlug('');
-      window.history.pushState({}, '', '/');
     } else {
       setActiveBlogSlug('');
       window.history.pushState({}, '', `/${tab}`);
@@ -400,26 +453,69 @@ export default function App() {
         {/* View Switcher */}
         <main className="transition-all duration-300 pt-16 sm:pt-20">
           {activeTab === 'home' && (
-            <div className="animate-in fade-in duration-300 pt-0 font-sans">
-              <Hero
+            <div className="animate-in fade-in duration-300 pt-0 font-sans space-y-0">
+              <div id="hero">
+                <Hero
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                  onExploreIndustries={() => handleSelectTab('industries')}
+                />
+              </div>
+
+              <BankLogosCarousel />
+              <TrustNumbers />
+
+              {/* Solutions & How It Works Anchor Section */}
+              <div id="solutions" className="scroll-mt-20">
+                <HowItWorks
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onNavigateToContact={() => handleSelectTab('contact')}
+                />
+                <WhyChooseInisio
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                />
+                <ProjectActionCards
+                  onNavigateToAbout={() => handleSelectTab('solutions')}
+                  onNavigateToContact={() => handleSelectTab('contact')}
+                />
+              </div>
+
+              {/* Industries & Sectors Anchor Section */}
+              <div id="industries" className="scroll-mt-20">
+                <IndustriesSection
+                  onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                  selectedIndustryName={selectedIndustryForAssessment}
+                />
+              </div>
+
+              <Testimonials />
+
+              {/* FAQs & Insights / Blogs Anchor Section */}
+              <div id="faqs" className="scroll-mt-20">
+                <FAQSection onOpenConsultation={() => setConsultationModalOpen(true)} />
+                <Suspense fallback={<div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                  <LatestBlogs
+                    onOpenAssessment={() => handleOpenAssessment()}
+                    onOpenConsultation={() => setConsultationModalOpen(true)}
+                    onNavigateToBlogs={(slug) => handleSelectTab('blogs', slug)}
+                  />
+                </Suspense>
+              </div>
+
+              {/* Contact Us Anchor Section */}
+              <div id="contact" className="scroll-mt-20">
+                <ContactSection />
+              </div>
+
+              {/* Final Conversion CTA */}
+              <FinalCTA
                 onOpenAssessment={() => handleOpenAssessment()}
                 onOpenConsultation={() => setConsultationModalOpen(true)}
               />
-              <BankLogosCarousel />
-              <TrustNumbers />
-              <ProjectActionCards
-                onNavigateToAbout={() => handleSelectTab('about')}
-                onNavigateToContact={() => handleSelectTab('contact')}
-              />
-              <Testimonials />
-              <FAQSection onOpenConsultation={() => setConsultationModalOpen(true)} />
-              <Suspense fallback={<div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>}>
-                <LatestBlogs
-                  onOpenAssessment={() => handleOpenAssessment()}
-                  onOpenConsultation={() => setConsultationModalOpen(true)}
-                  onNavigateToBlogs={(slug) => handleSelectTab('blogs', slug)}
-                />
-              </Suspense>
             </div>
           )}
 

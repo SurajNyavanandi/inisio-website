@@ -154,6 +154,38 @@ export const sendMailWithResilience = async (mailOptions, metadata = {}) => {
     ...mailOptions,
   };
 
+  // 0. Try Resend API if RESEND_API_KEY is configured
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.RESEND_API_KEY.trim()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: senderFrom || 'Inisio Advisory <onboarding@resend.dev>',
+          to: Array.isArray(recipient) ? recipient : [recipient],
+          subject: mailOptions.subject || 'Inisio Notification',
+          html: mailOptions.html,
+          text: mailOptions.text,
+        }),
+      });
+      const resendData = await resendRes.json().catch(() => ({}));
+      if (resendRes.ok) {
+        console.log(`✅ [Email Dispatched via Resend API] Sent to: ${recipient} (ID: ${resendData?.id || 'sent'})`);
+        if (metadata.otp) {
+          console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient} | Code: ${metadata.otp}`);
+        }
+        return { success: true, messageId: resendData?.id, isFallback: false, otp: metadata.otp };
+      } else {
+        console.warn(`⚠️ [Resend API Error] ${resendData?.message || resendRes.statusText}`);
+      }
+    } catch (resendErr) {
+      console.warn(`⚠️ [Resend Network Error] ${resendErr.message}`);
+    }
+  }
+
   // 1. Try primary custom SMTP if credentials are provided
   if (user && pass) {
     const customTransporter = createCustomTransporter();

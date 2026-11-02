@@ -7,9 +7,9 @@ import { authenticateUser, restrictSuperAdminViewer } from '../middleware/authMi
 import { uploadDocument, listDocuments, downloadDocument } from '../controllers/documentController.js';
 
 const router = express.Router();
+const defaultStorageDir = path.join(process.cwd(), 'Backend', 'storage', 'private');
 const storageRoot = path.resolve(
-  process.env.DOCUMENT_STORAGE_DIR ||
-  (path.join(process.cwd(), 'backend', 'storage', 'private'))
+  process.env.DOCUMENT_STORAGE_DIR || defaultStorageDir
 );
 fs.mkdirSync(storageRoot, { recursive: true });
 
