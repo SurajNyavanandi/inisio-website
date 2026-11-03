@@ -14,7 +14,6 @@ import { FAQSection } from './components/FAQSection';
 import { FinalCTA } from './components/FinalCTA';
 import { Footer } from './components/Footer';
 import { FloatingContactButtons } from './components/FloatingContactButtons';
-import { ConsultationModal } from './components/ConsultationModal';
 import { DashboardSkeleton, LoadingSpinner } from './components/common';
 import { Shield } from 'lucide-react';
 import { canUserStartAssessment } from './utils/membershipStore';
@@ -38,6 +37,7 @@ const BlogsPage = lazy(() => import('./components/BlogsPage').then(m => ({ defau
 const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
 const AdminLeadsModal = lazy(() => import('./components/AdminLeadsModal').then(m => ({ default: m.AdminLeadsModal })));
 const MembershipPlansModal = lazy(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
+const ConsultationModal = lazy(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
 
 export default function App() {
   const [activeBlogSlug, setActiveBlogSlug] = useState<string>(() => {
