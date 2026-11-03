@@ -1,30 +1,4 @@
-export let memoryPayments = [
-  {
-    _id: 'pay_mem_001',
-    orderId: 'order_INISIO_SAMPLE_001',
-    paymentId: 'pay_INISIO_SAMPLE_001',
-    signature: 'sig_mock_verified',
-    userEmail: 'promoter@inisio.com',
-    userName: 'Industrial Promoter',
-    userPhone: '+91 98765 43213',
-    amount: 14999,
-    amountPaise: 1499900,
-    currency: 'INR',
-    status: 'captured',
-    itemType: 'membership',
-    planName: 'Enterprise',
-    billingCycle: 'quarterly',
-    receipt: 'rcpt_inisio_sample_001',
-    invoiceNumber: 'INV-INISIO-2026-0001',
-    paymentMethod: 'UPI / NetBanking',
-    notes: {
-      source: 'Initial Provisioning',
-      entitlements: 'Comprehensive DPR + Bank Liaising + Investor Matching',
-    },
-    createdAt: new Date('2026-01-15T10:30:00.000Z'),
-    updatedAt: new Date('2026-01-15T10:30:00.000Z'),
-  },
-];
+export let memoryPayments = [];
 
 export const getMemoryPayments = () => memoryPayments;
 

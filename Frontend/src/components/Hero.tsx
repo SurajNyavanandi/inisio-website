@@ -229,14 +229,14 @@ export const Hero: React.FC<HeroProps> = ({
                 {/* LEFT CONTENT */}
                 <div className="lg:col-span-6 space-y-5 text-left">
                   
-                  {/* Category / Badge */}
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/80 border border-blue-200 text-blue-700 text-xs font-semibold tracking-wide">
+                  {/* Category / Kicker */}
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                     <span>{activeSlideData.badge}</span>
-                  </div>
+                  </p>
 
                   {/* Headline */}
-                  <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 leading-[1.18] tracking-tight">
+                  <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.18] tracking-tight text-balance">
                     {activeSlideData.headline}
                   </h1>
 
@@ -324,9 +324,9 @@ export const Hero: React.FC<HeroProps> = ({
       {/* INDUSTRIES / SECTORS CAROUSEL */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 sm:mt-8">
         <div className="mb-3 text-center max-w-2xl mx-auto">
-          <span className="inline-block text-[11px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">
-            Sectors & Industries
-          </span>
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-700">
+            Sectors &amp; Industries · Feasibility Coverage
+          </p>
         </div>
 
         {/* Carousel Container with Continuous Motion */}
@@ -373,10 +373,10 @@ export const Hero: React.FC<HeroProps> = ({
       {/* HOW INISIO HELPS WITH PROJECT ASSESSMENT (Simple Everyday English) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10 sm:mt-12 space-y-8">
         <div className="text-center max-w-2xl mx-auto space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-            How Inisio Helps You
-          </span>
-          <h2 className="font-manrope text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-700">
+            End-to-End Methodology · Greenfield Appraisal
+          </p>
+          <h2 className="font-manrope text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             Greenfield Project Assessment Made Simple
           </h2>
           <p className="text-xs sm:text-sm text-slate-600">
@@ -418,10 +418,10 @@ export const Hero: React.FC<HeroProps> = ({
           <div className="relative z-10 space-y-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-800 pb-6">
               <div className="space-y-2 text-left">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                <p className="text-xs font-bold uppercase tracking-widest text-emerald-400 flex items-center gap-1.5">
                   <Award className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>100% Free First Project Assessment</span>
-                </div>
+                  <span>Free Initial Appraisal · Institutional Teaser</span>
+                </p>
                 <h2 className="font-manrope text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
                   Tangible Outputs You Receive in Your Free Report
                 </h2>
@@ -498,10 +498,10 @@ export const Hero: React.FC<HeroProps> = ({
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 sm:mt-16">
         <div className="bg-gradient-to-b from-blue-50/70 to-slate-50 rounded-3xl p-6 sm:p-10 border border-blue-100 shadow-sm space-y-8">
           <div className="text-center max-w-xl mx-auto space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-blue-700 bg-white px-3 py-1 rounded-full border border-blue-200 shadow-2xs">
-              Why Assess With Inisio
-            </span>
-            <h2 className="font-manrope text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight">
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-700">
+              Comparative Appraisal Advantage
+            </p>
+            <h2 className="font-manrope text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Higher Approval. Zero Stress.
             </h2>
             <p className="text-xs sm:text-sm text-slate-600">

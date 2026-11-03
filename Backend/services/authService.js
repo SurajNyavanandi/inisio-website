@@ -50,12 +50,8 @@ const recordSuccessfulLogin = async (userObj, req) => {
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 const DEFAULT_SEED_PASSWORDS = {
-  'inisio2026@gmail.com': 'inisio2026',
-  'junnupravalika59@gmail.com': 'inisio2026',
-  'pravalikajunnu14@gmail.com': 'pravalika123',
-  'ca@gmail.com': 'ca123456',
-  'prosync@gmail.com': 'prosync123',
-  'promoter@inisio.com': 'promoter123',
+  'inisio2026@gmail.com': process.env.ADMIN_PASSWORD || 'inisio2026',
+  'junnupravalika59@gmail.com': process.env.SUPERADMIN_PASSWORD || 'inisio2026',
 };
 
 const shouldAllowMemoryFallback = () => {

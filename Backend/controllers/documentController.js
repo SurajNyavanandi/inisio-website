@@ -5,9 +5,9 @@ import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import { sendError, sendSuccess } from '../utils/responseHandler.js';
 
+const defaultStorageDir = path.join(process.cwd(), 'Backend', 'storage', 'private');
 const storageRoot = path.resolve(
-  process.env.DOCUMENT_STORAGE_DIR ||
-  (path.join(process.cwd(), 'backend', 'storage', 'private'))
+  process.env.DOCUMENT_STORAGE_DIR || defaultStorageDir
 );
 
 const matchesAssignment = (assignment, user, team) => {

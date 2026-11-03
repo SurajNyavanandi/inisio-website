@@ -44,7 +44,7 @@ const AnimatedCounter: React.FC<CounterProps> = ({ end, prefix = '', suffix = ''
   }, [isInView, end]);
 
   return (
-    <span ref={ref} className="font-manrope font-bold text-xl sm:text-2xl text-slate-900 tracking-tight">
+    <span ref={ref} className="font-manrope font-extrabold text-2xl sm:text-3xl text-slate-900 tracking-tight tabular-nums">
       {prefix}
       {count.toLocaleString('en-IN')}
       {suffix}
@@ -69,19 +69,25 @@ export const TrustNumbers: React.FC = () => {
   };
 
   return (
-    <section className="py-5 sm:py-6 bg-slate-50/50 border-y border-slate-200/70 relative">
+    <section className="py-6 sm:py-8 bg-slate-50/60 border-y border-slate-200/80 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full inline-block border border-blue-200/80 w-fit">
-            Proven Track Record Across Pan-India
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+            <span>Proven Track Record · Pan-India Debt Advisory</span>
           </p>
-          <div className="flex flex-wrap items-center gap-3 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
-            <span>• HDFC</span>
-            <span>• ICICI</span>
-            <span>• SBI</span>
-            <span>• Axis</span>
-            <span>• Canara</span>
-            <span>• SIDBI</span>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-500 font-semibold uppercase text-[11px] tracking-wider font-inter">
+            <span>HDFC Bank</span>
+            <span className="text-slate-300">·</span>
+            <span>ICICI Bank</span>
+            <span className="text-slate-300">·</span>
+            <span>SBI</span>
+            <span className="text-slate-300">·</span>
+            <span>Axis Bank</span>
+            <span className="text-slate-300">·</span>
+            <span>Canara Bank</span>
+            <span className="text-slate-300">·</span>
+            <span>SIDBI</span>
           </div>
         </div>
 

@@ -215,7 +215,7 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
         {/* ========================================================================= */}
         {/* 2. Interactive Step Progression Track */}
         {/* ========================================================================= */}
-        <section className="max-w-5xl mx-auto space-y-4">
+        <section className="max-w-7xl mx-auto space-y-4">
           
           <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-200/80">
@@ -291,7 +291,7 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
         {/* ========================================================================= */}
         {/* 3. Detailed 5-Step Timeline (Vertical Connected Flow) */}
         {/* ========================================================================= */}
-        <section className="relative max-w-5xl mx-auto space-y-6 sm:space-y-10">
+        <section className="relative max-w-7xl mx-auto space-y-6 sm:space-y-10">
           
           {/* Central Connecting Line (Desktop) */}
           <div className="hidden md:block absolute left-1/2 top-8 bottom-8 w-0.5 bg-gradient-to-b from-blue-200 via-blue-400 to-blue-200 -translate-x-1/2 z-0" />

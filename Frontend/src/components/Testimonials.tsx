@@ -51,41 +51,45 @@ export const Testimonials: React.FC = () => {
   const currentItem = filteredTestimonials[currentIndex] || TESTIMONIALS[0];
 
   return (
-    <section id="testimonials" className="pt-12 sm:pt-16 pb-8 sm:pb-10 bg-slate-50/50 border-t border-slate-200/80 relative">
+    <section id="testimonials" className="pt-14 sm:pt-20 pb-12 sm:pb-16 bg-slate-50/60 border-t border-slate-200/80 relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Minimalist Header */}
         <div className="text-center max-w-2xl mx-auto mb-10 space-y-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-blue-800 bg-blue-50 px-3.5 py-1 rounded-full border border-blue-200/80">
-            Client Success
-          </span>
-          <h2 className="font-manrope text-xl sm:text-2xl font-bold text-[#111827] tracking-tight">
-            Bank-Sanctioned Greenfield Case Studies
+          <p className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center justify-center gap-1.5">
+            <Award className="w-3.5 h-3.5 text-blue-600" />
+            <span>Client Track Record · Bank-Sanctioned Case Studies</span>
+          </p>
+          <h2 className="font-manrope text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+            Proven Greenfield Project Appraisals
           </h2>
-          <p className="font-inter text-xs sm:text-sm text-[#4B5563]">
-            Verified founder feedback on debt syndication, DPR preparation, and loan approval timelines.
+          <p className="font-inter text-sm text-slate-600 leading-relaxed">
+            Verified founder feedback on debt syndication, DPR preparation, and commercial bank sanction timelines.
           </p>
 
-          {/* Industry Filter Pills */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2">
-            {industries.map((ind) => (
-              <button
-                key={ind}
-                onClick={() => setSelectedIndustry(ind)}
-                className={`px-3 py-1 text-xs font-medium rounded-xl transition-all cursor-pointer ${
-                  selectedIndustry === ind
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-                }`}
-              >
-                {ind}
-              </button>
-            ))}
+          {/* Industry Filter Segmented Control */}
+          <div className="pt-3 flex justify-center">
+            <div className="inline-flex flex-wrap items-center justify-center gap-1 p-1 bg-white border border-slate-200 rounded-xl shadow-2xs">
+              {industries.map((ind) => (
+                <button
+                  type="button"
+                  key={ind}
+                  onClick={() => setSelectedIndustry(ind)}
+                  className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                    selectedIndustry === ind
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  {ind}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Testimonials Interactive Carousel */}
-        <div className="max-w-4xl mx-auto relative px-2 sm:px-12">
+        <div className="max-w-5xl mx-auto relative px-2 sm:px-12">
           <AnimatePresence mode="wait">
             <motion.div
               key={`${currentItem.id}-${currentIndex}`}
@@ -93,9 +97,9 @@ export const Testimonials: React.FC = () => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="bg-white rounded-3xl border border-blue-100/80 p-6 sm:p-10 shadow-sm relative space-y-6"
+              className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-10 shadow-sm relative space-y-6"
             >
-              <Quote className="absolute top-6 right-6 w-12 h-12 text-blue-100/60 pointer-events-none" />
+              <Quote className="absolute top-6 right-6 w-12 h-12 text-blue-100/70 pointer-events-none" />
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* Rating */}
@@ -103,33 +107,33 @@ export const Testimonials: React.FC = () => {
                   {[...Array(currentItem.rating)].map((_, i) => (
                     <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
                   ))}
-                  <span className="text-xs font-bold text-gray-700 ml-1">5.0</span>
+                  <span className="text-xs font-bold text-slate-700 ml-1">5.0 / 5.0</span>
                 </div>
 
-                {/* Funding Badge */}
-                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-900 bg-blue-50 px-3 py-1 rounded-full border border-blue-200/80">
+                {/* Funding Secured */}
+                <div className="text-xs font-bold text-blue-700 flex items-center gap-1.5 uppercase tracking-wider">
                   <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                  {currentItem.fundingAmount} Debt Secured
-                </span>
+                  <span>{currentItem.fundingAmount} Debt Sanctioned</span>
+                </div>
               </div>
 
               {/* Minimalist Quote */}
-              <p className="font-inter text-sm sm:text-base text-gray-800 font-medium leading-relaxed italic">
+              <p className="font-inter text-base sm:text-lg text-slate-800 font-normal leading-relaxed italic">
                 "{currentItem.quote}"
               </p>
 
               {/* Promoter Author Info */}
-              <div className="pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-4 font-inter">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200/80 text-blue-700 font-manrope font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+              <div className="pt-5 border-t border-slate-100 flex items-center justify-between flex-wrap gap-4 font-inter">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 font-manrope font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
                     {currentItem.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <h4 className="font-manrope font-bold text-sm text-gray-900">
+                    <h4 className="font-manrope font-bold text-sm text-slate-900">
                       {currentItem.name}
                     </h4>
-                    <p className="text-xs text-gray-500">
-                      {currentItem.title}, <span className="font-semibold text-gray-700">{currentItem.company}</span>
+                    <p className="text-xs text-slate-500">
+                      {currentItem.title}, <span className="font-semibold text-slate-700">{currentItem.company}</span>
                     </p>
                   </div>
                 </div>

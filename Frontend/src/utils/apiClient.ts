@@ -20,7 +20,7 @@ export const getAuthToken = (): string | null => {
 
 export const getApiBaseUrl = (): string => {
   const env = (import.meta as any).env || {};
-  const configuredUrl = env.VITE_API_URL || env.VITE_BACKEND_URL;
+  const configuredUrl = env.BACKEND_API_URL || env.VITE_BACKEND_API_URL || env.VITE_API_URL || env.VITE_BACKEND_URL;
 
   if (configuredUrl) {
     const baseUrl = configuredUrl.replace(/\/$/, '');
@@ -99,6 +99,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  // Generic HTTP helpers
+  get: <T = any>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { method: 'GET', ...options }),
+  post: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    request<T>(endpoint, {
+      method: 'POST',
+      body: data instanceof FormData ? data : (data !== undefined ? JSON.stringify(data) : undefined),
+      ...options,
+    }),
+  put: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    request<T>(endpoint, {
+      method: 'PUT',
+      body: data instanceof FormData ? data : (data !== undefined ? JSON.stringify(data) : undefined),
+      ...options,
+    }),
+  patch: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    request<T>(endpoint, {
+      method: 'PATCH',
+      body: data instanceof FormData ? data : (data !== undefined ? JSON.stringify(data) : undefined),
+      ...options,
+    }),
+  delete: <T = any>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { method: 'DELETE', ...options }),
+
   // Auth & Email Verification
   auth: {
     login: (credentials: { email: string; password?: string }) =>

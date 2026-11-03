@@ -1,276 +1,180 @@
 import React, { useState } from 'react';
-import { ConsultationFormData } from '../types';
-import { MAIN_SECTORS } from '../data/landingData';
-import { saveLeadRecord } from '../utils/leadStore';
+import { X, Calendar, Clock, CheckCircle2, Phone, Mail, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
 import { validateIndianMobileNumber } from '../utils/validation';
+import { saveLeadRecord } from '../utils/leadStore';
 import api from '../utils/apiClient';
-import {
-  X,
-  PhoneCall,
-  CheckCircle2,
-  ShieldCheck,
-  MessageSquare
-} from 'lucide-react';
 
 interface ConsultationModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const ConsultationModal: React.FC<ConsultationModalProps> = ({
-  isOpen,
-  onClose
-}) => {
-  const [formData, setFormData] = useState(() => {
-    let prefillName = '';
-    let prefillEmail = '';
-    let prefillPhone = '';
-    let prefillCompany = '';
-    try {
-      const saved = localStorage.getItem('inisio_active_user');
-      if (saved) {
-        const u = JSON.parse(saved);
-        prefillName = u.name || '';
-        prefillEmail = u.email || '';
-        prefillPhone = u.phone || '';
-        prefillCompany = u.company || '';
-      }
-    } catch {}
-    return {
-      fullName: prefillName,
-      email: prefillEmail,
-      phone: prefillPhone,
-      companyName: prefillCompany,
-      industry: '',
-      projectCostCr: '',
-      additionalNotes: ''
-    };
+export const ConsultationModal: React.FC<ConsultationModalProps> = ({ isOpen, onClose }) => {
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    date: '',
+    timeSlot: 'Morning (10:00 AM - 1:00 PM)',
+    projectScope: 'Greenfield Debt Syndication'
   });
-
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const targetWhatsAppNumber = '916302026462';
-
-  const constructWhatsAppUrl = () => {
-    const text = `Hello Inisio Advisory Team,\n\nI would like to book a Free Banking Consultation:\n` +
-      `• Full Name: ${formData.fullName}\n` +
-      `• Phone: ${formData.phone}\n` +
-      (formData.email ? `• Email: ${formData.email}\n` : '') +
-      (formData.companyName ? `• Company: ${formData.companyName}\n` : '') +
-      `• Industry Sector: ${formData.industry}\n` +
-      `• Project Budget: ${formData.projectCostCr ? `₹ ${formData.projectCostCr} Cr` : 'N/A'}` +
-      (formData.additionalNotes ? `\n• Notes: ${formData.additionalNotes}` : '');
-
-    return `https://wa.me/${targetWhatsAppNumber}?text=${encodeURIComponent(text)}`;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const phoneValidation = validateIndianMobileNumber(formData.phone);
-    if (!phoneValidation.isValid) {
-      alert(phoneValidation.error);
+    setPhoneError('');
+    const validation = validateIndianMobileNumber(formData.phone);
+    if (!validation.isValid) {
+      setPhoneError(validation.error || 'Please enter a valid 10-digit mobile number');
       return;
     }
 
-    setIsSubmitting(true);
-
+    setLoading(true);
     try {
-      await api.consultations.create({
-        fullName: formData.fullName,
+      await saveLeadRecord({
+        fullName: formData.name,
         email: formData.email,
         phone: formData.phone,
-        companyName: formData.companyName,
-        industry: formData.industry,
-        projectCostCr: formData.projectCostCr,
-        additionalNotes: formData.additionalNotes,
-        assignedAdvisor: 'Prosync',
-        status: 'pending'
-      }).catch(() => undefined);
-
-      await saveLeadRecord({
-        fullName: formData.fullName || 'Consultation Lead',
-        mobile: formData.phone || 'N/A',
-        email: formData.email || 'N/A',
-        projectName: formData.companyName ? `${formData.companyName} Greenfield` : `${formData.industry || 'Advisory'} Project`,
-        industry: formData.industry || 'General Sector',
-        location: 'India',
-        totalCostCr: formData.projectCostCr || 'N/A',
-        loanRequiredCr: 'N/A',
-        source: 'Advisory Call Booked',
-        downloadedPDF: false,
-        notes: formData.additionalNotes,
-        consultationAssignedTo: 'Prosync',
-        consultationStatus: 'Pending'
+        status: 'Consultation Requested',
+        notes: `Preferred Slot: ${formData.date} ${formData.timeSlot} | Scope: ${formData.projectScope}`
       });
-
-      const whatsappUrl = constructWhatsAppUrl();
-      window.open(whatsappUrl, '_blank');
-      setIsSubmitted(true);
+      await api.post('/consultations', formData).catch(() => {});
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitted(true);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in">
-      <div className="glass-card rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-white/80 relative my-8">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200/60 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100/90 text-blue-700 flex items-center justify-center font-bold">
-              <PhoneCall className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-inter">
+      <div className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {submitted ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200">
+              <CheckCircle2 className="w-7 h-7" />
             </div>
-            <div>
-              <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-widest block font-inter">
-                1-on-1 Ex-Banker Session
-              </span>
-              <h3 className="font-manrope font-extrabold text-xl text-gray-900">
-                Book Free Banking Consultation
-              </h3>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 font-bold p-1.5 rounded-xl hover:bg-white/80 transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        {!isSubmitted ? (
-          <form onSubmit={handleSubmit} className="space-y-4 pt-3 font-inter">
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  placeholder="Enter your full name"
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Phone Number *</label>
-                <input
-                  type="tel"
-                  required
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Enter your phone number"
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Email Address</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="name@company.com (for confirmation)"
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Company / Entity Name</label>
-                <input
-                  type="text"
-                  value={formData.companyName}
-                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                  placeholder="e.g. Acme Industries Ltd"
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Industry Sector *</label>
-                <select
-                  required
-                  value={formData.industry}
-                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden font-medium cursor-pointer"
-                >
-                  <option value="">Select Industry Sector</option>
-                  {MAIN_SECTORS.map((sector) => (
-                    <option key={sector} value={sector}>{sector}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-gray-800 block">Project Budget (₹ Cr)</label>
-                <input
-                  type="text"
-                  value={formData.projectCostCr}
-                  onChange={(e) => setFormData({ ...formData, projectCostCr: e.target.value })}
-                  placeholder="e.g. 25 Cr"
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden font-medium"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3.5 px-4 font-bold text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <MessageSquare className="w-5 h-5 fill-current" />
-              <span>Submit & Book Free Consultation</span>
-            </button>
-
-            <p className="text-[11px] text-gray-400 text-center flex items-center justify-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              <span>100% Confidential. Bound by Mutual Non-Disclosure Agreement.</span>
+            <h3 className="text-xl font-bold text-slate-900 font-manrope">Consultation Scheduled!</h3>
+            <p className="text-sm text-slate-600 leading-relaxed max-w-sm mx-auto">
+              Thank you, <strong>{formData.name}</strong>. A Senior Greenfield Banking Advisor has been assigned to your advisory session for <strong>{formData.timeSlot}</strong>.
             </p>
-          </form>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-2.5 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-blue-700 transition-colors cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
         ) : (
-          <div className="text-center py-8 space-y-4 animate-in zoom-in-95">
-            <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-blue-500/20">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-
-            <div className="space-y-1">
-              <h4 className="font-display font-bold text-2xl text-gray-900">Consultation Request Sent!</h4>
-              <p className="text-xs text-gray-600 max-w-sm mx-auto">
-                Thank you, <strong>{formData.fullName}</strong>. Your consultation request has been submitted successfully to our advisory team.
+          <div className="space-y-5">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold mb-2">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>1-on-1 Senior Advisory Session</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-manrope">
+                Book a Greenfield Debt Consultation
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Discuss debt structuring, CMA compliance, DSCR modeling, and bank matching with our underwriting experts.
               </p>
             </div>
 
-            <div className="pt-2">
-              <a
-                href={constructWhatsAppUrl()}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold text-white bg-[#25D366] hover:bg-[#20bd5a] rounded-xl shadow-sm"
-              >
-                <MessageSquare className="w-4 h-4 fill-current" />
-                <span>Open WhatsApp Direct Chat</span>
-              </a>
-            </div>
+            {phoneError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
+                {phoneError}
+              </div>
+            )}
 
-            <button
-              onClick={() => {
-                setIsSubmitted(false);
-                onClose();
-              }}
-              className="px-6 py-2 text-xs font-bold text-gray-600 hover:text-gray-900 border border-gray-300 rounded-xl block mx-auto mt-2"
-            >
-              Close Window
-            </button>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700 block">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Anand Mahindra"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 block">Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@company.in"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 block">Mobile Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="10-digit mobile"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 block">Preferred Date</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 block">Time Slot</label>
+                  <select
+                    value={formData.timeSlot}
+                    onChange={(e) => setFormData({ ...formData, timeSlot: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
+                  >
+                    <option>Morning (10:00 AM - 1:00 PM)</option>
+                    <option>Afternoon (2:00 PM - 5:00 PM)</option>
+                    <option>Evening (5:00 PM - 7:30 PM)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Confirm Consultation</span>}
+              </button>
+            </form>
           </div>
         )}
-
       </div>
     </div>
   );
 };
 
+export default ConsultationModal;

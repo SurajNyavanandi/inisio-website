@@ -648,8 +648,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       feasibilityScore: results.feasibilityScore,
       bankabilityRating: riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : results.bankabilityRating,
       estimatedLoan: results.estimatedLoan,
-      eqPct: reconciled.eqPct,
-      debtPct: reconciled.debtPct,
+      eqPct: reconciled.eqPct ?? 30,
+      debtPct: reconciled.debtPct ?? 70,
       dscrEstimate: calculatedDscr,
       estInterestRate: '8.85% - 9.40%',
       directors,
@@ -1061,7 +1061,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     <div className="min-h-screen bg-slate-50/70 pb-20">
       {/* Header Banner */}
       <section className="bg-slate-900 text-white pt-20 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-3xl mx-auto text-center space-y-3">
+        <div className="max-w-5xl mx-auto text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider">
             <Award className="w-3.5 h-3.5 text-emerald-400" />
             <span>100% Free First Project Assessment</span>
@@ -1070,7 +1070,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight font-manrope">
             {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Assessment'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto font-inter">
+          <p className="text-xs sm:text-sm text-slate-300 max-w-3xl mx-auto font-inter">
             {editingProject
               ? 'Update your project parameters, cost structure, land and risk inputs, and re-evaluate underwriting scores.'
               : 'Assess your project viability, debt-capacity, and bankability rating before approaching lenders and credit committees.'}
@@ -1087,7 +1087,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       </section>
 
       {/* Main Container */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 relative z-20 space-y-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 relative z-20 space-y-6">
 
         {/* Editing Mode Banner */}
         {editingProject && (
@@ -1233,7 +1233,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           <div className="bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden animate-in fade-in duration-300">
             {/* Steps Progress */}
             <div className="bg-slate-900 px-4 sm:px-6 py-4 border-b border-slate-800 text-white">
-              <div className="flex items-center justify-between max-w-2xl mx-auto">
+              <div className="flex items-center justify-between max-w-4xl mx-auto">
                 <button
                   type="button"
                   onClick={() => setStage(1)}
@@ -2710,19 +2710,19 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             otherFinanceCr: financials.otherFinanceCr
           });
 
-          const cCost = finResolved.consultancyCostCr;
-          const mCost = finResolved.machineryCostCr;
-          const lCost = finResolved.civilCostCr;
-          const oCost = finResolved.otherCostsCr;
-          const totalCost = finResolved.totalCostCr;
+          const cCost = Number(finResolved?.consultancyCostCr) || 0;
+          const mCost = Number(finResolved?.machineryCostCr) || 0;
+          const lCost = Number(finResolved?.civilCostCr) || 0;
+          const oCost = Number(finResolved?.otherCostsCr) || 0;
+          const totalCost = Number(finResolved?.totalCostCr) || 0;
           
-          const tLoan = finResolved.termLoanCr;
-          const pContrib = finResolved.promoterContributionCr;
-          const oFin = finResolved.otherFinanceCr;
-          const totalFin = finResolved.totalFinanceCr;
+          const tLoan = Number(finResolved?.termLoanCr) || 0;
+          const pContrib = Number(finResolved?.promoterContributionCr) || 0;
+          const oFin = Number(finResolved?.otherFinanceCr) || 0;
+          const totalFin = Number(finResolved?.totalFinanceCr) || 0;
           
-          const debtPctCalc = finResolved.debtPct.toString();
-          const eqPctCalc = finResolved.eqPct.toString();
+          const debtPctCalc = (finResolved?.debtPct ?? 70).toString();
+          const eqPctCalc = (finResolved?.eqPct ?? 30).toString();
           const dscrValue = calculateSystemDscr({
             industry: formData.industry
           }).toFixed(2);

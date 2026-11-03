@@ -1,147 +1,111 @@
-/**
- * Financial Calculation & Capex Breakdown Utilities
- * Ensures consistent, mathematically reconciled Project Cost & Means of Finance
- * across Assessment, Dashboard, PDF, and DOCX generators.
- */
-
-export interface RawFinancialsInput {
-  totalCostCr?: string | number;
-  loanRequiredCr?: string | number;
-  promoterContribCr?: string | number;
-  debtPct?: number;
-  eqPct?: number;
-  consultancyCostCr?: string | number;
-  machineryCostCr?: string | number;
-  civilCostCr?: string | number;
-  otherCostsCr?: string | number;
-  termLoanCr?: string | number;
-  promoterContributionCr?: string | number;
-  otherFinanceCr?: string | number;
+export function calculateSystemDscr(params: { industry?: string; projectCost?: number }): number {
+  const ind = (params.industry || '').toLowerCase();
+  if (/solar|renewable|clean|power/.test(ind)) return 1.35;
+  if (/manufactur|engineering|steel|metal/.test(ind)) return 1.48;
+  if (/food|rice|agro|dairy/.test(ind)) return 1.45;
+  if (/health|pharma|hospital/.test(ind)) return 1.52;
+  if (/warehouse|logistic/.test(ind)) return 1.38;
+  if (/hotel|hospitality/.test(ind)) return 1.35;
+  return 1.45;
 }
 
 export interface ReconciledFinancials {
-  totalCostCr: number;
-  totalCostFormatted: string;
-  consultancyCostCr: number;
+  debtPct: number;
+  eqPct: number;
   machineryCostCr: number;
   civilCostCr: number;
+  consultancyCostCr: number;
   otherCostsCr: number;
-  consultancyFormatted: string;
-  machineryFormatted: string;
-  civilFormatted: string;
-  otherCostsFormatted: string;
+  totalCostCr: number;
   termLoanCr: number;
   promoterContributionCr: number;
   otherFinanceCr: number;
+  totalFinanceCr: number;
+  machineryFormatted: string;
+  civilFormatted: string;
+  consultancyFormatted: string;
+  otherCostsFormatted: string;
   termLoanFormatted: string;
   promoterContributionFormatted: string;
   otherFinanceFormatted: string;
-  totalFinanceCr: number;
+  totalCostFormatted: string;
   totalFinanceFormatted: string;
-  debtPct: number;
-  eqPct: number;
-  otherPct: number;
+  isBalanced: boolean;
 }
 
-export interface SystemDscrInput {
-  industry: string;
-}
+export function reconcileProjectFinancials(params: {
+  totalCostCr?: number | string;
+  loanRequiredCr?: number | string;
+  promoterContribCr?: number | string;
+  debtPct?: number | string;
+  eqPct?: number | string;
+  consultancyCostCr?: number | string;
+  machineryCostCr?: number | string;
+  civilCostCr?: number | string;
+  otherCostsCr?: number | string;
+  termLoanCr?: number | string;
+  promoterContributionCr?: number | string;
+  otherFinanceCr?: number | string;
+}): ReconciledFinancials {
+  const totalCost = Math.max(0, Number(params.totalCostCr) || 10);
+  const loanReq = Math.max(0, Number(params.loanRequiredCr) || totalCost * 0.7);
+  const promoterContrib = Math.max(0, Number(params.promoterContribCr) || Math.max(0, totalCost - loanReq));
+  const otherFinance = Math.max(0, Number(params.otherFinanceCr) || 0);
 
-export function calculateSystemDscr(input: SystemDscrInput): number {
-  const industry = (input.industry || '').toLowerCase();
-  if (industry.includes('renewable') || industry.includes('solar') || industry.includes('wind') || industry.includes('energy')) return 1.35;
-  if (industry.includes('manufactur') || industry.includes('engineering') || industry.includes('chemical') || industry.includes('textile')) return 1.48;
-  if (industry.includes('food') || industry.includes('rice') || industry.includes('flour') || industry.includes('spice') || industry.includes('agri')) return 1.45;
-  if (industry.includes('health') || industry.includes('pharma')) return 1.50;
-  if (industry.includes('logistic') || industry.includes('warehouse') || industry.includes('transport')) return 1.35;
-  if (industry.includes('hospital') || industry.includes('hotel') || industry.includes('tourism')) return 1.35;
-  if (industry.includes('real estate') || industry.includes('commercial')) return 1.30;
-  return 1.40;
-}
+  const machinery = params.machineryCostCr !== undefined && params.machineryCostCr !== ''
+    ? Number(params.machineryCostCr) || 0
+    : totalCost * 0.55;
 
-/**
- * Reconciles and guarantees valid, non-zero project cost statement and means of finance
- */
-export function reconcileProjectFinancials(input: RawFinancialsInput): ReconciledFinancials {
-  const baseCost = Math.max(0, parseFloat(String(input.totalCostCr || 0)) || 0);
+  const civil = params.civilCostCr !== undefined && params.civilCostCr !== ''
+    ? Number(params.civilCostCr) || 0
+    : totalCost * 0.25;
 
-  let cCost = parseFloat(String(input.consultancyCostCr || '')) || 0;
-  let mCost = parseFloat(String(input.machineryCostCr || '')) || 0;
-  let lCost = parseFloat(String(input.civilCostCr || '')) || 0;
-  let oCost = parseFloat(String(input.otherCostsCr || '')) || 0;
+  const consultancy = params.consultancyCostCr !== undefined && params.consultancyCostCr !== ''
+    ? Number(params.consultancyCostCr) || 0
+    : totalCost * 0.03;
 
-  const componentSum = cCost + mCost + lCost + oCost;
+  const otherCosts = params.otherCostsCr !== undefined && params.otherCostsCr !== ''
+    ? Number(params.otherCostsCr) || 0
+    : Math.max(0, totalCost - machinery - civil - consultancy);
 
-  // If user entered no components or all components sum to 0, generate standard industrial benchmarks
-  if (componentSum <= 0 && baseCost > 0) {
-    cCost = Number((baseCost * 0.05).toFixed(2));
-    mCost = Number((baseCost * 0.60).toFixed(2));
-    lCost = Number((baseCost * 0.25).toFixed(2));
-    oCost = Number((baseCost - cCost - mCost - lCost).toFixed(2));
-  } else if (componentSum > 0 && Math.abs(componentSum - baseCost) > 0.05 && baseCost > 0) {
-    // If only partial components were given, adjust 'other' or scale to match baseCost if requested
-    if (oCost === 0 && (cCost + mCost + lCost) < baseCost) {
-      oCost = Number((baseCost - (cCost + mCost + lCost)).toFixed(2));
+  const totalFinance = loanReq + promoterContrib + otherFinance;
+
+  let debtPct = params.debtPct !== undefined && params.debtPct !== '' ? Number(params.debtPct) : NaN;
+  let eqPct = params.eqPct !== undefined && params.eqPct !== '' ? Number(params.eqPct) : NaN;
+
+  if (isNaN(debtPct) || isNaN(eqPct)) {
+    if (totalCost > 0) {
+      debtPct = Math.round((loanReq / totalCost) * 100);
+      eqPct = Math.max(0, 100 - debtPct);
+    } else {
+      debtPct = 70;
+      eqPct = 30;
     }
   }
 
-  const finalTotalCost = (cCost + mCost + lCost + oCost) > 0 ? (cCost + mCost + lCost + oCost) : baseCost;
-
-  // Means of Finance
-  const defaultDebtPct = input.debtPct !== undefined ? input.debtPct : 75;
-  const defaultEqPct = input.eqPct !== undefined ? input.eqPct : 25;
-
-  let termLoan = parseFloat(String(input.termLoanCr || ''));
-  if (isNaN(termLoan) || termLoan <= 0) {
-    termLoan = parseFloat(String(input.loanRequiredCr || ''));
-    if (isNaN(termLoan) || termLoan <= 0) {
-      termLoan = Number((finalTotalCost * (defaultDebtPct / 100)).toFixed(2));
-    }
-  }
-
-  let promoterEquity = parseFloat(String(input.promoterContributionCr || ''));
-  if (isNaN(promoterEquity) || promoterEquity <= 0) {
-    promoterEquity = parseFloat(String(input.promoterContribCr || ''));
-    if (isNaN(promoterEquity) || promoterEquity <= 0) {
-      promoterEquity = Number((finalTotalCost * (defaultEqPct / 100)).toFixed(2));
-    }
-  }
-
-  const otherFinance = Math.max(0, parseFloat(String(input.otherFinanceCr || 0)) || 0);
-
-  // If total finance is empty or mismatched, balance it to match finalTotalCost
-  let finalTotalFinance = termLoan + promoterEquity + otherFinance;
-  if (finalTotalFinance <= 0 && finalTotalCost > 0) {
-    termLoan = Number((finalTotalCost * (defaultDebtPct / 100)).toFixed(2));
-    promoterEquity = Number((finalTotalCost - termLoan).toFixed(2));
-    finalTotalFinance = termLoan + promoterEquity;
-  }
-
-  const calculatedDebtPct = finalTotalFinance > 0 ? Number(((termLoan / finalTotalFinance) * 100).toFixed(1)) : defaultDebtPct;
-  const calculatedEqPct = finalTotalFinance > 0 ? Number(((promoterEquity / finalTotalFinance) * 100).toFixed(1)) : defaultEqPct;
-  const calculatedOtherPct = finalTotalFinance > 0 ? Number(((otherFinance / finalTotalFinance) * 100).toFixed(1)) : 0;
+  const isBalanced = totalCost === 0 || Math.abs(totalCost - totalFinance) < 0.05;
 
   return {
-    totalCostCr: Number(finalTotalCost.toFixed(2)),
-    totalCostFormatted: finalTotalCost.toFixed(2),
-    consultancyCostCr: Number(cCost.toFixed(2)),
-    machineryCostCr: Number(mCost.toFixed(2)),
-    civilCostCr: Number(lCost.toFixed(2)),
-    otherCostsCr: Number(oCost.toFixed(2)),
-    consultancyFormatted: cCost.toFixed(2),
-    machineryFormatted: mCost.toFixed(2),
-    civilFormatted: lCost.toFixed(2),
-    otherCostsFormatted: oCost.toFixed(2),
-    termLoanCr: Number(termLoan.toFixed(2)),
-    promoterContributionCr: Number(promoterEquity.toFixed(2)),
-    otherFinanceCr: Number(otherFinance.toFixed(2)),
-    termLoanFormatted: termLoan.toFixed(2),
-    promoterContributionFormatted: promoterEquity.toFixed(2),
+    debtPct,
+    eqPct,
+    machineryCostCr: machinery,
+    civilCostCr: civil,
+    consultancyCostCr: consultancy,
+    otherCostsCr: Math.max(0, otherCosts),
+    totalCostCr: totalCost,
+    termLoanCr: loanReq,
+    promoterContributionCr: promoterContrib,
+    otherFinanceCr: otherFinance,
+    totalFinanceCr: totalFinance,
+    machineryFormatted: machinery.toFixed(2),
+    civilFormatted: civil.toFixed(2),
+    consultancyFormatted: consultancy.toFixed(2),
+    otherCostsFormatted: Math.max(0, otherCosts).toFixed(2),
+    termLoanFormatted: loanReq.toFixed(2),
+    promoterContributionFormatted: promoterContrib.toFixed(2),
     otherFinanceFormatted: otherFinance.toFixed(2),
-    totalFinanceCr: Number(finalTotalFinance.toFixed(2)),
-    totalFinanceFormatted: finalTotalFinance.toFixed(2),
-    debtPct: calculatedDebtPct,
-    eqPct: calculatedEqPct,
-    otherPct: calculatedOtherPct
+    totalCostFormatted: totalCost.toFixed(2),
+    totalFinanceFormatted: totalFinance.toFixed(2),
+    isBalanced
   };
 }
