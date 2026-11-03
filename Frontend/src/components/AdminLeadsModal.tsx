@@ -167,25 +167,7 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
         setErrorMsg(data.message || 'Authentication failed. Please verify your administrative credentials.');
       }
     } catch (err: any) {
-<<<<<<< HEAD
       setErrorMsg(err.message || 'Unable to connect to authentication server. Please check your network and credentials.');
-=======
-      // Local fallback for offline/preview resilience
-      if (password === 'admin' || password === 'Password@123' || password === 'inisio2026') {
-        const localUser: AuthUser = {
-          id: 'user_admin_preview',
-          email: cleanEmail,
-          name: 'Administrative Executive',
-          role: 'admin',
-          company: 'Inisio HQ Operations'
-        };
-        localStorage.setItem('inisio_active_user', JSON.stringify(localUser));
-        if (onLoginSuccess) onLoginSuccess(localUser);
-        setIsAuthenticated(true);
-      } else {
-        setErrorMsg(err.message || 'Unable to connect to server. Check your credentials.');
-      }
->>>>>>> f4dc582695723bc6fdb875451437d5d3d94b6429
     } finally {
       setLoading(false);
     }
