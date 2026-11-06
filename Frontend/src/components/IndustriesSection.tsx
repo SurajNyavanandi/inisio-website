@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useState, useEffect } from 'react';
+=======
+import React, { useState } from 'react';
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
 import {
   Factory,
   Sun,
@@ -12,6 +16,7 @@ import {
   ArrowRight,
   TrendingUp,
   ShieldCheck,
+<<<<<<< HEAD
   CheckCircle2,
   Wheat,
   Sprout,
@@ -20,6 +25,10 @@ import {
   LucideIcon
 } from 'lucide-react';
 import api from '../utils/apiClient';
+=======
+  CheckCircle2
+} from 'lucide-react';
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
 
 interface IndustriesSectionProps {
   onSelectIndustryForAssessment: (industryName: string) => void;
@@ -28,6 +37,7 @@ interface IndustriesSectionProps {
   selectedIndustryName?: string;
 }
 
+<<<<<<< HEAD
 const ICON_MAP: Record<string, LucideIcon> = {
   Factory,
   Sun,
@@ -43,6 +53,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Building2,
 };
 
+=======
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
 export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
   onSelectIndustryForAssessment,
   onOpenAssessment,
@@ -50,10 +62,15 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
   selectedIndustryName
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+<<<<<<< HEAD
   const [industriesList, setIndustriesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fallbackIndustries = [
+=======
+
+  const industries = [
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
     {
       id: 'ind-1',
       name: 'Manufacturing & Engineering Unit',
@@ -144,6 +161,7 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
     }
   ];
 
+<<<<<<< HEAD
   useEffect(() => {
     let isMounted = true;
     api.industries.getAll()
@@ -196,6 +214,13 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
   const filtered = selectedCategory === 'All'
     ? activeIndustries
     : activeIndustries.filter(i => i.category === selectedCategory);
+=======
+  const categories = ['All', 'Manufacturing', 'Renewables', 'Agro-Tech', 'Healthcare', 'Logistics', 'Tech & Infra'];
+
+  const filtered = selectedCategory === 'All'
+    ? industries
+    : industries.filter(i => i.category === selectedCategory);
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
 
   return (
     <section id="industries" className="py-16 sm:py-24 bg-white border-t border-slate-200/80">
@@ -228,7 +253,11 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
 
         {/* Filter Badges */}
         <div className="flex flex-wrap gap-2 mb-10 pb-2 border-b border-slate-100">
+<<<<<<< HEAD
           {dynamicCategories.map((cat) => (
+=======
+          {categories.map((cat) => (
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
             <button
               key={cat}
               type="button"

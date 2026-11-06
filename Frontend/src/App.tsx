@@ -28,6 +28,10 @@ const BlogsPage = lazy(() => import('./components/BlogsPage').then(m => ({ defau
 
 // Code-split modals
 const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
+<<<<<<< HEAD
+=======
+const AdminLeadsModal = lazy(() => import('./components/AdminLeadsModal').then(m => ({ default: m.AdminLeadsModal })));
+>>>>>>> 14445cf31be235f8e89167c9b42ddd5e422201f4
 const MembershipPlansModal = lazy(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
 const ConsultationModal = lazy(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
 
