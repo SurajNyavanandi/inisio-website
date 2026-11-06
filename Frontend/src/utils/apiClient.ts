@@ -23,10 +23,15 @@ export const getApiBaseUrl = (): string => {
   const configuredUrl = env.BACKEND_API_URL || env.VITE_BACKEND_API_URL || env.VITE_API_URL || env.VITE_BACKEND_URL;
 
   if (configuredUrl) {
-    const baseUrl = configuredUrl.replace(/\/$/, '');
+    let baseUrl = configuredUrl.replace(/\/$/, '');
+    // Force HTTPS upgrade if host page is loaded via HTTPS
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http:')) {
+      baseUrl = baseUrl.replace(/^http:/, 'https:');
+    }
     return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
   }
 
+  // Always use relative /api in AI Studio preview & production to prevent cross-origin/mixed-content warnings
   return '/api';
 };
 

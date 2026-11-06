@@ -1,4 +1,5 @@
 import Razorpay from 'razorpay';
+import { config } from './env.js';
 
 let razorpayInstance = null;
 
@@ -6,8 +7,8 @@ let razorpayInstance = null;
  * Returns the current Razorpay gateway configuration state.
  */
 export const getRazorpayConfig = () => {
-  const key_id = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
-  const key_secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+  const key_id = config.RAZORPAY_KEY_ID;
+  const key_secret = config.RAZORPAY_KEY_SECRET;
   const webhook_secret = (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
   const isConfigured = Boolean(key_id && key_secret);
 
@@ -24,14 +25,14 @@ export const getRazorpayConfig = () => {
  * Lazily initializes and returns the Razorpay instance.
  */
 export const getRazorpayInstance = () => {
-  const config = getRazorpayConfig();
-  if (!config.isConfigured) {
+  const cfg = getRazorpayConfig();
+  if (!cfg.isConfigured) {
     return null;
   }
   if (!razorpayInstance) {
     razorpayInstance = new Razorpay({
-      key_id: config.key_id,
-      key_secret: config.key_secret,
+      key_id: cfg.key_id,
+      key_secret: cfg.key_secret,
     });
   }
   return razorpayInstance;

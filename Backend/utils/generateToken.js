@@ -1,11 +1,9 @@
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { config } from '../config/env.js';
 
 export const generateToken = (payload) => {
-  const secret = process.env.JWT_SECRET || 'inisio_secure_jwt_secret_token_2026_greenfield';
-  const expiresIn = process.env.JWT_EXPIRE || process.env.JWT_EXPIRES_IN || '7d';
+  const secret = config.JWT_SECRET;
+  const expiresIn = config.JWT_EXPIRES_IN;
 
   return jwt.sign(payload, secret, {
     expiresIn,
@@ -13,7 +11,7 @@ export const generateToken = (payload) => {
 };
 
 export const verifyToken = (token) => {
-  const secret = process.env.JWT_SECRET || 'inisio_secure_jwt_secret_token_2026_greenfield';
+  const secret = config.JWT_SECRET;
   return jwt.verify(token, secret);
 };
 

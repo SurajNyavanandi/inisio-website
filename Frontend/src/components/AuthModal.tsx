@@ -818,9 +818,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           required
                         >
                           <option value="user">Project Promoter / Business Owner</option>
-                          <option value="ca">Chartered Accountant (CA / Auditor)</option>
-                          <option value="dpr_consultant">DPR Consultant / Technical Advisor</option>
-                          <option value="prosync">ProSync Team Partner / Syndication Associate</option>
+                          <option value="ca">Chartered Accountant (CA)</option>
+                          <option value="dpr_consultant">DPR Consultant</option>
+                          <option value="prosync">ProSync Team Partner</option>
                         </select>
                         <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
                       </div>
@@ -828,17 +828,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         {role === 'user' && 'Access financial modeling, bank eligibility scorecards & loan tracking.'}
                         {role === 'ca' && 'Perform CMA verification, audits & debt compliance review.'}
                         {role === 'dpr_consultant' && 'Prepare, review & upload Detailed Project Reports (DPR).'}
-                        {role === 'prosync' && 'Access banking syndication desk, lender liaison & project pipelines.'}
+                        {role === 'prosync' && 'Access banking syndication, lender liaison & project desk.'}
                       </p>
                     </div>
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        {role === 'ca'
-                          ? 'Full Name / CA Member Signatory *'
-                          : role === 'dpr_consultant'
-                          ? 'Consultant Name / Lead Engineer *'
-                          : 'Full Name / Authorized Signatory *'}
+                        Full Name / Authorized Signatory *
                       </label>
                       <div className="relative">
                         <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -847,13 +843,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           required
                           value={name}
                           onChange={(e) => setName(e.target.value)}
-                          placeholder={
-                            role === 'ca'
-                              ? 'e.g. CA Ramesh Chandra, FCA'
-                              : role === 'dpr_consultant'
-                              ? 'e.g. Er. Suresh Varma'
-                              : 'e.g. Ramesh Chandra'
-                          }
+                          placeholder="e.g. Ramesh Chandra"
                           className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                         />
                       </div>
@@ -862,13 +852,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          {role === 'ca'
-                            ? 'CA Firm / Practice Name'
-                            : role === 'dpr_consultant'
-                            ? 'Consultancy Firm Name'
-                            : role === 'prosync'
-                            ? 'Partner Organization'
-                            : 'Company / Entity Name'}
+                          Company / Entity Name
                         </label>
                         <div className="relative">
                           <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -876,13 +860,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             type="text"
                             value={company}
                             onChange={(e) => setCompany(e.target.value)}
-                            placeholder={
-                              role === 'ca'
-                                ? 'e.g. R. Chandra & Associates'
-                                : role === 'dpr_consultant'
-                                ? 'e.g. Apex Techno-Economic'
-                                : 'e.g. Apex Solar Infra Ltd'
-                            }
+                            placeholder="Apex Solar Infra Ltd"
                             className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                           />
                         </div>

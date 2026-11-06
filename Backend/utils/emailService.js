@@ -1,257 +1,73 @@
-import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { config } from '../config/env.js';
 
 dotenv.config();
 
-let cachedTestTransporter = null;
-
 /**
- * Get configured SMTP credentials from environment with robust alias matching
+ * Dispatch transactional email strictly via Resend API using RESEND_API_KEY
  */
-export const getSmtpConfig = () => {
-  const user = (
-    process.env.SMTP_USER ||
-    process.env.EMAIL_USER ||
-    process.env.GMAIL_USER ||
-    process.env.SMTP_USERNAME ||
-    process.env.MAIL_USER ||
-    process.env.MAIL_USERNAME ||
-    ''
-  ).trim();
+export const sendResendEmail = async ({ to, subject, html, text }, metadata = {}) => {
+  const apiKey = (process.env.RESEND_API_KEY || config.RESEND_API_KEY || '').trim();
+  const recipient = Array.isArray(to) ? to : [to];
+  const senderFrom = process.env.EMAIL_FROM || 'Inisio Advisory <onboarding@resend.dev>';
 
-  let pass = (
-    process.env.SMTP_PASS ||
-    process.env.EMAIL_PASS ||
-    process.env.GMAIL_PASS ||
-    process.env.GMAIL_APP_PASSWORD ||
-    process.env.SMTP_PASSWORD ||
-    process.env.MAIL_PASSWORD ||
-    process.env.MAIL_PASS ||
-    ''
-  ).trim();
-
-  // Strip wrapping quotes and internal spaces from 16-char Google App Passwords
-  if (pass) {
-    pass = pass.replace(/^['"]|['"]$/g, '').replace(/\s+/g, '');
-  }
-
-  let host = (
-    process.env.SMTP_HOST ||
-    process.env.EMAIL_HOST ||
-    process.env.MAIL_HOST ||
-    ''
-  ).trim();
-
-  const isGmail = (user && user.toLowerCase().endsWith('@gmail.com')) || (host && host.includes('gmail.com'));
-  if (!host && isGmail) {
-    host = 'smtp.gmail.com';
-  }
-
-  const port = parseInt(
-    process.env.SMTP_PORT ||
-    process.env.EMAIL_PORT ||
-    process.env.MAIL_PORT ||
-    (isGmail ? '587' : '587'),
-    10
-  );
-
-  const isSecure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-  return { user, pass, host, port, isSecure, isGmail };
-};
-
-/**
- * Create custom SMTP transporter with SSL/TLS resilience
- */
-export const createCustomTransporter = (forcePort = null) => {
-  const { user, pass, host, port, isSecure, isGmail } = getSmtpConfig();
-
-  if (!user || !pass || pass === 'your_smtp_password' || pass === 'password') {
-    return null;
-  }
-
-  const effectivePort = forcePort || port;
-  const effectiveSecure = effectivePort === 465;
-
-  try {
-    if (isGmail || host === 'smtp.gmail.com') {
-      return nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user,
-          pass,
-        },
-        tls: {
-          rejectUnauthorized: false,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 8000,
-        socketTimeout: 15000,
-      });
+  if (!apiKey) {
+    console.warn(`[Resend Email] RESEND_API_KEY is not configured in backend environment.`);
+    if (metadata.otp) {
+      console.log(`🔑 [Inisio Verification OTP (Simulated/Dev)] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp} | Valid for 15 minutes`);
     }
-
-    return nodemailer.createTransport({
-      host: host || 'smtp.gmail.com',
-      port: effectivePort,
-      secure: effectiveSecure,
-      auth: {
-        user,
-        pass,
-      },
-      tls: {
-        rejectUnauthorized: false,
-        minVersion: 'TLSv1.2',
-      },
-      connectionTimeout: 10000,
-      greetingTimeout: 8000,
-      socketTimeout: 15000,
-    });
-  } catch (err) {
-    console.warn('⚠️ SMTP Transporter build error:', err.message);
-    return null;
-  }
-};
-
-/**
- * Get or initialize fallback test transporter (fast in-process JSON transport)
- */
-export const getFallbackTransporter = async () => {
-  if (cachedTestTransporter) {
-    return cachedTestTransporter;
-  }
-  cachedTestTransporter = nodemailer.createTransport({ jsonTransport: true });
-  return cachedTestTransporter;
-};
-
-/**
- * Send an email with automatic error resilience, retry on alternative port, and delivery confirmation
- */
-export const sendMailWithResilience = async (mailOptions, metadata = {}) => {
-  const recipient = mailOptions.to;
-  const { user, pass } = getSmtpConfig();
-
-  if (!user || !pass || pass === 'your_smtp_password' || pass === 'password') {
-    const errorMessage = 'SMTP credentials are not configured. Set SMTP_USER and SMTP_PASS (or GMAIL_APP_PASSWORD) in the backend environment before enabling email delivery.';
-    console.warn(`[Email] ${errorMessage}`);
     return {
       success: false,
-      isFallback: true,
-      otp: metadata.otp || null,
-      error: errorMessage,
       configured: false,
+      otp: metadata.otp || null,
+      error: 'RESEND_API_KEY missing in environment',
     };
   }
 
-  // For Gmail and custom SMTP, the "from" header must match the authenticated account
-  const senderFrom = user
-    ? (process.env.EMAIL_FROM && process.env.EMAIL_FROM.includes(user)
-        ? process.env.EMAIL_FROM
-        : `"Inisio Capital Advisory" <${user}>`)
-    : (process.env.EMAIL_FROM || '"Inisio Capital Advisory" <no-reply@inisio.com>');
-  
-  const optionsWithFrom = {
-    from: senderFrom,
-    ...mailOptions,
-  };
-
-  // 0. Try Resend API if RESEND_API_KEY is configured
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const resendRes = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY.trim()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: senderFrom || 'Inisio Advisory <onboarding@resend.dev>',
-          to: Array.isArray(recipient) ? recipient : [recipient],
-          subject: mailOptions.subject || 'Inisio Notification',
-          html: mailOptions.html,
-          text: mailOptions.text,
-        }),
-      });
-      const resendData = await resendRes.json().catch(() => ({}));
-      if (resendRes.ok) {
-        console.log(`✅ [Email Dispatched via Resend API] Sent to: ${recipient} (ID: ${resendData?.id || 'sent'})`);
-        if (metadata.otp) {
-          console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient} | Code: ${metadata.otp}`);
-        }
-        return { success: true, messageId: resendData?.id, isFallback: false, otp: metadata.otp };
-      } else {
-        console.warn(`⚠️ [Resend API Error] ${resendData?.message || resendRes.statusText}`);
-      }
-    } catch (resendErr) {
-      console.warn(`⚠️ [Resend Network Error] ${resendErr.message}`);
-    }
-  }
-
-  // 1. Try primary custom SMTP if credentials are provided
-  if (user && pass) {
-    const customTransporter = createCustomTransporter();
-    if (customTransporter) {
-      try {
-        const sendPromise = customTransporter.sendMail(optionsWithFrom);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('SMTP_TIMEOUT')), 12000)
-        );
-
-        const info = await Promise.race([sendPromise, timeoutPromise]);
-        console.log(`✅ [Email Dispatched to SMTP] OTP successfully sent to: ${recipient} (Message ID: ${info?.messageId || 'sent'})`);
-        if (metadata.otp) {
-          console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient} | Code: ${metadata.otp} | Valid for 15 mins`);
-        }
-        return { success: true, messageId: info?.messageId, isFallback: false, otp: metadata.otp };
-      } catch (smtpErr) {
-        const errMsg = smtpErr?.message || '';
-        console.warn(`⚠️ [SMTP Primary Dispatch Error] ${errMsg}`);
-        
-        // 2. Retry on alternative port (587 STARTTLS or 465 SSL) if timeout or connection refused
-        if (errMsg.includes('TIMEOUT') || errMsg.includes('ECONNREFUSED') || errMsg.includes('ETIMEDOUT')) {
-          try {
-            console.log(`🔄 [SMTP Fallback] Retrying email delivery to ${recipient} via alternative port 587...`);
-            const fallbackPortTransporter = createCustomTransporter(587);
-            if (fallbackPortTransporter) {
-              const retryPromise = fallbackPortTransporter.sendMail(optionsWithFrom);
-              const retryTimeout = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('SMTP_RETRY_TIMEOUT')), 8000)
-              );
-              const retryInfo = await Promise.race([retryPromise, retryTimeout]);
-              console.log(`✅ [Email Dispatched via Port 587] OTP sent to: ${recipient}`);
-              return { success: true, messageId: retryInfo?.messageId, isFallback: false, otp: metadata.otp };
-            }
-          } catch (retryErr) {
-            console.warn(`⚠️ [SMTP Port 587 Retry Error] ${retryErr.message}`);
-          }
-        }
-
-        if (errMsg.includes('535') || errMsg.includes('Username and Password') || errMsg.includes('Invalid login') || errMsg.includes('BadCredentials')) {
-          console.warn(`🔑 [Gmail App Password Notice] Gmail requires a 16-character Google App Password from https://myaccount.google.com/apppasswords`);
-        }
-      }
-    }
-  }
-
-  // 3. Fallback to in-process transport to ensure registration/login is never blocked
   try {
-    const fallback = await getFallbackTransporter();
-    const info = await fallback.sendMail(optionsWithFrom);
-    
-    if (metadata.otp) {
-      console.log(`🔑 [Inisio Verification OTP (Simulated/Dev)] Recipient: ${recipient} | Code: ${metadata.otp} | Valid for 15 minutes`);
-    }
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: senderFrom,
+        to: recipient,
+        subject: subject || 'Inisio Capital Notification',
+        html,
+        text,
+      }),
+    });
 
-    return { success: true, messageId: info?.messageId || 'simulated-sent', isFallback: true, otp: metadata.otp, configured: false };
-  } catch (err) {
-    if (metadata.otp) {
-      console.log(`🔑 [Inisio Verification OTP (Direct Output)] Recipient: ${recipient} | Code: ${metadata.otp}`);
+    const data = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+      console.log(`✅ [Email Dispatched via Resend API] Sent to: ${recipient.join(', ')} (Message ID: ${data?.id || 'sent'})`);
+      if (metadata.otp) {
+        console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp}`);
+      }
+      return { success: true, messageId: data?.id, otp: metadata.otp, configured: true };
+    } else {
+      console.warn(`⚠️ [Resend API Error] ${data?.message || response.statusText}`);
+      if (metadata.otp) {
+        console.log(`🔑 [Inisio Verification OTP (Fallback)] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp}`);
+      }
+      return { success: false, error: data?.message || 'Resend API Error', otp: metadata.otp, configured: true };
     }
-    return { success: false, simulated: true, isFallback: true, otp: metadata.otp, error: err.message, configured: false };
+  } catch (err) {
+    console.warn(`⚠️ [Resend Network Exception] ${err.message}`);
+    if (metadata.otp) {
+      console.log(`🔑 [Inisio Verification OTP (Network Fallback)] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp}`);
+    }
+    return { success: false, error: err.message, otp: metadata.otp, configured: true };
   }
 };
 
+export const sendMailWithResilience = sendResendEmail;
+
 /**
- * Send an Email Verification OTP
+ * Send Email Verification OTP
  */
 export const sendVerificationEmail = async ({ to, name, otp }) => {
   const htmlContent = `
@@ -265,7 +81,6 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
   <div style="max-width: 540px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0;">
     
-    <!-- Brand Header -->
     <div style="background-color: #1e40af; padding: 28px 32px; text-align: center;">
       <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background-color: #ffffff; color: #1e40af; border-radius: 12px; font-weight: 900; font-size: 20px; margin-bottom: 12px;">
         IN
@@ -278,7 +93,6 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
       </p>
     </div>
 
-    <!-- Body -->
     <div style="padding: 32px;">
       <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 0; margin-bottom: 16px;">
         Account Verification Code
@@ -288,7 +102,6 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
         Thank you for registering on the Inisio Greenfield Project Finance Portal. Please use the 6-digit verification code below to activate your account and access your advisory desk:
       </p>
 
-      <!-- OTP Box -->
       <div style="background-color: #eff6ff; border: 2px dashed #3b82f6; border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 24px;">
         <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1d4ed8; font-family: monospace;">
           ${otp}
@@ -314,7 +127,7 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
 </html>
   `;
 
-  const result = await sendMailWithResilience(
+  const result = await sendResendEmail(
     {
       to,
       subject: `Your Inisio Verification Code: ${otp}`,
@@ -331,7 +144,8 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
  * Send a Password Reset Link and OTP Email
  */
 export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
-  const safeResetLink = resetLink || `http://localhost:3000/?action=reset-password&email=${encodeURIComponent(to)}&otp=${otp}`;
+  const baseUrl = (process.env.APP_URL || process.env.FRONTEND_URL || 'https://inisio.in').replace(/\/$/, '');
+  const safeResetLink = resetLink || `${baseUrl}/?action=reset-password&email=${encodeURIComponent(to)}&otp=${otp}`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -344,7 +158,6 @@ export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a;">
   <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); border: 1px solid #e2e8f0;">
     
-    <!-- Brand Header -->
     <div style="background-color: #1e3a8a; padding: 28px 32px; text-align: center;">
       <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background-color: #ffffff; color: #1e3a8a; border-radius: 12px; font-weight: 900; font-size: 20px; margin-bottom: 12px;">
         IN
@@ -357,7 +170,6 @@ export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
       </p>
     </div>
 
-    <!-- Body -->
     <div style="padding: 32px;">
       <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 0; margin-bottom: 16px;">
         Password Reset Request
@@ -367,14 +179,12 @@ export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
         We received a request to reset the password associated with your Inisio account (<strong>${to}</strong>). Click the secure link below to set a new password:
       </p>
 
-      <!-- Primary Action Button -->
       <div style="text-align: center; margin: 28px 0;">
         <a href="${safeResetLink}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-weight: 700; font-size: 14px; padding: 14px 32px; border-radius: 10px; text-decoration: none; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);">
           Reset Your Password &rarr;
         </a>
       </div>
 
-      <!-- Backup OTP Section -->
       <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin: 24px 0; text-align: center;">
         <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
           Or Enter This 6-Digit Reset Code Manually
@@ -387,7 +197,6 @@ export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
         </p>
       </div>
 
-      <!-- Fallback Direct Link -->
       <p style="font-size: 12px; line-height: 18px; color: #64748b; margin-bottom: 8px;">
         If the button above does not work, copy and paste this link into your web browser:
       </p>
@@ -411,7 +220,7 @@ export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
 </html>
   `;
 
-  const result = await sendMailWithResilience(
+  const result = await sendResendEmail(
     {
       to,
       subject: `Reset Your Inisio Password: ${otp}`,
@@ -468,7 +277,6 @@ The Inisio Advisory Team`;
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #0f172a; line-height: 1.6;">
   <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); border: 1px solid #e2e8f0;">
     
-    <!-- Brand Header -->
     <div style="background-color: #1e3a8a; padding: 28px 32px; text-align: center;">
       <div style="display: inline-block; width: 44px; height: 44px; line-height: 44px; background-color: #ffffff; color: #1e3a8a; border-radius: 12px; font-weight: 900; font-size: 20px; margin-bottom: 12px;">
         IN
@@ -481,7 +289,6 @@ The Inisio Advisory Team`;
       </p>
     </div>
 
-    <!-- Body -->
     <div style="padding: 32px;">
       <p style="font-size: 15px; color: #0f172a; margin-top: 0; margin-bottom: 16px;">
         Hi <strong>${promoterName}</strong>,
@@ -521,7 +328,7 @@ The Inisio Advisory Team`;
 </html>
   `;
 
-  const result = await sendMailWithResilience(
+  const result = await sendResendEmail(
     {
       to,
       subject: `Your Inisio Consultation is Confirmed`,
@@ -535,12 +342,11 @@ The Inisio Advisory Team`;
 };
 
 /**
- * Send Contact Enquiry Alert to Admin and Confirmation to User
+ * Send Contact Enquiry Alert
  */
 export const sendContactEnquiryAlertEmail = async (enquiry) => {
-  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || process.env.SMTP_USER || 'advisory@inisio.in';
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'advisory@inisio.in';
   
-  // 1. User Acknowledgment Email
   const userHtml = `
 <!DOCTYPE html>
 <html>
@@ -569,7 +375,6 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
 </html>
   `;
 
-  // 2. Admin Alert Email
   const adminHtml = `
 <!DOCTYPE html>
 <html>
@@ -620,7 +425,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
 
   try {
     if (enquiry.email) {
-      sendMailWithResilience(
+      sendResendEmail(
         {
           to: enquiry.email,
           subject: `We have received your enquiry - Inisio Project Advisory`,
@@ -631,7 +436,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
       ).catch(() => {});
     }
 
-    sendMailWithResilience(
+    sendResendEmail(
       {
         to: adminEmail,
         subject: `[New Enquiry] ${enquiry.name} - ${enquiry.subject || 'Project Inquiry'}`,
@@ -644,9 +449,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
 };
 
 export default {
-  getSmtpConfig,
-  createCustomTransporter,
-  getFallbackTransporter,
+  sendResendEmail,
   sendMailWithResilience,
   sendVerificationEmail,
   sendPasswordResetEmail,

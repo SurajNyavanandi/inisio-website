@@ -77,11 +77,24 @@ export const Navbar: React.FC<NavbarProps> = ({
     setUserDropdownOpen(false);
   };
 
-  const getDashboardTabForRole = (_role?: string) => 'user-dashboard';
+  const getDashboardTabForRole = (role: string) => {
+    if (role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3') return 'admin-dashboard';
+    if (role === 'ca') return 'ca-dashboard';
+    if (role === 'dpr_consultant') return 'dpr-dashboard';
+    if (role === 'prosync_admin' || role === 'prosync') return 'prosync-dashboard';
+    return 'user-dashboard';
+  };
 
-  const getRoleLabel = (role?: string) => {
-    if (role === 'admin' || role === 'superadmin') return 'Administrator';
-    return 'Promoter';
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'superadmin': return 'Super Admin';
+      case 'admin': return 'Executive Admin';
+      case 'ca': return 'Chartered Accountant';
+      case 'dpr_consultant': return 'DPR Consultant';
+      case 'prosync':
+      case 'prosync_admin': return 'ProSync Desk';
+      default: return 'Promoter';
+    }
   };
 
   return (

@@ -102,7 +102,7 @@ export const resolveIpLocation = async (ip) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-    const response = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,regionName,city,query`, {
+    const response = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
     });
