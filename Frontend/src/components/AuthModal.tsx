@@ -16,9 +16,6 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
-  UserCheck,
-  FileCheck2,
-  Headphones,
   KeyRound,
   RotateCw,
   Send,
@@ -59,7 +56,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [role, setRole] = useState<UserRole>('user');
   const [showPassword, setShowPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showRolesGuide, setShowRolesGuide] = useState(false);
 
   // Email verification / Reset OTP states
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -822,9 +818,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           required
                         >
                           <option value="user">Project Promoter / Business Owner</option>
-                          <option value="ca">Chartered Accountant (CA)</option>
-                          <option value="dpr_consultant">DPR Consultant</option>
-                          <option value="prosync">ProSync Team Partner</option>
+                          <option value="ca">Chartered Accountant (CA / Auditor)</option>
+                          <option value="dpr_consultant">DPR Consultant / Technical Advisor</option>
+                          <option value="prosync">ProSync Team Partner / Syndication Associate</option>
                         </select>
                         <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
                       </div>
@@ -832,13 +828,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         {role === 'user' && 'Access financial modeling, bank eligibility scorecards & loan tracking.'}
                         {role === 'ca' && 'Perform CMA verification, audits & debt compliance review.'}
                         {role === 'dpr_consultant' && 'Prepare, review & upload Detailed Project Reports (DPR).'}
-                        {role === 'prosync' && 'Access banking syndication, lender liaison & project desk.'}
+                        {role === 'prosync' && 'Access banking syndication desk, lender liaison & project pipelines.'}
                       </p>
                     </div>
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
-                        Full Name / Authorized Signatory *
+                        {role === 'ca'
+                          ? 'Full Name / CA Member Signatory *'
+                          : role === 'dpr_consultant'
+                          ? 'Consultant Name / Lead Engineer *'
+                          : 'Full Name / Authorized Signatory *'}
                       </label>
                       <div className="relative">
                         <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -847,7 +847,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           required
                           value={name}
                           onChange={(e) => setName(e.target.value)}
-                          placeholder="e.g. Ramesh Chandra"
+                          placeholder={
+                            role === 'ca'
+                              ? 'e.g. CA Ramesh Chandra, FCA'
+                              : role === 'dpr_consultant'
+                              ? 'e.g. Er. Suresh Varma'
+                              : 'e.g. Ramesh Chandra'
+                          }
                           className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                         />
                       </div>
@@ -856,7 +862,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Company / Entity Name
+                          {role === 'ca'
+                            ? 'CA Firm / Practice Name'
+                            : role === 'dpr_consultant'
+                            ? 'Consultancy Firm Name'
+                            : role === 'prosync'
+                            ? 'Partner Organization'
+                            : 'Company / Entity Name'}
                         </label>
                         <div className="relative">
                           <Building className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -864,7 +876,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             type="text"
                             value={company}
                             onChange={(e) => setCompany(e.target.value)}
-                            placeholder="Apex Solar Infra Ltd"
+                            placeholder={
+                              role === 'ca'
+                                ? 'e.g. R. Chandra & Associates'
+                                : role === 'dpr_consultant'
+                                ? 'e.g. Apex Techno-Economic'
+                                : 'e.g. Apex Solar Infra Ltd'
+                            }
                             className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                           />
                         </div>
@@ -969,54 +987,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </>
             )}
           </form>
-
-          {/* Roles & Permissions Breakdown Collapsible Guide */}
-          <div className="pt-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setShowRolesGuide(!showRolesGuide)}
-              className="w-full flex items-center justify-between text-left py-2 px-3 bg-slate-50 hover:bg-slate-100 rounded-xl text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2 text-slate-600">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                <span>Roles &amp; Permissions Guide</span>
-              </span>
-              {showRolesGuide ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
-            </button>
-
-            {showRolesGuide && (
-              <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] space-y-2.5 animate-in fade-in">
-                <div className="flex gap-2 items-start">
-                  <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-slate-900">Promoter / Borrower:</strong>
-                    <p className="text-slate-500">Run Greenfield project assessments, calculate bankability &amp; DSCR, track DPR &amp; CMA preparation, view sanction milestones.</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 items-start">
-                  <FileCheck2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-slate-900">CA Auditor Desk:</strong>
-                    <p className="text-slate-500">Financial auditing, DSCR &amp; Capex vetting, review means of finance, issue TEFR and CA Clearance Certificates.</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 items-start">
-                  <Headphones className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-slate-900">Prosync Advisory Desk:</strong>
-                    <p className="text-slate-500">Manage 1-on-1 discovery calls, track borrower notes, update consultation statuses, and liaison with lending institutions.</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 items-start">
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="text-slate-900">Platform Administrator:</strong>
-                    <p className="text-slate-500">Complete oversight across all project leads, consultant allocation, audit logs, and master export capabilities.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
       </div>

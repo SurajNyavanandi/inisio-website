@@ -27,13 +27,6 @@ export const getApiBaseUrl = (): string => {
     return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
   }
 
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname.toLowerCase();
-    if (hostname.includes('vercel.app') || hostname.includes('netlify.app') || hostname.includes('github.dev')) {
-      return 'https://inisio-web.onrender.com/api';
-    }
-  }
-
   return '/api';
 };
 
@@ -99,6 +92,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  // Generic HTTP helpers
+  get: <T = any>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { method: 'GET', ...options }),
+  post: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    request<T>(endpoint, {
+      method: 'POST',
+      body: data instanceof FormData ? data : (data !== undefined ? JSON.stringify(data) : undefined),
+      ...options,
+    }),
+  put: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    request<T>(endpoint, {
+      method: 'PUT',
+      body: data instanceof FormData ? data : (data !== undefined ? JSON.stringify(data) : undefined),
+      ...options,
+    }),
+  patch: <T = any>(endpoint: string, data?: any, options?: RequestInit) =>
+    request<T>(endpoint, {
+      method: 'PATCH',
+      body: data instanceof FormData ? data : (data !== undefined ? JSON.stringify(data) : undefined),
+      ...options,
+    }),
+  delete: <T = any>(endpoint: string, options?: RequestInit) => request<T>(endpoint, { method: 'DELETE', ...options }),
+
   // Auth & Email Verification
   auth: {
     login: (credentials: { email: string; password?: string }) =>

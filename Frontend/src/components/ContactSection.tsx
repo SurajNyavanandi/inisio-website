@@ -47,7 +47,7 @@ export const ContactSection: React.FC = () => {
     }).catch(() => undefined);
 
     // 2. Save into Live Admin Lead Store (shows on Admin Dashboard immediately)
-    saveLeadRecord({
+    await saveLeadRecord({
       fullName: formData.fullName || 'Contact Lead',
       mobile: formData.phone || 'N/A',
       email: formData.email || 'N/A',

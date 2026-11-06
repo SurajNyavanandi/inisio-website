@@ -648,8 +648,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       feasibilityScore: results.feasibilityScore,
       bankabilityRating: riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : results.bankabilityRating,
       estimatedLoan: results.estimatedLoan,
-      eqPct: reconciled.eqPct,
-      debtPct: reconciled.debtPct,
+      eqPct: reconciled.eqPct ?? 30,
+      debtPct: reconciled.debtPct ?? 70,
       dscrEstimate: calculatedDscr,
       estInterestRate: '8.85% - 9.40%',
       directors,
@@ -2710,19 +2710,19 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             otherFinanceCr: financials.otherFinanceCr
           });
 
-          const cCost = finResolved.consultancyCostCr;
-          const mCost = finResolved.machineryCostCr;
-          const lCost = finResolved.civilCostCr;
-          const oCost = finResolved.otherCostsCr;
-          const totalCost = finResolved.totalCostCr;
+          const cCost = Number(finResolved?.consultancyCostCr) || 0;
+          const mCost = Number(finResolved?.machineryCostCr) || 0;
+          const lCost = Number(finResolved?.civilCostCr) || 0;
+          const oCost = Number(finResolved?.otherCostsCr) || 0;
+          const totalCost = Number(finResolved?.totalCostCr) || 0;
           
-          const tLoan = finResolved.termLoanCr;
-          const pContrib = finResolved.promoterContributionCr;
-          const oFin = finResolved.otherFinanceCr;
-          const totalFin = finResolved.totalFinanceCr;
+          const tLoan = Number(finResolved?.termLoanCr) || 0;
+          const pContrib = Number(finResolved?.promoterContributionCr) || 0;
+          const oFin = Number(finResolved?.otherFinanceCr) || 0;
+          const totalFin = Number(finResolved?.totalFinanceCr) || 0;
           
-          const debtPctCalc = finResolved.debtPct.toString();
-          const eqPctCalc = finResolved.eqPct.toString();
+          const debtPctCalc = (finResolved?.debtPct ?? 70).toString();
+          const eqPctCalc = (finResolved?.eqPct ?? 30).toString();
           const dscrValue = calculateSystemDscr({
             industry: formData.industry
           }).toFixed(2);
