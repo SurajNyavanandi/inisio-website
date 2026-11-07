@@ -14,7 +14,11 @@ import {
 import { MAIN_SECTORS } from '../data/landingData';
 import { validateIndianMobileNumber } from '../utils/validation';
 
-export const ContactSection: React.FC = () => {
+interface ContactSectionProps {
+  isStandalone?: boolean;
+}
+
+export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = false }) => {
   const [submitted, setSubmitted] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [formData, setFormData] = useState({
@@ -84,9 +88,15 @@ export const ContactSection: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5 text-blue-600" />
             <span>Senior Advisory Desk · Greenfield Capital</span>
           </p>
-          <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.2] tracking-tight">
-            Book Your Free Advisory Call
-          </h2>
+          {isStandalone ? (
+            <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.2] tracking-tight">
+              Contact Inisio Capital Advisory | Hyderabad Desk
+            </h1>
+          ) : (
+            <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.2] tracking-tight">
+              Book Your Free Advisory Call
+            </h2>
+          )}
           <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
             Discuss your greenfield project feasibility, capital requirements, and bank loan syndication with our senior advisory team.
           </p>

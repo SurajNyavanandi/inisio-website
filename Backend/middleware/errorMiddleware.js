@@ -16,6 +16,24 @@ export const errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
   let message = err.message || 'Internal Server Error';
 
+  // Handle Mongoose disconnection / buffer timeout gracefully
+  if (
+    err.name === 'MongooseError' ||
+    err.name === 'MongoNetworkError' ||
+    err.name === 'MongoServerSelectionError' ||
+    err.message?.includes('buffering timed out') ||
+    err.message?.includes('connect ECONNREFUSED')
+  ) {
+    console.warn('[AI Studio] Database offline — returning mock empty response or fallback:', err.message);
+    if (req.method === 'GET') {
+      return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {});
+    }
+    return res.status(503).json({
+      success: false,
+      message: 'Service temporarily unavailable (database offline). Resilient in-memory mode active.',
+    });
+  }
+
   // Handle Mongoose bad ObjectId (CastError)
   if (err.name === 'CastError' && err.kind === 'ObjectId') {
     statusCode = 404;

@@ -891,21 +891,8 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     throw error;
   }
 
-  // Determine base application URL with HTTPS protocol resolution
-  let rawBaseUrl = (
-    clientOrigin ||
-    process.env.APP_URL ||
-    process.env.FRONTEND_URL ||
-    ''
-  ).replace(/\/$/, '');
-
-  if (!rawBaseUrl) {
-    rawBaseUrl = process.env.NODE_ENV === 'production' ? 'https://inisio.in' : 'http://localhost:3000';
-  } else if (process.env.NODE_ENV === 'production' && rawBaseUrl.startsWith('http:')) {
-    rawBaseUrl = rawBaseUrl.replace(/^http:/, 'https:');
-  }
-
-  const baseUrl = rawBaseUrl;
+  // Determine base application URL from incoming request origin
+  const baseUrl = (clientOrigin || 'http://localhost:3000').replace(/\/$/, '');
 
   const resetLink = `${baseUrl}/?action=reset-password&email=${encodeURIComponent(cleanEmail)}&otp=${otp}&token=${otp}`;
 

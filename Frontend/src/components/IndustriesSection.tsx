@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Factory,
   Sun,
@@ -12,25 +12,50 @@ import {
   ArrowRight,
   TrendingUp,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Wheat,
+  Sprout,
+  Activity,
+  Building2,
+  LucideIcon
 } from 'lucide-react';
+import api from '../utils/apiClient';
 
 interface IndustriesSectionProps {
   onSelectIndustryForAssessment: (industryName: string) => void;
   onOpenAssessment: () => void;
   onOpenConsultation: () => void;
   selectedIndustryName?: string;
+  isStandalone?: boolean;
 }
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  Factory,
+  Sun,
+  Utensils,
+  Pill,
+  Warehouse,
+  Hotel,
+  Server,
+  Shirt,
+  Wheat,
+  Sprout,
+  Activity,
+  Building2,
+};
 
 export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
   onSelectIndustryForAssessment,
   onOpenAssessment,
   onOpenConsultation,
-  selectedIndustryName
+  selectedIndustryName,
+  isStandalone = false
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [industriesList, setIndustriesList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const industries = [
+  const fallbackIndustries = [
     {
       id: 'ind-1',
       name: 'Manufacturing & Engineering Unit',
@@ -121,11 +146,58 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
     }
   ];
 
-  const categories = ['All', 'Manufacturing', 'Renewables', 'Agro-Tech', 'Healthcare', 'Logistics', 'Tech & Infra'];
+  useEffect(() => {
+    let isMounted = true;
+    api.industries.getAll()
+      .then((data) => {
+        if (!isMounted) return;
+        const list = Array.isArray(data) ? data : (data as any)?.data || [];
+        if (list.length > 0) {
+          const normalized = list.map((item: any, idx: number) => {
+            const iconKey = item.iconName || '';
+            const matchedIcon = ICON_MAP[iconKey] || Factory;
+            return {
+              id: item.slug || item._id || `ind_${idx}`,
+              name: item.name,
+              category: item.category || 'Manufacturing',
+              icon: matchedIcon,
+              ticketSize: item.avgLoanSize || item.projectCostRange || '₹5 Cr – ₹100 Cr',
+              dscr: item.dscrNorms || '≥ 1.35',
+              subsidy: Array.isArray(item.subsidiesAndSchemes) && item.subsidiesAndSchemes.length > 0
+                ? item.subsidiesAndSchemes[0]
+                : 'Central & State Industrial Policy Subsidies',
+              feasibility: item.feasibilityRate ? `${item.feasibilityRate} Sanction Success` : '92% Sanction Success',
+              description: item.description || item.overview || '',
+            };
+          });
+          setIndustriesList(normalized);
+        } else {
+          setIndustriesList(fallbackIndustries);
+        }
+      })
+      .catch((err) => {
+        console.warn('API fetch for industries deferred, using fallback:', err);
+        if (isMounted) setIndustriesList(fallbackIndustries);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const activeIndustries = industriesList.length > 0 ? industriesList : fallbackIndustries;
+
+  const dynamicCategories = [
+    'All',
+    ...Array.from(new Set(activeIndustries.map((i) => i.category))).filter(Boolean)
+  ];
 
   const filtered = selectedCategory === 'All'
-    ? industries
-    : industries.filter(i => i.category === selectedCategory);
+    ? activeIndustries
+    : activeIndustries.filter(i => i.category === selectedCategory);
 
   return (
     <section id="industries" className="py-16 sm:py-24 bg-white border-t border-slate-200/80">
@@ -138,9 +210,15 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               <span>Sector-Specific Underwriting Criteria</span>
             </p>
-            <h2 className="font-manrope text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              Greenfield Project Sectors &amp; Bankability Benchmarks
-            </h2>
+            {isStandalone ? (
+              <h1 className="font-manrope text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                Greenfield Project Sectors &amp; Bankability Benchmarks
+              </h1>
+            ) : (
+              <h2 className="font-manrope text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                Greenfield Project Sectors &amp; Bankability Benchmarks
+              </h2>
+            )}
             <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
               Every industrial domain has distinct debt-service norms, promoter contribution thresholds, and state subsidy schemes. Select your sector to evaluate bank loan feasibility.
             </p>
@@ -158,7 +236,7 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
 
         {/* Filter Badges */}
         <div className="flex flex-wrap gap-2 mb-10 pb-2 border-b border-slate-100">
-          {categories.map((cat) => (
+          {dynamicCategories.map((cat) => (
             <button
               key={cat}
               type="button"

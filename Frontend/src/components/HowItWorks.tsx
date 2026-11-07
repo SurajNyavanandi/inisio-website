@@ -32,6 +32,7 @@ interface HowItWorksProps {
   onOpenConsultation: () => void;
   onOpenAssessment: () => void;
   onNavigateToContact: () => void;
+  isStandalone?: boolean;
 }
 
 interface StepItem {
@@ -148,7 +149,8 @@ export const HOW_IT_WORKS_STEPS: StepItem[] = [
 export const HowItWorks: React.FC<HowItWorksProps> = ({
   onOpenConsultation,
   onOpenAssessment,
-  onNavigateToContact
+  onNavigateToContact,
+  isStandalone = false
 }) => {
   const [activeStep, setActiveStep] = useState<number>(1);
 
@@ -165,9 +167,15 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
             <span>Project Assessment Platform (Not a Bank)</span>
           </div>
 
-          <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 tracking-tight leading-snug">
-            Your Step-by-Step Journey to <span className="text-blue-600 font-bold">Institutional Funding Readiness</span>
-          </h1>
+          {isStandalone ? (
+            <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 tracking-tight leading-snug">
+              Your Step-by-Step Journey to <span className="text-blue-600 font-bold">Institutional Funding Readiness</span>
+            </h1>
+          ) : (
+            <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-semibold text-slate-900 tracking-tight leading-snug">
+              Your Step-by-Step Journey to <span className="text-blue-600 font-bold">Institutional Funding Readiness</span>
+            </h2>
+          )}
 
           <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl mx-auto font-normal">
             From your business idea to funding readiness, Inisio guides you through every stage with expert advisory, bank-ready documentation, and complete project finance support.

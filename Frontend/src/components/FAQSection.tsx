@@ -11,10 +11,12 @@ import {
 
 interface FAQSectionProps {
   onOpenConsultation: () => void;
+  isStandalone?: boolean;
 }
 
 export const FAQSection: React.FC<FAQSectionProps> = ({
-  onOpenConsultation
+  onOpenConsultation,
+  isStandalone = false
 }) => {
   const [openId, setOpenId] = useState<string>('faq_1');
 
@@ -32,9 +34,15 @@ export const FAQSection: React.FC<FAQSectionProps> = ({
             <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
             <span>Frequently Asked Questions · Project Appraisal</span>
           </p>
-          <h2 className="font-manrope text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-snug">
-            Everything You Need to Know About <span className="text-blue-600">Greenfield Assessment &amp; Bankability</span>
-          </h2>
+          {isStandalone ? (
+            <h1 className="font-manrope text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-snug">
+              Frequently Asked Questions: <span className="text-blue-600">Greenfield Assessment &amp; Bankability</span>
+            </h1>
+          ) : (
+            <h2 className="font-manrope text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-snug">
+              Everything You Need to Know About <span className="text-blue-600">Greenfield Assessment &amp; Bankability</span>
+            </h2>
+          )}
           <p className="font-inter text-sm text-slate-600 leading-relaxed">
             Clear, transparent answers on DPR drafting, CMA modeling, bankability ratings, and institutional debt underwriting.
           </p>

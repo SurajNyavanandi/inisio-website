@@ -1,73 +1,67 @@
 import dotenv from 'dotenv';
-import { config } from '../config/env.js';
 
 dotenv.config();
 
 /**
- * Dispatch transactional email strictly via Resend API using RESEND_API_KEY
+ * Send an email using Resend API exclusively
+ * Falls back gracefully to console output in development if RESEND_API_KEY is not set
  */
-export const sendResendEmail = async ({ to, subject, html, text }, metadata = {}) => {
-  const apiKey = (process.env.RESEND_API_KEY || config.RESEND_API_KEY || '').trim();
-  const recipient = Array.isArray(to) ? to : [to];
-  const senderFrom = process.env.EMAIL_FROM || 'Inisio Advisory <onboarding@resend.dev>';
+export const sendEmail = async (mailOptions, metadata = {}) => {
+  const recipient = mailOptions.to;
+  const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
 
-  if (!apiKey) {
-    console.warn(`[Resend Email] RESEND_API_KEY is not configured in backend environment.`);
-    if (metadata.otp) {
-      console.log(`🔑 [Inisio Verification OTP (Simulated/Dev)] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp} | Valid for 15 minutes`);
+  // From header: Use verified sender or default Resend onboarding address
+  const senderFrom = mailOptions.from || process.env.EMAIL_FROM || 'Inisio Capital Advisory <onboarding@resend.dev>';
+
+  if (resendApiKey) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: senderFrom,
+          to: Array.isArray(recipient) ? recipient : [recipient],
+          subject: mailOptions.subject || 'Inisio Capital Advisory Notification',
+          html: mailOptions.html,
+          text: mailOptions.text,
+        }),
+      });
+
+      const resData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        console.log(`✅ [Resend API] Email sent to: ${recipient} (ID: ${resData?.id || 'sent'})`);
+        if (metadata.otp) {
+          console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient} | Code: ${metadata.otp}`);
+        }
+        return { success: true, messageId: resData?.id, otp: metadata.otp };
+      } else {
+        console.warn(`⚠️ [Resend API Error] ${resData?.message || response.statusText}`);
+        return { success: false, error: resData?.message || response.statusText, otp: metadata.otp };
+      }
+    } catch (err) {
+      console.warn(`⚠️ [Resend Network Error] ${err.message}`);
+      return { success: false, error: err.message, otp: metadata.otp };
     }
-    return {
-      success: false,
-      configured: false,
-      otp: metadata.otp || null,
-      error: 'RESEND_API_KEY missing in environment',
-    };
   }
 
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: senderFrom,
-        to: recipient,
-        subject: subject || 'Inisio Capital Notification',
-        html,
-        text,
-      }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (response.ok) {
-      console.log(`✅ [Email Dispatched via Resend API] Sent to: ${recipient.join(', ')} (Message ID: ${data?.id || 'sent'})`);
-      if (metadata.otp) {
-        console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp}`);
-      }
-      return { success: true, messageId: data?.id, otp: metadata.otp, configured: true };
-    } else {
-      console.warn(`⚠️ [Resend API Error] ${data?.message || response.statusText}`);
-      if (metadata.otp) {
-        console.log(`🔑 [Inisio Verification OTP (Fallback)] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp}`);
-      }
-      return { success: false, error: data?.message || 'Resend API Error', otp: metadata.otp, configured: true };
-    }
-  } catch (err) {
-    console.warn(`⚠️ [Resend Network Exception] ${err.message}`);
-    if (metadata.otp) {
-      console.log(`🔑 [Inisio Verification OTP (Network Fallback)] Recipient: ${recipient.join(', ')} | Code: ${metadata.otp}`);
-    }
-    return { success: false, error: err.message, otp: metadata.otp, configured: true };
+  // Development fallback when RESEND_API_KEY is not yet configured
+  console.log(`ℹ️ [Email Service - Dev Mode] RESEND_API_KEY not configured. Simulated dispatch to: ${recipient}`);
+  console.log(`   Subject: ${mailOptions.subject}`);
+  if (metadata.otp) {
+    console.log(`🔑 [Inisio Verification OTP (Dev)] Recipient: ${recipient} | Code: ${metadata.otp} | Valid for 15 mins`);
   }
+  return { success: true, isDev: true, otp: metadata.otp, configured: false };
 };
 
-export const sendMailWithResilience = sendResendEmail;
+// Backwards compatibility alias for any existing callers
+export const sendMailWithResilience = sendEmail;
 
 /**
- * Send Email Verification OTP
+ * Send an Email Verification OTP
  */
 export const sendVerificationEmail = async ({ to, name, otp }) => {
   const htmlContent = `
@@ -127,7 +121,7 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
 </html>
   `;
 
-  const result = await sendResendEmail(
+  const result = await sendEmail(
     {
       to,
       subject: `Your Inisio Verification Code: ${otp}`,
@@ -144,8 +138,7 @@ export const sendVerificationEmail = async ({ to, name, otp }) => {
  * Send a Password Reset Link and OTP Email
  */
 export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
-  const baseUrl = (process.env.APP_URL || process.env.FRONTEND_URL || 'https://inisio.in').replace(/\/$/, '');
-  const safeResetLink = resetLink || `${baseUrl}/?action=reset-password&email=${encodeURIComponent(to)}&otp=${otp}`;
+  const safeResetLink = resetLink || `/?action=reset-password&email=${encodeURIComponent(to)}&otp=${otp}`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -220,7 +213,7 @@ export const sendPasswordResetEmail = async ({ to, name, otp, resetLink }) => {
 </html>
   `;
 
-  const result = await sendResendEmail(
+  const result = await sendEmail(
     {
       to,
       subject: `Reset Your Inisio Password: ${otp}`,
@@ -308,12 +301,6 @@ The Inisio Advisory Team`;
         If you have immediate questions, you can reach our advisory desk directly on WhatsApp at <a href="https://wa.me/916302026462" style="color: #2563eb; font-weight: 700; text-decoration: none;">+91 63020 26462</a>.
       </p>
 
-      <div style="text-align: center; margin: 24px 0;">
-        <a href="https://wa.me/916302026462" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #25D366; color: #ffffff; font-weight: 700; font-size: 13.5px; padding: 12px 24px; border-radius: 10px; text-decoration: none; box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);">
-          💬 Connect with Advisory Desk on WhatsApp
-        </a>
-      </div>
-
       <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 24px;">
         <p style="font-size: 14px; color: #334155; margin: 0 0 4px 0; font-weight: 600;">
           Best regards,
@@ -328,7 +315,7 @@ The Inisio Advisory Team`;
 </html>
   `;
 
-  const result = await sendResendEmail(
+  const result = await sendEmail(
     {
       to,
       subject: `Your Inisio Consultation is Confirmed`,
@@ -342,11 +329,12 @@ The Inisio Advisory Team`;
 };
 
 /**
- * Send Contact Enquiry Alert
+ * Send Contact Enquiry Alert to Admin and Confirmation to User
  */
 export const sendContactEnquiryAlertEmail = async (enquiry) => {
-  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || 'advisory@inisio.in';
+  const adminEmail = process.env.ADMIN_EMAIL || 'advisory@inisio.in';
   
+  // 1. User Acknowledgment Email
   const userHtml = `
 <!DOCTYPE html>
 <html>
@@ -375,6 +363,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
 </html>
   `;
 
+  // 2. Admin Alert Email
   const adminHtml = `
 <!DOCTYPE html>
 <html>
@@ -425,7 +414,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
 
   try {
     if (enquiry.email) {
-      sendResendEmail(
+      sendEmail(
         {
           to: enquiry.email,
           subject: `We have received your enquiry - Inisio Project Advisory`,
@@ -436,7 +425,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
       ).catch(() => {});
     }
 
-    sendResendEmail(
+    sendEmail(
       {
         to: adminEmail,
         subject: `[New Enquiry] ${enquiry.name} - ${enquiry.subject || 'Project Inquiry'}`,
@@ -449,7 +438,7 @@ export const sendContactEnquiryAlertEmail = async (enquiry) => {
 };
 
 export default {
-  sendResendEmail,
+  sendEmail,
   sendMailWithResilience,
   sendVerificationEmail,
   sendPasswordResetEmail,

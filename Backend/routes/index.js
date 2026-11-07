@@ -15,6 +15,16 @@ import paymentRoutes from './paymentRoutes.js';
 const router = express.Router();
 
 // Root API health & metadata
+router.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Inisio Greenfield Consultancy REST API',
+    version: '1.0.0',
+    documentation: '/api/health',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 router.get('/health', (req, res) => {
   res.json({
     status: 'ok',

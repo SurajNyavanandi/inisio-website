@@ -13,37 +13,13 @@ const PORT = process.env.PORT || 5000;
 // Connect to MongoDB Atlas
 connectDB().catch(() => {});
 
-// CORS Configuration supporting inisio.vercel.app and localhost:5173
-const allowedOrigins = [
-  'https://inisio.vercel.app',
-  'https://www.inisio.vercel.app',
-  'http://inisio.vercel.app',
-  'http://www.inisio.vercel.app',
-  'https://inisio-web.vercel.app',
-  'http://inisio-web.vercel.app',
-  'http://localhost:5173',
-  'https://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:3000',
-  'http://localhost:5000',
-  process.env.CLIENT_URL,
-  process.env.FRONTEND_URL,
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-  process.env.RENDER_EXTERNAL_URL,
-].filter(Boolean);
-
+// CORS Configuration supporting CORS_ORIGIN
+const corsOrigin = process.env.CORS_ORIGIN || '*';
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests or same-origin
-    if (!origin) return callback(null, true);
-
-    const isExplicitlyAllowed = allowedOrigins.includes(origin);
-    const isVercel = origin.endsWith('.vercel.app') || origin.includes('vercel.app');
-    const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
-
-    if (isExplicitlyAllowed || isVercel || isLocalhost) {
-      return callback(null, true);
-    }
+    if (!origin || corsOrigin === '*') return callback(null, true);
+    const origins = corsOrigin.split(',').map((s) => s.trim());
+    if (origins.includes(origin)) return callback(null, true);
     return callback(null, true);
   },
   credentials: true,
