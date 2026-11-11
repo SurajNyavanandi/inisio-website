@@ -1,19 +1,26 @@
 import Industry from '../models/Industry.js';
 import { DEFAULT_INDUSTRIES } from '../data/defaultData.js';
 import { isDBConnected } from '../config/db.js';
+import cache from '../utils/cache.js';
 
 let memoryIndustries = [...DEFAULT_INDUSTRIES];
+const CACHE_KEY = 'all_industries';
 
 export const getAllIndustries = async () => {
+  const cached = cache.get(CACHE_KEY);
+  if (cached) return cached;
+
+  let results = memoryIndustries;
   if (isDBConnected()) {
     try {
-      const list = await Industry.find({}).sort({ category: 1, name: 1 });
-      return list || [];
+      const list = await Industry.find({}).sort({ category: 1, name: 1 }).lean();
+      if (list && list.length > 0) results = list;
     } catch (err) {
       console.warn('MongoDB query failed in getAllIndustries, using memory fallback:', err.message);
     }
   }
-  return memoryIndustries;
+  cache.set(CACHE_KEY, results, 5 * 60 * 1000);
+  return results;
 };
 
 export const getIndustryBySlug = async (slug) => {
@@ -33,6 +40,7 @@ export const getIndustryBySlug = async (slug) => {
 };
 
 export const createIndustry = async (data) => {
+  cache.del(CACHE_KEY);
   if (isDBConnected()) {
     try {
       return await Industry.create(data);

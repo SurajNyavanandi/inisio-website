@@ -15,7 +15,7 @@ export const CADashboard: React.FC<{ user: AuthUser | null }> = ({ user }) => {
   }, []);
 
   const avgDscr = leads.length > 0
-    ? (leads.reduce((a, b) => a + (Number(b.dscr || b.dscrEstimate) || 1.45), 0) / leads.length).toFixed(2)
+    ? (leads.reduce((a, b) => a + (Number(b.dscr || b.dscrEstimate) || 0), 0) / leads.length).toFixed(2)
     : '0.00';
 
   return (

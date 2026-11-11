@@ -2,6 +2,7 @@ import ContactEnquiry from '../models/ContactEnquiry.js';
 import { isDBConnected } from '../config/db.js';
 import { sendWhatsAppNotification } from '../utils/whatsappService.js';
 import { sendContactEnquiryAlertEmail } from '../utils/emailService.js';
+import { escapeRegex } from '../middleware/validateMiddleware.js';
 
 // In-memory fallback repository with initial demo records
 let memoryEnquiries = [
@@ -207,13 +208,14 @@ export const getAllEnquiries = async (query = {}) => {
       }
 
       if (searchTerm) {
+        const safeSearch = escapeRegex(searchTerm);
         filter.$or = [
-          { name: { $regex: searchTerm, $options: 'i' } },
-          { email: { $regex: searchTerm, $options: 'i' } },
-          { phone: { $regex: searchTerm, $options: 'i' } },
-          { company: { $regex: searchTerm, $options: 'i' } },
-          { subject: { $regex: searchTerm, $options: 'i' } },
-          { message: { $regex: searchTerm, $options: 'i' } },
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { email: { $regex: safeSearch, $options: 'i' } },
+          { phone: { $regex: safeSearch, $options: 'i' } },
+          { company: { $regex: safeSearch, $options: 'i' } },
+          { subject: { $regex: safeSearch, $options: 'i' } },
+          { message: { $regex: safeSearch, $options: 'i' } },
         ];
       }
 
@@ -231,7 +233,8 @@ export const getAllEnquiries = async (query = {}) => {
       const enquiries = await ContactEnquiry.find(filter)
         .sort(sort)
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum);
+        .limit(limitNum)
+        .lean();
 
       return {
         enquiries,

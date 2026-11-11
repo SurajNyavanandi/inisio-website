@@ -14,7 +14,7 @@ export const getProjects = async (req, res, next) => {
 
 export const getProjectById = async (req, res, next) => {
   try {
-    const project = await projectService.getProjectById(req.params.id);
+    const project = await projectService.getProjectById(req.params.id, req.user);
     return sendSuccess(res, project, 'Project details fetched');
   } catch (error) {
     next(error);

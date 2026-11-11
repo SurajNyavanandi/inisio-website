@@ -12,27 +12,44 @@ import {
 
 export const getAllUsers = async (req, res, next) => {
   try {
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '50', 10)));
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const skip = (page - 1) * limit;
+
     if (isDBConnected()) {
       try {
-        const users = await User.find({}).select('-password').sort({ createdAt: -1 }).lean();
+        const users = await User.find({})
+          .select('-password')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+
         if (users && users.length > 0) {
-          // Dynamically compute the count of associated projects/leads for each user
-          const enrichedUsers = await Promise.all(
-            users.map(async (u) => {
-              const emailRegex = u.email ? new RegExp(`^${u.email.trim()}$`, 'i') : null;
-              const leadCount = emailRegex 
-                ? await Lead.countDocuments({ $or: [{ userId: u._id }, { email: emailRegex }] })
-                : await Lead.countDocuments({ userId: u._id });
-              const projectCount = emailRegex 
-                ? await Project.countDocuments({ $or: [{ userId: u._id }, { email: emailRegex }] })
-                : await Project.countDocuments({ userId: u._id });
-              const totalProjects = Math.max(leadCount, projectCount);
-              return {
-                ...u,
-                projectsCount: totalProjects
-              };
-            })
-          );
+          const userIds = users.map((u) => u._id);
+          const [leadCounts, projectCounts] = await Promise.all([
+            Lead.aggregate([
+              { $match: { userId: { $in: userIds } } },
+              { $group: { _id: '$userId', count: { $sum: 1 } } },
+            ]),
+            Project.aggregate([
+              { $match: { userId: { $in: userIds } } },
+              { $group: { _id: '$userId', count: { $sum: 1 } } },
+            ]),
+          ]);
+
+          const leadCountMap = new Map(leadCounts.map((c) => [String(c._id), c.count]));
+          const projectCountMap = new Map(projectCounts.map((c) => [String(c._id), c.count]));
+
+          const enrichedUsers = users.map((u) => {
+            const idStr = String(u._id);
+            const lCount = leadCountMap.get(idStr) || 0;
+            const pCount = projectCountMap.get(idStr) || 0;
+            return {
+              ...u,
+              projectsCount: Math.max(lCount, pCount),
+            };
+          });
           return sendSuccess(res, enrichedUsers, 'Users retrieved successfully');
         }
         return sendSuccess(res, [], 'Users retrieved successfully');
@@ -40,7 +57,7 @@ export const getAllUsers = async (req, res, next) => {
         console.warn('DB error in getAllUsers:', err.message);
       }
     }
-    const safeUsers = getMemoryUsers().map(({ password, ...u }) => u);
+    const safeUsers = getMemoryUsers().map(({ password, ...u }) => u).slice(skip, skip + limit);
     return sendSuccess(res, safeUsers, 'Users retrieved successfully');
   } catch (error) {
     next(error);

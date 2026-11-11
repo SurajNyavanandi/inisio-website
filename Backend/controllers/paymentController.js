@@ -123,7 +123,8 @@ export const verifyPaymentSignature = async (req, res, next) => {
  */
 export const getPaymentHistory = async (req, res, next) => {
   try {
-    const email = req.user?.email || req.query.email;
+    const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
+    const email = isPrivileged ? (req.query.email || req.user?.email) : req.user?.email;
     const payments = await getUserPayments(email);
     return sendSuccess(res, payments, 'Payment transactions retrieved successfully');
   } catch (error) {
@@ -134,7 +135,7 @@ export const getPaymentHistory = async (req, res, next) => {
 /**
  * @desc Get payment transaction by Order ID or Payment ID
  * @route GET /api/payments/:id
- * @access Public / Authenticated
+ * @access Authenticated (Owner or Admin)
  */
 export const getPaymentById = async (req, res, next) => {
   try {
@@ -142,6 +143,11 @@ export const getPaymentById = async (req, res, next) => {
     const payment = await getPaymentDetails(id);
     if (!payment) {
       return sendError(res, 'Payment transaction not found', 404);
+    }
+    const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
+    const isOwner = payment.userEmail && req.user?.email && payment.userEmail.toLowerCase() === req.user.email.toLowerCase();
+    if (!isPrivileged && !isOwner) {
+      return sendError(res, 'Access denied. You do not have permission to view this transaction.', 403);
     }
     return sendSuccess(res, payment, 'Payment transaction retrieved');
   } catch (error) {

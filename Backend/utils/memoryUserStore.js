@@ -1,29 +1,21 @@
 import bcrypt from 'bcryptjs';
-
-// Pre-hashed default passwords for local fallback resilience
-const CA_HASH = bcrypt.hashSync('ca123456', 10);
-const PROSYNC_HASH = bcrypt.hashSync('prosync123', 10);
-const PROMOTER_HASH = bcrypt.hashSync('promoter123', 10);
-const USER_HASH = bcrypt.hashSync('pravalika123', 10);
+import config from '../config/env.js';
 
 /**
- * Dynamically resolves authorized administrative emails from environment variables
+ * Dynamically resolves authorized administrative emails from environment configuration
  */
 export const getAdminEmail1 = () => {
-  return (process.env.ADMIN_EMAIL_1 || process.env.ADMIN_EMAIL || 'inisio2026@gmail.com').toLowerCase().trim();
+  return config.admin.email1 || 'admin@inisio.in';
 };
 
 export const getAdminEmail2 = () => {
-  return (process.env.ADMIN_EMAIL_2 || process.env.SUPERADMIN_EMAIL || 'junnupravalika59@gmail.com').toLowerCase().trim();
+  return config.admin.email2 || 'superadmin@inisio.in';
 };
 
 export const getAuthorizedAdminEmails = () => {
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
-  const extra = (process.env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
+  const extra = config.admin.extraEmails || [];
 
   const set = new Set([admin1, admin2, ...extra]);
   return Array.from(set).filter(Boolean);
@@ -46,98 +38,68 @@ export const AUTHORIZED_ADMIN_EMAILS = new Proxy([], {
   },
 });
 
-export let memoryUsers = [
-  {
-    _id: 'user_superadmin_001',
-    name: 'Executive Super Admin',
-    email: getAdminEmail2(),
-    password: bcrypt.hashSync(getAdminEmail2(), 10),
-    role: 'superadmin',
-    company: 'Inisio Executive Board',
-    phone: '+91 63020 26462',
-    isVerified: true,
-    createdAt: new Date('2025-01-01'),
-  },
-  {
-    _id: 'user_admin_002',
-    name: 'Inisio Operations Admin',
-    email: getAdminEmail1(),
-    password: bcrypt.hashSync(getAdminEmail1(), 10),
-    role: 'admin',
-    company: 'Inisio HQ Operations',
-    phone: '+91 63020 26462',
-    isVerified: true,
-    createdAt: new Date('2025-01-01'),
-  },
-];
+export let memoryUsers = [];
 
 export const getMemoryUsers = () => {
-  // Ensure both dynamic admin accounts are always present in memoryUsers
-  const admin1 = getAdminEmail1();
-  const admin2 = getAdminEmail2();
-
-  if (!memoryUsers.some((u) => u.email.toLowerCase() === admin2)) {
-    memoryUsers.unshift({
-      _id: 'user_superadmin_dynamic',
-      name: 'Executive Super Admin',
-      email: admin2,
-      password: bcrypt.hashSync(admin2, 10),
-      role: 'superadmin',
-      company: 'Inisio Executive Board',
-      phone: '+91 63020 26462',
-      isVerified: true,
-      createdAt: new Date(),
-    });
+  if (config.isProduction && !config.allowMemoryFallback) {
+    return [];
   }
-
-  if (!memoryUsers.some((u) => u.email.toLowerCase() === admin1)) {
-    memoryUsers.unshift({
-      _id: 'user_admin_dynamic',
-      name: 'Inisio Operations Admin',
-      email: admin1,
-      password: bcrypt.hashSync(admin1, 10),
-      role: 'admin',
-      company: 'Inisio HQ Operations',
-      phone: '+91 63020 26462',
-      isVerified: true,
-      createdAt: new Date(),
-    });
-  }
-
   return memoryUsers;
 };
 
 export const findMemoryUserByEmail = (email) => {
   if (!email) return null;
-  const clean = email.toLowerCase().trim();
-  const list = getMemoryUsers();
-  return list.find((u) => u.email.toLowerCase().trim() === clean) || null;
+  const clean = String(email).toLowerCase().trim();
+  return memoryUsers.find((u) => (u.email || '').toLowerCase().trim() === clean) || null;
 };
 
 export const findMemoryUserById = (id) => {
   if (!id) return null;
-  const list = getMemoryUsers();
-  return list.find((u) => String(u._id) === String(id) || u.email.toLowerCase() === String(id).toLowerCase()) || null;
+  const strId = String(id);
+  return memoryUsers.find((u) => String(u._id || u.id) === strId) || null;
 };
 
 export const addMemoryUser = (user) => {
-  memoryUsers.push(user);
-  return user;
+  const cleanEmail = (user.email || '').toLowerCase().trim();
+  const idx = memoryUsers.findIndex((u) => (u.email || '').toLowerCase().trim() === cleanEmail);
+  const userRecord = {
+    ...user,
+    _id: user._id || user.id || `user_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    email: cleanEmail,
+    createdAt: user.createdAt || new Date(),
+    updatedAt: new Date(),
+  };
+
+  if (idx >= 0) {
+    memoryUsers[idx] = { ...memoryUsers[idx], ...userRecord };
+    return memoryUsers[idx];
+  }
+  memoryUsers.unshift(userRecord);
+  return userRecord;
 };
 
 export const updateMemoryUser = (id, updates) => {
-  const idx = memoryUsers.findIndex((u) => String(u._id) === String(id) || u.email.toLowerCase() === String(id).toLowerCase());
-  if (idx !== -1) {
-    memoryUsers[idx] = { ...memoryUsers[idx], ...updates };
+  const strId = String(id);
+  const idx = memoryUsers.findIndex((u) => String(u._id || u.id) === strId);
+  if (idx >= 0) {
+    memoryUsers[idx] = {
+      ...memoryUsers[idx],
+      ...updates,
+      updatedAt: new Date(),
+    };
     return memoryUsers[idx];
   }
   return null;
 };
 
 export const deleteMemoryUser = (id) => {
-  const initialLen = memoryUsers.length;
-  memoryUsers = memoryUsers.filter((u) => String(u._id) !== String(id) && u.email.toLowerCase() !== String(id).toLowerCase());
-  return memoryUsers.length < initialLen;
+  const strId = String(id);
+  const idx = memoryUsers.findIndex((u) => String(u._id || u.id) === strId);
+  if (idx >= 0) {
+    memoryUsers.splice(idx, 1);
+    return true;
+  }
+  return false;
 };
 
 export default {

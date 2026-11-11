@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import { generateToken } from '../utils/generateToken.js';
 import { isDBConnected } from '../config/db.js';
+import config from '../config/env.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailService.js';
 import { captureLoginMetadata } from '../utils/geoIpService.js';
 import {
@@ -60,9 +61,10 @@ const shouldAllowMemoryFallback = () => {
 
 /**
  * Sync memory users to MongoDB to ensure preloaded demo & registered users exist in DB
+ * Skipped in production unless SEED_DEMO_USERS=true is explicitly set
  */
 export const syncMemoryUsersToDB = async () => {
-  if (!isDBConnected()) return;
+  if (!isDBConnected() || (config.isProduction && process.env.SEED_DEMO_USERS !== 'true')) return;
   try {
     const authorizedList = getAuthorizedAdminEmails();
     const admin1 = getAdminEmail1();
@@ -380,7 +382,18 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       }
 
       if (!user.verificationOtp || user.verificationOtp !== cleanOtp) {
-        const error = new Error('Invalid verification code. Please check your email or click Resend Code.');
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.verificationOtp = null;
+          user.verificationExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect verification attempts. Code has been invalidated. Please click Resend Code.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid verification code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
@@ -394,6 +407,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       user.isVerified = true;
       user.verificationOtp = null;
       user.verificationExpires = null;
+      user.otpAttempts = 0;
       await recordSuccessfulLogin(user, req);
 
       const token = generateToken({
@@ -891,13 +905,8 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     throw error;
   }
 
-  // Determine base application URL
-  const baseUrl = (
-    clientOrigin ||
-    process.env.APP_URL ||
-    process.env.FRONTEND_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
+  // Determine base application URL from incoming request origin
+  const baseUrl = (clientOrigin || 'http://localhost:3000').replace(/\/$/, '');
 
   const resetLink = `${baseUrl}/?action=reset-password&email=${encodeURIComponent(cleanEmail)}&otp=${otp}&token=${otp}`;
 
@@ -1013,13 +1022,24 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       }
 
       if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
-        const error = new Error('Invalid or expired OTP code.');
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.resetPasswordOtp = null;
+          user.resetPasswordExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect OTP attempts. Code has been invalidated. Please request a new password reset.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid or expired OTP code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
 
       if (user.resetPasswordExpires && new Date() > new Date(user.resetPasswordExpires)) {
-        const error = new Error('OTP code has expired.');
+        const error = new Error('OTP code has expired. Please request a new one.');
         error.statusCode = 400;
         throw error;
       }
@@ -1027,6 +1047,7 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       user.password = newPassword;
       user.resetPasswordOtp = null;
       user.resetPasswordExpires = null;
+      user.otpAttempts = 0;
       user.isVerified = true;
       await user.save();
 

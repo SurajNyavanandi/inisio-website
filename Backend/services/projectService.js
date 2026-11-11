@@ -1,26 +1,30 @@
 import Project from '../models/Project.js';
 import Notification from '../models/Notification.js';
 import { isDBConnected } from '../config/db.js';
+import { escapeRegex } from '../middleware/validateMiddleware.js';
 
 let memoryProjects = [];
 
 export const getProjects = async (filter = {}, userRole = 'admin', userId = null) => {
+  if (userRole === 'user' && !userId) {
+    return [];
+  }
+
+  const limit = Math.min(100, Math.max(1, parseInt(filter.limit || '100', 10)));
+  const page = Math.max(1, parseInt(filter.page || '1', 10));
+  const skip = (page - 1) * limit;
+
   if (isDBConnected()) {
     try {
       let query = {};
-      
-      if (filter.email && userId) {
-        query.$or = [
-          { userId: userId },
-          { email: { $regex: new RegExp(`^${filter.email.trim()}$`, 'i') } }
-        ];
-      } else if (filter.email) {
-        query.email = { $regex: new RegExp(`^${filter.email.trim()}$`, 'i') };
-      } else if (userRole === 'user' && userId) {
+
+      if (userRole === 'user') {
         query.userId = userId;
+      } else if (filter.email) {
+        query.email = { $regex: new RegExp(`^${escapeRegex(filter.email.trim())}$`, 'i') };
       }
 
-      const projects = await Project.find(query).sort({ updatedAt: -1 });
+      const projects = await Project.find(query).sort({ updatedAt: -1 }).skip(skip).limit(limit).lean();
       return projects;
     } catch (err) {
       console.warn('MongoDB query failed in getProjects, using memory fallback:', err.message);
@@ -29,13 +33,15 @@ export const getProjects = async (filter = {}, userRole = 'admin', userId = null
 
   // Memory fallback filtering
   let results = [...memoryProjects];
-  if (filter.email) {
+  if (userRole === 'user') {
+    results = results.filter((p) => String(p.userId) === String(userId));
+  } else if (filter.email) {
     const em = filter.email.toLowerCase();
-    results = results.filter((p) => (p.email && p.email.toLowerCase() === em) || (userId && p.userId === userId));
-  } else if (userRole === 'user' && userId) {
-    results = results.filter((p) => p.userId === userId);
+    results = results.filter((p) => p.email && p.email.toLowerCase() === em);
   }
-  return results.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+  return results
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+    .slice(skip, skip + limit);
 };
 
 export const createProject = async (projectData, userId = null) => {
@@ -76,16 +82,36 @@ export const createProject = async (projectData, userId = null) => {
   return created;
 };
 
-export const getProjectById = async (id) => {
+export const getProjectById = async (id, requester = null) => {
+  if (!requester) {
+    const error = new Error('Authentication required');
+    error.statusCode = 401;
+    throw error;
+  }
+  let project = null;
   if (isDBConnected()) {
     try {
-      const project = await Project.findById(id);
-      if (project) return project;
+      project = await Project.findById(id).lean();
     } catch (err) {}
   }
-  const found = memoryProjects.find((p) => String(p._id) === String(id));
-  if (!found) throw new Error('Project not found');
-  return found;
+  if (!project) {
+    project = memoryProjects.find((p) => String(p._id) === String(id));
+  }
+  if (!project) {
+    const error = new Error('Project not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  const isPrivileged = ['admin', 'superadmin', 'ca', 'admin1', 'admin2', 'admin3'].includes(requester.role);
+  const isOwner =
+    String(project.userId) === String(requester._id) ||
+    Boolean(project.email && requester.email && project.email.toLowerCase() === requester.email.toLowerCase());
+  if (!isPrivileged && !isOwner) {
+    const error = new Error('Access denied. You do not have permission to view this project.');
+    error.statusCode = 403;
+    throw error;
+  }
+  return project;
 };
 
 export const updateProjectAudit = async (id, status, caReviewNotes = '', assignedCA = '', updates = {}) => {

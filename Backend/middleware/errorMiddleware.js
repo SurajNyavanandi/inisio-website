@@ -1,25 +1,45 @@
 import { sendError } from '../utils/responseHandler.js';
+import logger from '../utils/logger.js';
+import config from '../config/env.js';
 
 /**
  * 404 Route Not Found Middleware
  */
 export const notFound = (req, res, next) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`);
-  res.status(404);
+  const error = new Error(`Resource not found - ${req.originalUrl}`);
+  error.statusCode = 404;
+  error.code = 'NOT_FOUND';
   next(error);
 };
 
 /**
- * Centralized Error Handling Middleware
+ * Centralized Global Error Handling Middleware
+ * Guarantees consistent JSON output: { success: false, message, code }
+ * Never leaks stack traces or internal details in production
  */
 export const errorHandler = (err, req, res, next) => {
-  let statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
+  let statusCode = err.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
   let message = err.message || 'Internal Server Error';
+  let code = err.code || 'INTERNAL_ERROR';
+
+  // Handle Mongoose disconnection / buffer timeout gracefully
+  if (
+    err.name === 'MongooseError' ||
+    err.name === 'MongoNetworkError' ||
+    err.name === 'MongoServerSelectionError' ||
+    err.message?.includes('buffering timed out') ||
+    err.message?.includes('connect ECONNREFUSED')
+  ) {
+    statusCode = 503;
+    message = 'Service temporarily unavailable. Database connection offline.';
+    code = 'DATABASE_OFFLINE';
+  }
 
   // Handle Mongoose bad ObjectId (CastError)
   if (err.name === 'CastError' && err.kind === 'ObjectId') {
     statusCode = 404;
     message = `Resource not found with ID of ${err.value}`;
+    code = 'RESOURCE_NOT_FOUND';
   }
 
   // Handle Mongoose duplicate key (E11000)
@@ -27,6 +47,7 @@ export const errorHandler = (err, req, res, next) => {
     statusCode = 400;
     const field = Object.keys(err.keyValue || {})[0] || 'field';
     message = `Duplicate value entered for '${field}'. Please use another value.`;
+    code = 'DUPLICATE_KEY';
   }
 
   // Handle Mongoose validation errors
@@ -35,33 +56,41 @@ export const errorHandler = (err, req, res, next) => {
     message = Object.values(err.errors)
       .map((val) => val.message)
       .join(', ');
+    code = 'VALIDATION_ERROR';
   }
 
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
     statusCode = 401;
     message = 'Invalid authentication token';
+    code = 'INVALID_TOKEN';
   }
 
   if (err.name === 'TokenExpiredError') {
     statusCode = 401;
     message = 'Authentication token expired. Please login again';
+    code = 'TOKEN_EXPIRED';
   }
 
   if (message.includes('Invalid email or password') || message.includes('Please provide your password')) {
     statusCode = 401;
+    code = 'INVALID_CREDENTIALS';
   }
 
+  // Server-side logging only
   if (statusCode >= 500) {
-    console.error(`[Server Error] ${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
-    if (process.env.NODE_ENV === 'development' && err.stack) {
-      console.error(err.stack);
-    }
+    logger.error(`[Server Error] ${req.method} ${req.originalUrl} (${statusCode}) - ${err.message}`, err.stack);
   } else {
-    console.warn(`[Client Info] ${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
+    logger.warn(`[Client Error] ${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
   }
 
-  return sendError(res, message, statusCode, process.env.NODE_ENV === 'development' ? err.stack : undefined);
+  return sendError(
+    res,
+    message,
+    statusCode,
+    config.isProduction ? undefined : err.stack,
+    code
+  );
 };
 
 export default {

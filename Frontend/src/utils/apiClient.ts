@@ -27,13 +27,6 @@ export const getApiBaseUrl = (): string => {
     return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
   }
 
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname.toLowerCase();
-    if (hostname.includes('vercel.app') || hostname.includes('netlify.app') || hostname.includes('github.dev')) {
-      return 'https://inisio-web.onrender.com/api';
-    }
-  }
-
   return '/api';
 };
 
@@ -375,6 +368,24 @@ export const api = {
   services: {
     getAll: () => request<any[]>('/services'),
     getBySlug: (slug: string) => request<any>(`/services/${slug}`),
+  },
+
+  // Dynamic Landing & Content Modules
+  testimonials: {
+    getAll: (industry?: string) => {
+      const q = industry && industry !== 'All' ? `?industry=${encodeURIComponent(industry)}` : '';
+      return request<any[]>(`/testimonials${q}`);
+    },
+  },
+  stats: {
+    getAll: () => request<any[]>('/stats'),
+  },
+  blogs: {
+    getAll: () => request<any[]>('/blogs'),
+    getBySlug: (slug: string) => request<any>(`/blogs/${slug}`),
+  },
+  faqs: {
+    getAll: () => request<any[]>('/faqs'),
   },
 };
 

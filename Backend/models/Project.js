@@ -112,5 +112,10 @@ const projectSchema = new mongoose.Schema(
   }
 );
 
+projectSchema.index({ userId: 1 });
+projectSchema.index({ email: 1 });
+projectSchema.index({ status: 1 });
+projectSchema.index({ createdAt: -1 });
+
 const Project = mongoose.models.Project || mongoose.model('Project', projectSchema);
 export default Project;

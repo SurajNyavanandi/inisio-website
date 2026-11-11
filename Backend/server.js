@@ -1,50 +1,43 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import connectDB from './config/db.js';
+import helmet from 'helmet';
+import compression from 'compression';
+import mongoose from 'mongoose';
+import config from './config/env.js';
+import logger from './utils/logger.js';
+import connectDB, { isDBConnected } from './config/db.js';
+import seedDatabase from './data/seedDatabase.js';
 import apiRouter from './routes/index.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
-
-dotenv.config();
+import { generalApiLimiter } from './middleware/rateLimitMiddleware.js';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = config.port || 5000;
 
-// Connect to MongoDB Atlas
-connectDB().catch(() => {});
+// 1. Security Headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
-// CORS Configuration supporting inisio.vercel.app and localhost:5173
-const allowedOrigins = [
-  'https://inisio.vercel.app',
-  'https://www.inisio.vercel.app',
-  'http://inisio.vercel.app',
-  'http://www.inisio.vercel.app',
-  'https://inisio-web.vercel.app',
-  'http://inisio-web.vercel.app',
-  'http://localhost:5173',
-  'https://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:3000',
-  'http://localhost:5000',
-  process.env.CLIENT_URL,
-  process.env.FRONTEND_URL,
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-  process.env.RENDER_EXTERNAL_URL,
-].filter(Boolean);
+// 2. Response Compression
+app.use(compression());
 
+// 3. CORS Configuration
+const allowedOrigins = config.cors.allowedOrigins;
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests or same-origin
+    // Allow non-browser requests or matching origins
     if (!origin) return callback(null, true);
-
-    const isExplicitlyAllowed = allowedOrigins.includes(origin);
-    const isVercel = origin.endsWith('.vercel.app') || origin.includes('vercel.app');
-    const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
-
-    if (isExplicitlyAllowed || isVercel || isLocalhost) {
+    if (allowedOrigins.includes('*')) {
+      if (config.isProduction) {
+        logger.warn(`Permitting request from origin '${origin}' under wildcard setting. Recommended to set explicit ALLOWED_ORIGINS.`);
+      }
       return callback(null, true);
     }
-    return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin '${origin}' not permitted by CORS policy`), false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -54,37 +47,103 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// 4. Request Body Limiters (1MB limit to prevent memory exhaustion DoS)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Simple request logger
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+// 5. Request Logging (Debug in dev, omitted in prod to prevent data leakage)
+app.use((req, _res, next) => {
+  logger.debug(`[HTTP] ${req.method} ${req.originalUrl}`);
   next();
 });
 
-// API Routes
-app.use('/api', apiRouter);
-
-// Root route
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to Inisio - Greenfield Project Consultancy & Bank Funding API',
-    documentation: '/api/health',
-    status: 'active',
+// 6. Direct Root Health Endpoint
+app.get('/health', (_req, res) => {
+  const connected = isDBConnected();
+  const statusCode = connected ? 200 : (config.isProduction ? 503 : 200);
+  return res.status(statusCode).json({
+    status: connected ? 'healthy' : (config.isProduction ? 'unhealthy' : 'degraded'),
+    database: connected ? 'connected' : 'disconnected',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
   });
 });
 
-// Centralized error handling
+// 7. General API Rate Limiting & Routes
+app.use('/api', generalApiLimiter, apiRouter);
+
+// Root route
+app.get('/', (_req, res) => {
+  res.json({
+    service: 'Inisio Greenfield Project Consultancy REST API',
+    status: 'active',
+    documentation: '/api/health',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// 8. Centralized error handling
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server if run directly
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Inisio Backend REST API Server is running on port ${PORT}`);
-    console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
-  });
-}
+// 9. Database Connection & Server Initialization
+let server = null;
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    await seedDatabase();
+  } catch (err) {
+    logger.error('Database initialization encountered an error:', err.message);
+  }
+
+  if (process.env.NODE_ENV !== 'test') {
+    server = app.listen(PORT, '0.0.0.0', () => {
+      logger.info(`Inisio Backend REST API running on port ${PORT} [${config.env}]`);
+      logger.info(`Health check available at: http://localhost:${PORT}/health`);
+    });
+  }
+};
+
+startServer();
+
+// 10. Graceful Shutdown & Unhandled Exception Handling
+const gracefulShutdown = async (signal) => {
+  logger.info(`Received ${signal}. Starting graceful shutdown...`);
+  if (server) {
+    server.close(async () => {
+      logger.info('HTTP server closed.');
+      try {
+        if (mongoose.connection && mongoose.connection.readyState === 1) {
+          await mongoose.connection.close(false);
+          logger.info('MongoDB connection closed.');
+        }
+      } catch (err) {
+        logger.error('Error closing MongoDB connection:', err.message);
+      }
+      process.exit(0);
+    });
+
+    // Force exit after 10 seconds if shutdown stalls
+    setTimeout(() => {
+      logger.error('Forcefully terminating process after 10s shutdown timeout.');
+      process.exit(1);
+    }, 10000).unref();
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception thrown:', error.message, error.stack);
+  gracefulShutdown('uncaughtException');
+});
 
 export default app;

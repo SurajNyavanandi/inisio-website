@@ -270,5 +270,13 @@ const leadSchema = new mongoose.Schema(
   }
 );
 
+leadSchema.index({ email: 1 });
+leadSchema.index({ mobile: 1 });
+leadSchema.index({ status: 1 });
+leadSchema.index({ createdAt: -1 });
+leadSchema.index({ assignedCA: 1 });
+leadSchema.index({ dprAssignedTo: 1 });
+leadSchema.index({ consultationAssignedTo: 1 });
+
 const Lead = mongoose.models.Lead || mongoose.model('Lead', leadSchema);
 export default Lead;

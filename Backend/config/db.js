@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import config from './env.js';
+import logger from '../utils/logger.js';
 
 // Disable buffering so queries fail-fast or fallback immediately instead of hanging
 mongoose.set('bufferCommands', false);
@@ -27,9 +26,12 @@ export const connectDB = async () => {
     return connectingPromise;
   }
 
-  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  const uri = config.databaseUri;
 
   if (!uri) {
+    if (config.isProduction) {
+      logger.error('CRITICAL: MongoDB URI not provided in production environment.');
+    }
     return null;
   }
 
@@ -52,10 +54,10 @@ export const connectDB = async () => {
       });
 
       cachedConnection = conn;
-      console.log(`✅ MongoDB Connected Successfully: ${conn.connection.host}`);
+      logger.info(`MongoDB Connected Successfully: ${conn.connection.host}`);
       return conn;
     } catch (error) {
-      console.warn(`⚠️ MongoDB Connection not established (${error.message}). Resilient in-memory storage active.`);
+      logger.warn(`MongoDB Connection not established (${error.message}). Resilient storage active.`);
       return null;
     } finally {
       connectingPromise = null;
