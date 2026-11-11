@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+
+  <!-- Home / Greenfield Advisory Landing -->
+  <url>
+    <loc>https://inisio.vercel.app/</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Greenfield Project Assessment & Bankability Scorecard -->
+  <url>
+    <loc>https://inisio.vercel.app/assessment</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- How It Works / Funding Readiness Process -->
+  <url>
+    <loc>https://inisio.vercel.app/how-it-works</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- About / Why Choose Inisio -->
+  <url>
+    <loc>https://inisio.vercel.app/about</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Industries & Sectors Directory -->
+  <url>
+    <loc>https://inisio.vercel.app/industries</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Advisory Knowledge Hub & Publications -->
+  <url>
+    <loc>https://inisio.vercel.app/blogs</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Blog Article 1: DSCR Underwriting Norms -->
+  <url>
+    <loc>https://inisio.vercel.app/blogs/greenfield-dscr-underwriting-norms-2025</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog Article 2: PMKSY Food Processing Subsidies -->
+  <url>
+    <loc>https://inisio.vercel.app/blogs/central-state-subsidies-pmksy-food-processing</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog Article 3: Solar Park Bankable DPRs -->
+  <url>
+    <loc>https://inisio.vercel.app/blogs/solar-park-dpr-power-purchase-agreements</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Frequently Asked Questions -->
+  <url>
+    <loc>https://inisio.vercel.app/faq</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Contact Advisory Desk -->
+  <url>
+    <loc>https://inisio.vercel.app/contact</loc>
+    <lastmod>2025-02-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>

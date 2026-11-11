@@ -9,6 +9,36 @@ interface LatestBlogsProps {
   onNavigateToBlogs: (slug?: string) => void;
 }
 
+export const BLOG_POSTS: BlogPostItem[] = [
+  {
+    slug: 'greenfield-dscr-underwriting-norms-2025',
+    title: 'How PSU Banks Calculate DSCR for Greenfield Manufacturing in 2025',
+    category: 'Debt Syndication',
+    date: 'February 2025',
+    readTime: '6 min read',
+    excerpt: 'Detailed breakdown of gross vs net debt service coverage ratios, acceptable moratorium tenures, and how credit risk rating models evaluate projected EBITDA.',
+    featured: true
+  },
+  {
+    slug: 'central-state-subsidies-pmksy-food-processing',
+    title: 'Unlocking PMKSY 35%-50% Grants for Agro-Processing & Cold Storage Units',
+    category: 'Subsidies & Grants',
+    date: 'January 2025',
+    readTime: '5 min read',
+    excerpt: 'Step-by-step roadmap to integrating Ministry of Food Processing Industries (MoFPI) capital investment grants into your project Means of Finance.',
+    featured: false
+  },
+  {
+    slug: 'solar-park-dpr-power-purchase-agreements',
+    title: 'Key Technical & Financial Clauses That Make Solar DPRs 100% Bankable',
+    category: 'Renewables',
+    date: 'January 2025',
+    readTime: '7 min read',
+    excerpt: 'Evaluating evacuation clearance, CUF generation models, and DISCOM payment escrow mechanisms to secure low-interest green loans from IREDA and SBI.',
+    featured: false
+  }
+];
+
 export const LatestBlogs: React.FC<LatestBlogsProps> = ({
   onNavigateToBlogs
 }) => {

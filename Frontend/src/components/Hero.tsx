@@ -83,35 +83,35 @@ export const Hero: React.FC<HeroProps> = ({
     {
       id: 'slide-1',
       badge: '100% Free Initial Assessment',
-      headline: 'Planning a New Project?',
-      description: 'Assess its feasibility, understand its bankability and prepare it for funding.',
+      headline: 'Planning a Greenfield Project? Loan Syndication & DPR',
+      description: 'Assess feasibility, evaluate institutional bankability ratings, and prepare audit-ready DPR financial models for bank loan sanctions.',
       primaryBtnText: 'Start Free Assessment',
       secondaryBtnText: 'Talk to an Expert',
       trustPoints: ['100% Free First Assessment', 'Instant Bankability Rating', 'Bank-Grade Teaser PDF'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786547187/ChatGPT_Image_Aug_12_2026_08_34_57_PM_hb8xi9.png',
-      imageAlt: 'Indian entrepreneur meeting an advisor for project assessment'
+      imageAlt: 'Indian entrepreneur reviewing greenfield project finance assessment with Inisio advisor'
     },
     {
       id: 'slide-2',
       badge: 'Greenfield Feasibility & Bankability',
-      headline: 'Validate Your Greenfield Project',
-      description: 'Evaluate financial viability, equity-debt structure, and lender readiness before approaching banks and institutional funds.',
+      headline: 'Validate Your Greenfield Project: Debt & DSCR Norms',
+      description: 'Evaluate capital expenditure viability, equity-debt structure, and lender readiness before approaching banks and institutional funds.',
       primaryBtnText: 'Start Free Assessment',
       secondaryBtnText: 'Free Consultation',
       trustPoints: ['Debt-to-Equity & DSCR Checks', 'Capex & Means of Finance', 'Bankability Scorecard'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786536547/start_your_business_fx8g11.png',
-      imageAlt: 'Young entrepreneur reviewing project plans with financial advisor'
+      imageAlt: 'Business promoter evaluating bank loan eligibility and CMA modeling with Inisio consultant'
     },
     {
       id: 'slide-3',
       badge: 'Institutional Funding Readiness',
-      headline: 'Prepare for Institutional Funding',
-      description: 'Get bank-grade feasibility scores, CMA models, and expert CA guidance for term debt syndication.',
+      headline: 'Prepare for Institutional Funding & Term Loan Sanctions',
+      description: 'Get bank-grade feasibility scores, CMA models, and expert CA guidance for consortium term debt syndication across India.',
       primaryBtnText: 'Start Free Assessment',
       secondaryBtnText: 'Contact Us',
       trustPoints: ['Credit Committee Ready', 'Detailed Risk Scorer', 'Dedicated CA Advisory'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786543850/Business_ootwt8.png',
-      imageAlt: 'Business owner walking through factory discussing growth with consultant'
+      imageAlt: 'Promoter and chartered accountant reviewing Detailed Project Report at industrial plant'
     }
   ];
 
@@ -283,6 +283,8 @@ export const Hero: React.FC<HeroProps> = ({
                     <img
                       src={activeSlideData.image}
                       alt={activeSlideData.imageAlt}
+                      width={600}
+                      height={390}
                       loading="eager"
                       referrerPolicy="no-referrer"
                       className="w-full h-[280px] sm:h-[360px] lg:h-[390px] object-contain rounded-xl sm:rounded-2xl"
@@ -352,7 +354,10 @@ export const Hero: React.FC<HeroProps> = ({
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#f0f5ff] hover:bg-[#e6f0ff] border border-blue-100/70 flex items-center justify-center p-3.5 shadow-2xs group-hover:shadow-md group-hover:-translate-y-1 transition-all duration-300">
                     <img
                       src={ind.icon}
-                      alt={ind.name}
+                      alt={`${ind.name} Greenfield Project Finance & Debt Syndication`}
+                      width={48}
+                      height={48}
+                      loading="lazy"
                       referrerPolicy="no-referrer"
                       className="w-10 h-10 sm:w-12 sm:h-12 object-contain group-hover:scale-105 transition-transform duration-300"
                     />

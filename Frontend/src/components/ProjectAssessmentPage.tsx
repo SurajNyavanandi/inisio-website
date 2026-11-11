@@ -1068,7 +1068,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           </div>
 
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight font-manrope">
-            {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Assessment'}
+            {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Feasibility Assessment & Bankability Scorecard'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-3xl mx-auto font-inter">
             {editingProject

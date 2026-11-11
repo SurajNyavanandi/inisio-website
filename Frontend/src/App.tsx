@@ -15,6 +15,7 @@ import { FinalCTA } from './components/FinalCTA';
 import { Footer } from './components/Footer';
 import { FloatingContactButtons } from './components/FloatingContactButtons';
 import { DashboardSkeleton, LoadingSpinner } from './components/common';
+import { SEOHead } from './components/SEOHead';
 import { Shield } from 'lucide-react';
 import { canUserStartAssessment } from './utils/membershipStore';
 import { getStoredLeads } from './utils/leadStore';
@@ -334,6 +335,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col justify-between overflow-x-hidden">
+      {/* Dynamic SEO Meta, Social Cards & JSON-LD */}
+      <SEOHead activeTab={activeTab} activeBlogSlug={activeBlogSlug} />
+
       <div className="w-full min-w-0">
         {/* Navbar */}
         <Navbar
@@ -483,6 +487,7 @@ export default function App() {
           {activeTab === 'how-it-works' && (
             <div className="animate-in fade-in duration-300">
               <HowItWorks
+                isStandalone
                 onOpenConsultation={() => setConsultationModalOpen(true)}
                 onOpenAssessment={() => handleOpenAssessment()}
                 onNavigateToContact={() => handleSelectTab('contact')}
@@ -493,6 +498,7 @@ export default function App() {
           {activeTab === 'about' && (
             <div className="animate-in fade-in duration-300">
               <WhyChooseInisio
+                isStandalone
                 onOpenAssessment={() => handleOpenAssessment()}
                 onOpenConsultation={() => setConsultationModalOpen(true)}
               />
@@ -502,6 +508,7 @@ export default function App() {
           {activeTab === 'industries' && (
             <div className="animate-in fade-in duration-300">
               <IndustriesSection
+                isStandalone
                 onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
                 onOpenAssessment={() => handleOpenAssessment()}
                 onOpenConsultation={() => setConsultationModalOpen(true)}
@@ -535,13 +542,13 @@ export default function App() {
 
           {activeTab === 'contact' && (
             <div className="animate-in fade-in duration-300">
-              <ContactSection />
+              <ContactSection isStandalone />
             </div>
           )}
 
           {activeTab === 'faq' && (
             <div className="animate-in fade-in duration-300">
-              <FAQSection onOpenConsultation={() => setConsultationModalOpen(true)} />
+              <FAQSection isStandalone onOpenConsultation={() => setConsultationModalOpen(true)} />
             </div>
           )}
         </main>

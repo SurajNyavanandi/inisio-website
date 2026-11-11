@@ -109,7 +109,7 @@ export const Testimonials: React.FC = () => {
         {/* Testimonials Interactive Carousel */}
         <div className="max-w-5xl mx-auto relative px-2 sm:px-12">
           {loading ? (
-            <div className="bg-white rounded-3xl border border-slate-200/90 p-8 sm:p-12 shadow-sm flex flex-col items-center justify-center min-h-[260px] space-y-3 animate-pulse">
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-8 sm:p-12 shadow-sm flex flex-col items-center justify-center min-h-65 space-y-3 animate-pulse">
               <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
               <p className="text-sm font-semibold text-slate-500">Loading verified case studies...</p>
             </div>
