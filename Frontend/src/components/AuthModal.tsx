@@ -33,6 +33,17 @@ interface AuthModalProps {
   initialOtp?: string;
 }
 
+const maskEmail = (val: string): string => {
+  if (!val || !val.includes('@')) return val || '';
+  const [user, domain] = val.split('@');
+  if (user.length <= 4) {
+    return `${user.slice(0, 1)}***@${domain}`;
+  }
+  const prefix = user.length >= 7 ? user.slice(0, 4) : user.slice(0, 2);
+  const suffix = user.slice(-2);
+  return `${prefix}*****${suffix}@${domain}`;
+};
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -60,6 +71,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Email verification / Reset OTP states
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [devOtp, setDevOtp] = useState('');
   const [resendingOtp, setResendingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -158,7 +170,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setResendingOtp(false);
       if (response.ok && resData.success) {
         setResendCooldown(30);
-        setSuccessMessage(resData.message || 'A fresh verification code has been dispatched to your email address.');
+        setSuccessMessage('A fresh verification code has been sent to your email.');
+        if (resData.data?.otp) {
+          setDevOtp(resData.data.otp);
+        }
       } else {
         setError(resData.message || 'Unable to resend code.');
       }
@@ -333,6 +348,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (response.ok && resData.success && resData.data) {
         const userData = resData.data;
 
+        // If account requires 6-digit email OTP verification
+        if (userData.requiresVerification || userData.isVerified === false) {
+          setIsVerifyingOtp(true);
+          setOtpCode('');
+          setError('');
+          setSuccessMessage('');
+          if (userData.otp) {
+            setDevOtp(userData.otp);
+          }
+          return;
+        }
+
         if (userData.token) {
           localStorage.setItem('inisio_auth_token', userData.token);
         }
@@ -380,13 +407,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 {!isVerifyingOtp && mode === 'forgot-password' && 'Reset Your Password'}
                 {!isVerifyingOtp && mode === 'reset-password' && 'Set New Password'}
               </h2>
-              <p className="text-xs text-slate-500">
-                {isVerifyingOtp && 'Enter the 6-digit verification code sent to your inbox'}
-                {!isVerifyingOtp && mode === 'login' && 'Access your loan tracking & project advisory desk'}
-                {!isVerifyingOtp && mode === 'signup' && 'Start your greenfield project finance journey'}
-                {!isVerifyingOtp && mode === 'forgot-password' && 'We will email you a secure direct reset link'}
-                {!isVerifyingOtp && mode === 'reset-password' && 'Enter your reset code and choose a new password'}
-              </p>
+              {isVerifyingOtp ? (
+                <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+                  <span>Code sent to <strong className="text-slate-800 font-mono">{maskEmail(email)}</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => { setIsVerifyingOtp(false); setError(''); setSuccessMessage(''); }}
+                    className="text-blue-600 hover:text-blue-800 underline text-[11px] font-semibold cursor-pointer"
+                  >
+                    Edit
+                  </button>
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  {mode === 'login' && 'Access your loan tracking & project advisory desk'}
+                  {mode === 'signup' && 'Start your greenfield project finance journey'}
+                  {mode === 'forgot-password' && 'We will email you a secure direct reset link'}
+                  {mode === 'reset-password' && 'Enter your reset code and choose a new password'}
+                </p>
+              )}
             </div>
           </div>
 
@@ -503,74 +542,62 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             )}
 
-            {successMessage && (
+            {successMessage && !isVerifyingOtp && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2 animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                 <span>{successMessage}</span>
               </div>
             )}
 
-            {/* Email OTP Verification Mode */}
+            {/* Email OTP Verification Mode - Ultra Minimalist */}
             {isVerifyingOtp ? (
-              <div className="space-y-4">
-                <div className="bg-blue-50/80 border border-blue-100 rounded-xl p-3.5 flex items-start gap-2.5">
-                  <Mail className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
-                  <div className="text-xs text-blue-900 flex-1">
-                    <p className="font-bold">Verification Code Sent to:</p>
-                    <div className="flex items-center justify-between gap-2 mt-1">
-                      <span className="font-mono font-bold text-blue-950 bg-blue-100/80 px-2 py-0.5 rounded-md text-[12px] truncate max-w-[240px]">
-                        {email}
-                      </span>
+              <div className="space-y-5 py-3">
+                <div className="max-w-xs mx-auto space-y-2">
+                  <div className="text-center">
+                    <label className="text-xs font-semibold text-slate-600">
+                      Enter 6-Digit Verification Code
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="• • • • • •"
+                    className="w-full py-3 px-4 bg-slate-50 border border-slate-200 rounded-xl text-2xl font-mono tracking-[0.45em] text-center text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all font-bold"
+                  />
+                  {devOtp && (
+                    <div className="pt-0.5 text-center">
                       <button
                         type="button"
-                        onClick={() => { setIsVerifyingOtp(false); setError(''); }}
-                        className="text-blue-700 hover:text-blue-900 underline text-[11px] font-bold cursor-pointer shrink-0"
+                        onClick={() => setOtpCode(devOtp)}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 bg-blue-50/90 hover:bg-blue-100 border border-blue-200/70 px-2.5 py-1 rounded-lg font-mono font-semibold cursor-pointer transition-colors"
+                        title="Click to auto-fill development code"
                       >
-                        Change Email
+                        Dev Code: {devOtp} (Click to fill)
                       </button>
                     </div>
-                    <p className="text-[11px] text-blue-700 mt-1.5">
-                      Please check your inbox (or spam folder) for the 6-digit code.
-                    </p>
+                  )}
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1 px-1">
+                    <span>Didn't receive code?</span>
+                    <button
+                      type="button"
+                      disabled={resendingOtp || resendCooldown > 0}
+                      onClick={handleResendOtp}
+                      className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {resendingOtp ? 'Sending...' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}
+                    </button>
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Enter 6-Digit Verification Code *
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      maxLength={6}
-                      required
-                      autoFocus
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="• • • • • •"
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-center"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-slate-500">Didn't receive code?</span>
-                  <button
-                    type="button"
-                    disabled={resendingOtp || resendCooldown > 0}
-                    onClick={handleResendOtp}
-                    className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {resendingOtp && <RotateCw className="w-3 h-3 animate-spin" />}
-                    <span>{resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend Code'}</span>
-                  </button>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading || otpCode.length < 6}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -585,11 +612,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   )}
                 </button>
 
-                <div className="text-center pt-2">
+                <div className="text-center">
                   <button
                     type="button"
-                    onClick={() => { setIsVerifyingOtp(false); setError(''); }}
-                    className="text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
+                    onClick={() => { setIsVerifyingOtp(false); setError(''); setSuccessMessage(''); }}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
                   >
                     ← Back to Sign In
                   </button>
@@ -603,7 +630,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="text-xs text-blue-900">
                     <p className="font-semibold">Reset Code Dispatched to Your Email</p>
                     <p className="text-[11px] text-blue-700 mt-0.5">
-                      Check your email inbox at <span className="font-bold underline">{email || 'your address'}</span> for your 6-digit authorization code and enter it below:
+                      Check your email inbox at <span className="font-bold underline font-mono">{maskEmail(email) || 'your address'}</span> for your 6-digit authorization code and enter it below:
                     </p>
                   </div>
                 </div>

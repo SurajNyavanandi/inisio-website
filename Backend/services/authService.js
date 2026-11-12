@@ -2,7 +2,7 @@ import User from '../models/User.js';
 import { generateToken } from '../utils/generateToken.js';
 import { isDBConnected } from '../config/db.js';
 import config from '../config/env.js';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailService.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordResetSuccessEmail } from '../utils/emailService.js';
 import { captureLoginMetadata } from '../utils/geoIpService.js';
 import {
   memoryUsers,
@@ -173,9 +173,9 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
       const userExists = await User.findOne({ email: cleanEmail });
       if (userExists) {
         if (!userExists.isVerified) {
-          userExists.isVerified = true;
-          userExists.verificationOtp = null;
-          userExists.verificationExpires = null;
+          userExists.verificationOtp = otp;
+          userExists.verificationExpires = otpExpiry;
+          userExists.otpAttempts = 0;
           if (password && password.length >= 6) {
             userExists.password = password; // Mongoose will re-hash
           }
@@ -184,15 +184,11 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
           if (company) userExists.company = company;
           await userExists.save();
 
-          const token = generateToken({
-            id: userExists._id,
-            email: userExists.email,
-            role: userExists.role,
+          sendVerificationEmail({
+            to: cleanEmail,
             name: userExists.name,
-            company: userExists.company,
-            phone: userExists.phone,
-            isVerified: true,
-          });
+            otp,
+          }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
 
           return {
             _id: userExists._id,
@@ -201,10 +197,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
             role: userExists.role,
             company: userExists.company,
             phone: userExists.phone,
-            avatarUrl: userExists.avatarUrl,
-            isVerified: true,
-            token,
-            message: 'Account exists and is active. You can sign in now.',
+            isVerified: false,
+            requiresVerification: true,
+            otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+            message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter the code to activate your account.`,
           };
         }
 
@@ -220,20 +216,18 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         role: assignedRole,
         company: defaultCompany,
         phone: phone || '',
-        isVerified: true,
-        verificationOtp: null,
-        verificationExpires: null,
+        isVerified: false,
+        verificationOtp: otp,
+        verificationExpires: otpExpiry,
+        otpAttempts: 0,
       });
 
-      const token = generateToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
+      // Dispatch 6-digit verification OTP email via Resend SDK
+      sendVerificationEmail({
+        to: cleanEmail,
         name: user.name,
-        company: user.company,
-        phone: user.phone,
-        isVerified: true,
-      });
+        otp,
+      }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
 
       return {
         _id: user._id,
@@ -243,9 +237,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         company: user.company,
         phone: user.phone,
         avatarUrl: user.avatarUrl,
-        isVerified: true,
-        token,
-        message: 'Account created successfully. You are now signed in.',
+        isVerified: false,
+        requiresVerification: true,
+        otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+        message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter the code to activate your account.`,
       };
     } catch (err) {
       if (err.message.includes('already') || err.message.includes('valid') || err.message.includes('Password')) {
@@ -572,6 +567,7 @@ export const sendVerificationOtp = async (email) => {
     email: cleanEmail,
     message: `A new 6-digit verification code has been dispatched to ${cleanEmail}.`,
     expiresIn: '15 minutes',
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };
 
@@ -736,6 +732,35 @@ export const loginUser = async ({ email, password, req }) => {
 
   if (isAdminEmail) {
     user.role = adminRole;
+  }
+
+  // If user has not verified their email, dispatch OTP and require verification
+  if (user.isVerified === false) {
+    const freshOtp = generateOtp();
+    user.verificationOtp = freshOtp;
+    user.verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.otpAttempts = 0;
+    if (user.save) {
+      await user.save().catch(() => {});
+    }
+
+    sendVerificationEmail({
+      to: cleanEmail,
+      name: user.name,
+      otp: freshOtp,
+    }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
+
+    return {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      company: user.company,
+      phone: user.phone,
+      isVerified: false,
+      requiresVerification: true,
+      message: `Your account is not verified yet. A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter it to continue.`,
+    };
   }
 
   await recordSuccessfulLogin(user, req);
@@ -925,6 +950,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     maskedEmail,
     resetLink,
     expiresIn: '15 minutes',
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };
 
@@ -1051,6 +1077,9 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       user.isVerified = true;
       await user.save();
 
+      // Dispatch security notification via Resend
+      sendPasswordResetSuccessEmail({ to: user.email, name: user.name }).catch(() => {});
+
       const token = generateToken({
         id: user._id,
         email: user.email,
@@ -1102,6 +1131,9 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
   memUser.resetPasswordOtp = null;
   memUser.resetPasswordExpires = null;
   memUser.isVerified = true;
+
+  // Dispatch security notification via Resend
+  sendPasswordResetSuccessEmail({ to: cleanEmail, name: memUser.name }).catch(() => {});
 
   const token = generateToken({
     id: memUser._id,

@@ -1,6 +1,17 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
 import config from './env.js';
 import logger from '../utils/logger.js';
+
+// Automatically configure public DNS servers (Google 8.8.8.8, Cloudflare 1.1.1.1)
+// for mongodb+srv:// to resolve MongoDB Atlas SRV records reliably across all Windows/local network resolvers.
+try {
+  if (config.databaseUri && config.databaseUri.startsWith('mongodb+srv://')) {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  }
+} catch (e) {
+  // Ignore if network environment restricts custom DNS
+}
 
 // Disable buffering so queries fail-fast or fallback immediately instead of hanging
 mongoose.set('bufferCommands', false);

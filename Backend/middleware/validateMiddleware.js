@@ -39,6 +39,7 @@ export const registerSchema = z
     password: z.string().min(6, 'Password must be at least 6 characters').max(100),
     phone: z.string().optional(),
     company: z.string().max(150).optional(),
+    role: z.enum(['user', 'ca', 'dpr_consultant', 'prosync', 'prosync_admin', 'promoter']).default('user').optional(),
   })
   .strict();
 

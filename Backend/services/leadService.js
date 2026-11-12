@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import { isDBConnected } from '../config/db.js';
 import { isAuthorizedAdminEmail } from '../utils/memoryUserStore.js';
 import { escapeRegex } from '../middleware/validateMiddleware.js';
+import { sendLeadAssessmentConfirmationEmail } from '../utils/emailService.js';
 
 let memoryLeads = [];
 
@@ -231,6 +232,9 @@ export const createLead = async (leadData, userId = null) => {
         });
       } catch (e) {}
 
+      // Dispatch confirmation & admin alert via Resend SDK
+      sendLeadAssessmentConfirmationEmail(lead).catch(() => {});
+
       return lead;
     } catch (err) {
       console.warn('MongoDB create failed in createLead, storing in memory fallback:', err.message);
@@ -244,6 +248,7 @@ export const createLead = async (leadData, userId = null) => {
     updatedAt: new Date(),
   };
   memoryLeads.unshift(created);
+  sendLeadAssessmentConfirmationEmail(created).catch(() => {});
   return created;
 };
 
@@ -347,6 +352,7 @@ export const updateLead = async (id, updates, requester = null) => {
     updatedAt: new Date(),
   };
   memoryLeads.unshift(created);
+  sendLeadAssessmentConfirmationEmail(created).catch(() => {});
   return created;
 };
 
