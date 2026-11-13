@@ -1,19 +1,21 @@
-import { sendError } from '../utils/responseHandler.js';
+import logger from '../utils/logger.js';
+import config from '../config/env.js';
 
 /**
  * 404 Route Not Found Middleware
  */
 export const notFound = (req, res, next) => {
-  const error = new Error(`Not Found - ${req.originalUrl}`);
+  const error = new Error(`Resource Not Found - ${req.method} ${req.originalUrl}`);
   res.status(404);
   next(error);
 };
 
 /**
  * Centralized Error Handling Middleware
+ * Returns consistent format: { success: false, message, code }
  */
 export const errorHandler = (err, req, res, next) => {
-  let statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
+  let statusCode = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
   let message = err.message || 'Internal Server Error';
 
   // Handle Mongoose disconnection / buffer timeout gracefully
@@ -24,13 +26,16 @@ export const errorHandler = (err, req, res, next) => {
     err.message?.includes('buffering timed out') ||
     err.message?.includes('connect ECONNREFUSED')
   ) {
-    console.warn('[AI Studio] Database offline — returning mock empty response or fallback:', err.message);
-    if (req.method === 'GET') {
-      return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {});
+    logger.warn(`Database connection error: ${err.message}`);
+    if (config.ALLOW_MEMORY_FALLBACK && !config.isProd) {
+      if (req.method === 'GET') {
+        return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? [] : {});
+      }
     }
     return res.status(503).json({
       success: false,
-      message: 'Service temporarily unavailable (database offline). Resilient in-memory mode active.',
+      code: 503,
+      message: 'Database service is temporarily unavailable. Please try again shortly.',
     });
   }
 
@@ -40,11 +45,11 @@ export const errorHandler = (err, req, res, next) => {
     message = `Resource not found with ID of ${err.value}`;
   }
 
-  // Handle Mongoose duplicate key (E11000)
+  // Handle Mongoose duplicate key (E11000) -> 409 Conflict
   if (err.code === 11000) {
-    statusCode = 400;
-    const field = Object.keys(err.keyValue || {})[0] || 'field';
-    message = `Duplicate value entered for '${field}'. Please use another value.`;
+    statusCode = 409;
+    const field = Object.keys(err.keyValue || {})[0] || 'record';
+    message = `A record with this ${field} already exists. Please choose a different ${field}.`;
   }
 
   // Handle Mongoose validation errors
@@ -58,28 +63,35 @@ export const errorHandler = (err, req, res, next) => {
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
     statusCode = 401;
-    message = 'Invalid authentication token';
+    message = 'Invalid authentication credentials';
   }
 
   if (err.name === 'TokenExpiredError') {
     statusCode = 401;
-    message = 'Authentication token expired. Please login again';
+    message = 'Authentication token expired. Please log in again.';
   }
 
-  if (message.includes('Invalid email or password') || message.includes('Please provide your password')) {
-    statusCode = 401;
-  }
-
+  // Server-side logging of errors
   if (statusCode >= 500) {
-    console.error(`[Server Error] ${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
-    if (process.env.NODE_ENV === 'development' && err.stack) {
-      console.error(err.stack);
-    }
+    logger.error(`${req.method} ${req.originalUrl} (${statusCode}) - ${message}`, {
+      stack: err.stack,
+    });
   } else {
-    console.warn(`[Client Info] ${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
+    logger.warn(`${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
   }
 
-  return sendError(res, message, statusCode, process.env.NODE_ENV === 'development' ? err.stack : undefined);
+  // In production, never return raw stack traces or internal db schema details
+  const responsePayload = {
+    success: false,
+    code: statusCode,
+    message: statusCode >= 500 && config.isProd ? 'An unexpected server error occurred.' : message,
+  };
+
+  if (!config.isProd && err.stack) {
+    responsePayload.stack = err.stack;
+  }
+
+  return res.status(statusCode).json(responsePayload);
 };
 
 export default {

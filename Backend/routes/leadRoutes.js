@@ -17,13 +17,13 @@ const router = express.Router();
 // Public submission
 router.post('/', optionalAuth, validateBody(['fullName', 'mobile', 'email']), validateIndianPhone('mobile'), createLead);
 
-// Lead retrieval & management (Admins & CAs & Super Admin viewer)
-router.get('/', optionalAuth, getLeads);
+// Lead retrieval & management (Authenticated - scoped by role: Admins, CAs, DPR, Prosync, or own leads for user)
+router.get('/', authenticateUser, getLeads);
 router.get('/:id', authenticateUser, getLeadById);
-router.put('/:id/assignment', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin', 'admin1', 'admin2', 'admin3'), assignLead);
+router.put('/:id/assignment', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), assignLead);
 router.put('/:id/progress', authenticateUser, restrictSuperAdminViewer, updateLeadProgress);
 router.put('/:id', authenticateUser, restrictSuperAdminViewer, validateIndianPhone('mobile'), updateLead);
-router.delete('/clear-all', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin', 'admin1', 'admin2', 'admin3'), clearAllLeads);
-router.delete('/:id', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin', 'admin1', 'admin2', 'admin3'), deleteLead);
+router.delete('/clear-all', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), clearAllLeads);
+router.delete('/:id', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), deleteLead);
 
 export default router;

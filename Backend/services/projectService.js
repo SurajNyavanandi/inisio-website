@@ -5,6 +5,7 @@ import { isDBConnected } from '../config/db.js';
 let memoryProjects = [];
 
 export const getProjects = async (filter = {}, userRole = 'admin', userId = null) => {
+  const limit = Math.min(Math.max(parseInt(filter.limit) || 50, 1), 100);
   if (isDBConnected()) {
     try {
       let query = {};
@@ -20,7 +21,7 @@ export const getProjects = async (filter = {}, userRole = 'admin', userId = null
         query.userId = userId;
       }
 
-      const projects = await Project.find(query).sort({ updatedAt: -1 });
+      const projects = await Project.find(query).sort({ updatedAt: -1 }).limit(limit).lean();
       return projects;
     } catch (err) {
       console.warn('MongoDB query failed in getProjects, using memory fallback:', err.message);
@@ -35,10 +36,18 @@ export const getProjects = async (filter = {}, userRole = 'admin', userId = null
   } else if (userRole === 'user' && userId) {
     results = results.filter((p) => p.userId === userId);
   }
-  return results.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+  return results.slice(0, limit).sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
 };
 
-export const createProject = async (projectData, userId = null) => {
+export const createProject = async (rawProjectData, userId = null) => {
+  const projectData = { ...rawProjectData };
+  delete projectData.status;
+  delete projectData.assignedCA;
+  delete projectData.assignedBank;
+  delete projectData.caReviewNotes;
+  delete projectData.dprAssignedTo;
+  delete projectData.consultationAssignedTo;
+
   if (isDBConnected()) {
     try {
       const project = await Project.create({
@@ -76,16 +85,36 @@ export const createProject = async (projectData, userId = null) => {
   return created;
 };
 
-export const getProjectById = async (id) => {
+export const getProjectById = async (id, requester = null) => {
+  let project = null;
   if (isDBConnected()) {
     try {
-      const project = await Project.findById(id);
-      if (project) return project;
+      project = await Project.findById(id).lean();
     } catch (err) {}
   }
-  const found = memoryProjects.find((p) => String(p._id) === String(id));
-  if (!found) throw new Error('Project not found');
-  return found;
+  if (!project) {
+    project = memoryProjects.find((p) => String(p._id) === String(id));
+  }
+  if (!project) {
+    const error = new Error('Project not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Authorization check (prevent IDOR)
+  if (requester) {
+    const isAdmin = ['admin', 'superadmin'].includes(requester.role);
+    const isOwner = String(project.userId || '') === String(requester._id || '') ||
+      Boolean(project.email && requester.email && project.email.toLowerCase() === requester.email.toLowerCase());
+    const isStaff = ['ca', 'dpr', 'prosync'].includes(requester.role);
+    if (!isAdmin && !isOwner && !isStaff) {
+      const error = new Error('Access denied: You are not authorized to view this project.');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  return project;
 };
 
 export const updateProjectAudit = async (id, status, caReviewNotes = '', assignedCA = '', updates = {}) => {

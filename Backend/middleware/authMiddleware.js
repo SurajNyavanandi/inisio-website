@@ -101,8 +101,19 @@ export const authorizeRoles = (...roles) => {
     const userEmail = (req.user.email || '').toLowerCase().trim();
     const userRole = req.user.role || 'user';
 
+    // Normalize any legacy role aliases from database
+    const normalizedRole = userRole === 'admin1' || userRole === 'admin2' || userRole === 'admin3'
+      ? 'admin'
+      : userRole === 'prosync_admin'
+        ? 'prosync'
+        : userRole === 'dpr_consultant'
+          ? 'dpr'
+          : userRole;
+
     // Strict Admin and Super Admin email validation:
-    if (roles.includes('admin') || roles.includes('superadmin')) {
+    // If user is operating under an admin/superadmin role, strictly verify authorized administrative email
+    const isAdmin = ['admin', 'superadmin'].includes(normalizedRole);
+    if (isAdmin) {
       const isAllowedAdmin = isAuthorizedAdminEmail(userEmail);
       if (!isAllowedAdmin) {
         return sendError(
@@ -121,13 +132,6 @@ export const authorizeRoles = (...roles) => {
         403
       );
     }
-
-    // Normalize admin aliases
-    const normalizedRole = userRole === 'admin1' || userRole === 'admin2' || userRole === 'admin3'
-      ? 'admin'
-      : userRole === 'prosync'
-        ? 'prosync_admin'
-        : userRole;
 
     // Super Admin has view-only authorization for any admin, superadmin, or general reporting resource
     const isSuperAdminViewer = userRole === 'superadmin' && req.method === 'GET' && (roles.includes('admin') || roles.includes('superadmin') || roles.includes('ca') || roles.includes('prosync_admin'));

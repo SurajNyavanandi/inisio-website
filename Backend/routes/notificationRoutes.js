@@ -6,14 +6,16 @@ import {
   markAllAsRead,
   clearNotifications,
 } from '../controllers/notificationController.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateUser, authorizeRoles, restrictSuperAdminViewer } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.get('/', optionalAuth, getNotifications);
-router.post('/', createNotification);
+router.use(authenticateUser);
+
+router.get('/', getNotifications);
+router.post('/', authorizeRoles('admin', 'superadmin', 'ca', 'dpr', 'prosync'), createNotification);
 router.patch('/read-all', markAllAsRead);
 router.patch('/:id/read', markAsRead);
-router.delete('/clear-all', clearNotifications);
+router.delete('/clear-all', restrictSuperAdminViewer, authorizeRoles('admin'), clearNotifications);
 
 export default router;

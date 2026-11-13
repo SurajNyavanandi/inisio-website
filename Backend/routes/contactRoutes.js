@@ -21,7 +21,7 @@ router.post('/', createEnquiry);
  * Admin Routes
  * Protected with Authentication & Role-based Authorization
  */
-const allowedAdminRoles = ['admin', 'superadmin', 'ca', 'prosync_admin', 'prosync', 'admin1', 'admin2', 'admin3'];
+const allowedAdminRoles = ['admin', 'superadmin', 'ca', 'prosync'];
 
 router.get('/', authenticateUser, authorizeRoles(...allowedAdminRoles), getEnquiries);
 router.get('/:id', authenticateUser, authorizeRoles(...allowedAdminRoles), getEnquiryDetails);

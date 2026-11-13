@@ -73,7 +73,7 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                 </p>
               </div>
 
-              {/* Sample Financial Metric Strip */}
+              {/* Industry Benchmark Financial Metric Strip */}
               <div className="pt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-2xs">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">DSCR Target</span>

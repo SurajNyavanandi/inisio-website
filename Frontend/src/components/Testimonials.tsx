@@ -18,6 +18,10 @@ export const Testimonials: React.FC = () => {
 
   const industries = ['All', 'Manufacturing', 'Healthcare', 'Food Processing', 'Solar & Renewable'];
 
+  if (!TESTIMONIALS || TESTIMONIALS.length === 0) {
+    return null;
+  }
+
   const filteredTestimonials = selectedIndustry === 'All'
     ? TESTIMONIALS
     : TESTIMONIALS.filter(t => t.industry === selectedIndustry);

@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import logger from './logger.js';
 
 dotenv.config();
 
@@ -33,28 +34,22 @@ export const sendEmail = async (mailOptions, metadata = {}) => {
       const resData = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        console.log(`✅ [Resend API] Email sent to: ${recipient} (ID: ${resData?.id || 'sent'})`);
-        if (metadata.otp) {
-          console.log(`🔑 [Inisio Verification OTP] Recipient: ${recipient} | Code: ${metadata.otp}`);
-        }
-        return { success: true, messageId: resData?.id, otp: metadata.otp };
+        logger.info(`[Resend API] Email sent to: ${recipient} (ID: ${resData?.id || 'sent'})`);
+        return { success: true, messageId: resData?.id };
       } else {
-        console.warn(`⚠️ [Resend API Error] ${resData?.message || response.statusText}`);
-        return { success: false, error: resData?.message || response.statusText, otp: metadata.otp };
+        logger.warn(`[Resend API Error] ${resData?.message || response.statusText}`);
+        return { success: false, error: resData?.message || response.statusText };
       }
     } catch (err) {
-      console.warn(`⚠️ [Resend Network Error] ${err.message}`);
-      return { success: false, error: err.message, otp: metadata.otp };
+      logger.warn(`[Resend Network Error] ${err.message}`);
+      return { success: false, error: err.message };
     }
   }
 
   // Development fallback when RESEND_API_KEY is not yet configured
-  console.log(`ℹ️ [Email Service - Dev Mode] RESEND_API_KEY not configured. Simulated dispatch to: ${recipient}`);
-  console.log(`   Subject: ${mailOptions.subject}`);
-  if (metadata.otp) {
-    console.log(`🔑 [Inisio Verification OTP (Dev)] Recipient: ${recipient} | Code: ${metadata.otp} | Valid for 15 mins`);
-  }
-  return { success: true, isDev: true, otp: metadata.otp, configured: false };
+  logger.info(`[Email Service - Dev Mode] RESEND_API_KEY not configured. Simulated dispatch to: ${recipient}`);
+  logger.info(`   Subject: ${mailOptions.subject}`);
+  return { success: true, isDev: true, configured: false };
 };
 
 // Backwards compatibility alias for any existing callers

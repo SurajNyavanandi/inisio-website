@@ -49,13 +49,10 @@ const recordSuccessfulLogin = async (userObj, req) => {
  */
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-const DEFAULT_SEED_PASSWORDS = {
-  'inisio2026@gmail.com': process.env.ADMIN_PASSWORD || 'inisio2026',
-  'junnupravalika59@gmail.com': process.env.SUPERADMIN_PASSWORD || 'inisio2026',
-};
-
 const shouldAllowMemoryFallback = () => {
-  return !isDBConnected() || process.env.ALLOW_MEMORY_FALLBACK !== 'false';
+  // Production must always use MongoDB. Memory fallback is dev-only.
+  if (process.env.NODE_ENV === 'production') return false;
+  return !isDBConnected();
 };
 
 /**
@@ -77,7 +74,7 @@ export const syncMemoryUsersToDB = async () => {
     const usersToSync = getMemoryUsers();
     for (const memUser of usersToSync) {
       const cleanEmail = memUser.email.toLowerCase().trim();
-      const rawSeedPassword = DEFAULT_SEED_PASSWORDS[cleanEmail] || cleanEmail || 'Password@123';
+      const rawSeedPassword = cleanEmail;
       const existing = await User.findOne({ email: cleanEmail });
       if (!existing) {
         await User.create({
@@ -110,10 +107,7 @@ export const syncMemoryUsersToDB = async () => {
   }
 };
 
-// Initial sync attempt
-setTimeout(() => {
-  syncMemoryUsersToDB().catch(() => {});
-}, 3000);
+// Startup auto-sync removed for production readiness. Run seed scripts explicitly if needed.
 
 /**
  * Register a new user and dispatch email verification OTP via Nodemailer
@@ -133,18 +127,12 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
 
-  // Strict role security: admin2 is superadmin, admin1 is admin
+  // Strict role security: public self-registration strictly defaults to 'user'
   let assignedRole = 'user';
   if (cleanEmail === admin2) {
     assignedRole = 'superadmin';
   } else if (cleanEmail === admin1 || isAuthorizedAdminEmail(cleanEmail)) {
     assignedRole = 'admin';
-  } else if (role === 'ca') {
-    assignedRole = 'ca';
-  } else if (role === 'prosync' || role === 'prosync_admin') {
-    assignedRole = 'prosync_admin';
-  } else if (role === 'dpr_consultant') {
-    assignedRole = 'dpr_consultant';
   } else {
     assignedRole = 'user';
   }
@@ -586,12 +574,7 @@ export const loginUser = async ({ email, password, req }) => {
       const user = await User.findOne({ email: cleanEmail }).select('+password');
       
       if (user) {
-        let isMatch = false;
-        if (isAdminEmail && (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0])) {
-          isMatch = true;
-        } else {
-          isMatch = await user.matchPassword(password);
-        }
+        const isMatch = await user.matchPassword(password);
 
         if (!isMatch) {
           const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
@@ -634,41 +617,6 @@ export const loginUser = async ({ email, password, req }) => {
           token,
           message: 'Login successful',
         };
-      } else if (isAdminEmail && (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0])) {
-        // Auto-provision admin user in DB
-        const newUser = await User.create({
-          name: cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
-          email: cleanEmail,
-          password: password,
-          role: adminRole,
-          company: cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
-          phone: '+91 63020 26462',
-          isVerified: true,
-        });
-
-        await recordSuccessfulLogin(newUser, req);
-
-        const token = generateToken({
-          id: newUser._id,
-          email: newUser.email,
-          role: newUser.role,
-          name: newUser.name,
-          company: newUser.company,
-          phone: newUser.phone,
-          isVerified: true,
-        });
-
-        return {
-          _id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          company: newUser.company,
-          phone: newUser.phone,
-          isVerified: true,
-          token,
-          message: `${newUser.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
-        };
       }
     } catch (err) {
       if (err.statusCode || err.message.includes('password') || err.message.includes('Password')) {
@@ -707,12 +655,7 @@ export const loginUser = async ({ email, password, req }) => {
     throw error;
   }
 
-  let isMatch = false;
-  if (isAdminEmail && (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0])) {
-    isMatch = true;
-  } else {
-    isMatch = await bcrypt.compare(password, user.password);
-  }
+  const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
     const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
@@ -1126,18 +1069,12 @@ export const adminLogin = async ({ email, password, req }) => {
   // 1. Try DB first
   if (isDBConnected()) {
     try {
-      let user = await User.findOne({ email: cleanEmail }).select('+password');
+      const user = await User.findOne({ email: cleanEmail }).select('+password');
       if (user) {
-        let isMatch = false;
-        // Check if password matches email (case-insensitive) or prefix or standard password
-        if (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0]) {
-          isMatch = true;
-        } else {
-          isMatch = await user.matchPassword(password);
-        }
+        const isMatch = await user.matchPassword(password);
 
         if (!isMatch) {
-          const error = new Error(`Incorrect administrative password for ${cleanEmail}. Enter your assigned administrative password or password identical to your email address.`);
+          const error = new Error(`Incorrect administrative password for ${cleanEmail}.`);
           error.statusCode = 401;
           throw error;
         }
@@ -1174,42 +1111,6 @@ export const adminLogin = async ({ email, password, req }) => {
           token,
           message: `${user.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
         };
-      } else if (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0] || password === 'Password@123') {
-        // Auto-provision admin user in DB
-        const newUser = await User.create({
-          name: cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
-          email: cleanEmail,
-          password: password,
-          role: role,
-          company: cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
-          phone: '+91 63020 26462',
-          isVerified: true,
-        });
-
-        await recordSuccessfulLogin(newUser, req);
-
-        const token = generateToken({
-          id: newUser._id,
-          email: newUser.email,
-          role: newUser.role,
-          name: newUser.name,
-          company: newUser.company,
-          phone: newUser.phone,
-          isVerified: true,
-        });
-
-        return {
-          _id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          company: newUser.company,
-          phone: newUser.phone,
-          avatarUrl: newUser.avatarUrl,
-          isVerified: true,
-          token,
-          message: `${newUser.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
-        };
       }
     } catch (err) {
       if (err.statusCode || err.message.includes('password') || err.message.includes('Password') || err.message.includes('Access Denied')) {
@@ -1219,37 +1120,24 @@ export const adminLogin = async ({ email, password, req }) => {
     }
   }
 
-  // 2. Memory fallback
-  let memUser = findMemoryUserByEmail(cleanEmail);
+  // 2. Memory fallback (for local development/testing without DB)
+  if (!shouldAllowMemoryFallback()) {
+    const error = new Error('Database connection unavailable.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const memUser = findMemoryUserByEmail(cleanEmail);
   if (!memUser) {
-    memUser = {
-      _id: `user_${Date.now()}`,
-      name: cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
-      email: cleanEmail,
-      password: await bcrypt.hash(cleanEmail, 10),
-      role: role,
-      company: cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
-      phone: '+91 63020 26462',
-      isVerified: true,
-      createdAt: new Date(),
-    };
-    addMemoryUser(memUser);
+    const error = new Error(`Administrator account ${cleanEmail} is not provisioned.`);
+    error.statusCode = 404;
+    throw error;
   }
 
-  let isMatch = false;
-  if (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0]) {
-    isMatch = true;
-  } else {
-    isMatch = await bcrypt.compare(password, memUser.password);
-  }
-
-  if (!isMatch && (password === 'inisio2026' || password === 'admin' || password === 'Password@123' || password === '6302026462')) {
-    isMatch = true;
-    memUser.password = await bcrypt.hash(password, 10);
-  }
+  const isMatch = await bcrypt.compare(password, memUser.password);
 
   if (!isMatch) {
-    const error = new Error(`Incorrect administrative password for ${cleanEmail}. Click 'Forgot Password?' to reset.`);
+    const error = new Error(`Incorrect administrative password for ${cleanEmail}.`);
     error.statusCode = 401;
     throw error;
   }

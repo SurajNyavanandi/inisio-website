@@ -1,10 +1,6 @@
 import bcrypt from 'bcryptjs';
 
-// Pre-hashed default passwords for local fallback resilience
-const CA_HASH = bcrypt.hashSync('ca123456', 10);
-const PROSYNC_HASH = bcrypt.hashSync('prosync123', 10);
-const PROMOTER_HASH = bcrypt.hashSync('promoter123', 10);
-const USER_HASH = bcrypt.hashSync('pravalika123', 10);
+// Memory store for local non-production development resilience
 
 /**
  * Dynamically resolves authorized administrative emails from environment variables
@@ -46,59 +42,35 @@ export const AUTHORIZED_ADMIN_EMAILS = new Proxy([], {
   },
 });
 
-export let memoryUsers = [
-  {
-    _id: 'user_superadmin_001',
-    name: 'Executive Super Admin',
-    email: getAdminEmail2(),
-    password: bcrypt.hashSync(getAdminEmail2(), 10),
-    role: 'superadmin',
-    company: 'Inisio Executive Board',
-    phone: '+91 63020 26462',
-    isVerified: true,
-    createdAt: new Date('2025-01-01'),
-  },
-  {
-    _id: 'user_admin_002',
-    name: 'Inisio Operations Admin',
-    email: getAdminEmail1(),
-    password: bcrypt.hashSync(getAdminEmail1(), 10),
-    role: 'admin',
-    company: 'Inisio HQ Operations',
-    phone: '+91 63020 26462',
-    isVerified: true,
-    createdAt: new Date('2025-01-01'),
-  },
-];
+export let memoryUsers = [];
 
 export const getMemoryUsers = () => {
-  // Ensure both dynamic admin accounts are always present in memoryUsers
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
 
-  if (!memoryUsers.some((u) => u.email.toLowerCase() === admin2)) {
+  if (admin2 && !memoryUsers.some((u) => u.email.toLowerCase() === admin2)) {
     memoryUsers.unshift({
       _id: 'user_superadmin_dynamic',
       name: 'Executive Super Admin',
       email: admin2,
-      password: bcrypt.hashSync(admin2, 10),
+      password: '',
       role: 'superadmin',
       company: 'Inisio Executive Board',
-      phone: '+91 63020 26462',
+      phone: process.env.SUPERADMIN_PHONE || '',
       isVerified: true,
       createdAt: new Date(),
     });
   }
 
-  if (!memoryUsers.some((u) => u.email.toLowerCase() === admin1)) {
+  if (admin1 && !memoryUsers.some((u) => u.email.toLowerCase() === admin1)) {
     memoryUsers.unshift({
       _id: 'user_admin_dynamic',
       name: 'Inisio Operations Admin',
       email: admin1,
-      password: bcrypt.hashSync(admin1, 10),
+      password: '',
       role: 'admin',
       company: 'Inisio HQ Operations',
-      phone: '+91 63020 26462',
+      phone: process.env.ADMIN_PHONE || '',
       isVerified: true,
       createdAt: new Date(),
     });

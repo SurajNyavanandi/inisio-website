@@ -70,11 +70,14 @@ export const createOrder = async ({
       orderData = await razorpay.orders.create(options);
       razorpayOrderId = orderData.id;
     } catch (err) {
-      console.warn('Razorpay live order creation failed, falling back to sandbox order:', err.message);
-      razorpayOrderId = `order_sim_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      console.error('Razorpay live order creation failed:', err.message);
+      throw err;
     }
   } else {
-    // Sandbox / Test fallback if keys are not yet provided
+    if (config.isProd) {
+      throw new Error('Razorpay payment gateway is not configured. RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.');
+    }
+    // Dev/test only: simulate order when keys are absent
     razorpayOrderId = `order_sim_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   }
 
@@ -131,7 +134,7 @@ export const createOrder = async ({
     amountINR: numAmount,
     currency: currency.toUpperCase(),
     receipt,
-    keyId: config.key_id || 'rzp_test_inisio_demo_key',
+    keyId: config.key_id || '',
     isTestMode: config.isTestMode,
     planName,
     billingCycle,
@@ -182,8 +185,8 @@ export const verifyPayment = async ({
       isSignatureValid = false;
     }
   } else {
-    // If running in test/sandbox simulation or signature test mode
-    isSignatureValid = true;
+    // No Razorpay keys configured — always fail verification
+    isSignatureValid = false;
   }
 
   if (!isSignatureValid) {
@@ -195,7 +198,7 @@ export const verifyPayment = async ({
   const invoiceNumber = generateInvoiceNumber();
   const updateFields = {
     paymentId: razorpay_payment_id,
-    signature: razorpay_signature || 'test_verified_signature',
+    signature: razorpay_signature || '',
     status: 'captured',
     invoiceNumber,
     paymentMethod,

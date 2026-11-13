@@ -4,6 +4,7 @@ import { sendSuccess } from '../utils/responseHandler.js';
 export const getAllServices = async (req, res, next) => {
   try {
     const list = await serviceService.getAllServices();
+    res.set('Cache-Control', 'public, max-age=900');
     return sendSuccess(res, list, 'Consultancy services retrieved');
   } catch (error) {
     next(error);

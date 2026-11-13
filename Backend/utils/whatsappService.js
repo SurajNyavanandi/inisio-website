@@ -23,6 +23,9 @@ export const formatWhatsAppEnquiryMessage = ({ name, phone, email, company, subj
   );
 };
 
+import logger from './logger.js';
+import config from '../config/env.js';
+
 export const sendWhatsAppNotification = async (enquiryData) => {
   const adminPhone = process.env.ADMIN_WHATSAPP_PHONE || '916302026462';
   const whatsappApiUrl = process.env.WHATSAPP_API_URL || process.env.WHATSAPP_WEBHOOK_URL;
@@ -30,10 +33,7 @@ export const sendWhatsAppNotification = async (enquiryData) => {
 
   const messageText = formatWhatsAppEnquiryMessage(enquiryData);
 
-  console.log(`\n========================================`);
-  console.log(`📱 [WHATSAPP DISPATCH] New Contact Enquiry to Admin (${adminPhone})`);
-  console.log(messageText);
-  console.log(`========================================\n`);
+  logger.debug(`[WhatsApp Dispatch] Contact Enquiry notice generated for admin`);
 
   // If a live WhatsApp API endpoint is configured in env:
   if (whatsappApiUrl) {
@@ -55,12 +55,12 @@ export const sendWhatsAppNotification = async (enquiryData) => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.warn(`[WhatsApp API Response ${response.status}]:`, errorText);
+        logger.warn(`[WhatsApp API Response ${response.status}]: ${errorText}`);
       } else {
-        console.log(`✅ [WhatsApp Notification] Dispatched successfully to ${adminPhone}`);
+        logger.info(`[WhatsApp Notification] Dispatched successfully`);
       }
     } catch (apiError) {
-      console.warn('[WhatsApp Notification API Warning]:', apiError.message);
+      logger.warn(`[WhatsApp Notification API Warning]: ${apiError.message}`);
     }
   }
 

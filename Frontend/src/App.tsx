@@ -21,6 +21,7 @@ import { canUserStartAssessment } from './utils/membershipStore';
 import { getStoredLeads } from './utils/leadStore';
 import { recordPageView } from './utils/visitorStore';
 import { recordUserLogin } from './utils/userStore';
+import { resolveApiUrl } from './utils/apiClient';
 // Code-split / Lazy-loaded heavy modules and dashboards
 const UserDashboard = lazy(() => import('./components/UserDashboard').then(m => ({ default: m.UserDashboard })));
 const ProjectAssessmentPage = lazy(() => import('./components/ProjectAssessmentPage').then(m => ({ default: m.ProjectAssessmentPage })));
@@ -86,15 +87,17 @@ export default function App() {
 
   // Dynamically verify active user token and session with the backend API
   useEffect(() => {
+    let isMounted = true;
     const token = localStorage.getItem('inisio_auth_token');
     if (token) {
-      fetch('/api/auth/me', {
+      fetch(resolveApiUrl('/auth/me'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       })
         .then((res) => res.json())
         .then((data) => {
+          if (!isMounted) return;
           if (data && data.success && data.data) {
             const user: AuthUser = {
               email: data.data.email,
@@ -117,6 +120,9 @@ export default function App() {
           // Keep active state if network is temporarily offline
         });
     }
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleOpenAuth = (

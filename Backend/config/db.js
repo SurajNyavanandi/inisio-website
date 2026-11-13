@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import logger from '../utils/logger.js';
 
 dotenv.config();
 
@@ -52,10 +53,10 @@ export const connectDB = async () => {
       });
 
       cachedConnection = conn;
-      console.log(`✅ MongoDB Connected Successfully: ${conn.connection.host}`);
+      logger.info(`MongoDB Connected Successfully: ${conn.connection.host}`);
       return conn;
     } catch (error) {
-      console.warn(`⚠️ MongoDB Connection not established (${error.message}). Resilient in-memory storage active.`);
+      logger.warn(`MongoDB Connection not established (${error.message}).`);
       return null;
     } finally {
       connectingPromise = null;

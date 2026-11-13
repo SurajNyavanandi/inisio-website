@@ -25,7 +25,7 @@ const consultationSchema = new mongoose.Schema(
     },
     industry: {
       type: String,
-      default: 'General Greenfield Project',
+      default: '',
       trim: true,
     },
     projectCostCr: {
@@ -51,7 +51,7 @@ const consultationSchema = new mongoose.Schema(
     },
     assignedAdvisor: {
       type: String,
-      default: 'Senior Debt Syndication Expert',
+      default: '',
     },
     feedback: {
       type: String,
@@ -62,6 +62,12 @@ const consultationSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Indexes for query filters and lookups
+consultationSchema.index({ email: 1 });
+consultationSchema.index({ phone: 1 });
+consultationSchema.index({ status: 1 });
+consultationSchema.index({ createdAt: -1 });
 
 const Consultation = mongoose.models.Consultation || mongoose.model('Consultation', consultationSchema);
 export default Consultation;

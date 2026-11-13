@@ -14,7 +14,7 @@ export const getProjects = async (req, res, next) => {
 
 export const getProjectById = async (req, res, next) => {
   try {
-    const project = await projectService.getProjectById(req.params.id);
+    const project = await projectService.getProjectById(req.params.id, req.user);
     return sendSuccess(res, project, 'Project details fetched');
   } catch (error) {
     next(error);
@@ -33,8 +33,15 @@ export const createProject = async (req, res, next) => {
 
 export const updateProjectAudit = async (req, res, next) => {
   try {
-    const { status, caReviewNotes, assignedCA } = req.body;
-    const project = await projectService.updateProjectAudit(req.params.id, status, caReviewNotes, assignedCA);
+    const { status, cmaAuditStatus, bankabilityStatus, caReviewNotes, assignedCA, dscr, debtEquityRatio } = req.body;
+    const effectiveStatus = status || cmaAuditStatus || bankabilityStatus;
+    const project = await projectService.updateProjectAudit(
+      req.params.id,
+      effectiveStatus,
+      caReviewNotes,
+      assignedCA,
+      { dscr: dscr !== undefined ? Number(dscr) : undefined, debtEquityRatio, ...req.body }
+    );
     return sendSuccess(res, project, 'Project audit status updated');
   } catch (error) {
     next(error);

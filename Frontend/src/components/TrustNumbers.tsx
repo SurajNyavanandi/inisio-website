@@ -53,6 +53,10 @@ const AnimatedCounter: React.FC<CounterProps> = ({ end, prefix = '', suffix = ''
 };
 
 export const TrustNumbers: React.FC = () => {
+  if (!TRUST_NUMBERS || TRUST_NUMBERS.length === 0) {
+    return null;
+  }
+
   const getIcon = (iconName: string) => {
     switch (iconName) {
       case 'FileCheck':
