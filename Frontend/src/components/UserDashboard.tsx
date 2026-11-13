@@ -63,7 +63,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const totalCostSum = leads.reduce((acc, curr) => acc + (Number(curr.projectCost || curr.totalCostCr) || 0), 0);
   const totalLoanSum = leads.reduce((acc, curr) => acc + (Number(curr.proposedLoan || curr.loanRequiredCr) || 0), 0);
   const avgFeasibility = leads.length > 0
-    ? Math.round(leads.reduce((acc, curr) => acc + (Number(curr.feasibilityScore) || 85), 0) / leads.length)
+    ? Math.round(leads.reduce((acc, curr) => acc + (Number(curr.feasibilityScore) || 0), 0) / leads.length)
     : null;
 
   return (

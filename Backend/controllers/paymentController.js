@@ -124,12 +124,18 @@ export const verifyPaymentSignature = async (req, res, next) => {
  */
 export const getPaymentHistory = async (req, res, next) => {
   try {
+<<<<<<< HEAD
     const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
     const targetEmail = isAdmin && req.query.email ? req.query.email : req.user?.email;
     if (!targetEmail) {
       return sendError(res, 'User email not found', 400);
     }
     const payments = await getUserPayments(targetEmail);
+=======
+    const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
+    const email = isPrivileged ? (req.query.email || req.user?.email) : req.user?.email;
+    const payments = await getUserPayments(email);
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
     return sendSuccess(res, payments, 'Payment transactions retrieved successfully');
   } catch (error) {
     next(error);
@@ -139,7 +145,11 @@ export const getPaymentHistory = async (req, res, next) => {
 /**
  * @desc Get payment transaction by Order ID or Payment ID
  * @route GET /api/payments/:id
+<<<<<<< HEAD
  * @access Authenticated
+=======
+ * @access Authenticated (Owner or Admin)
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
  */
 export const getPaymentById = async (req, res, next) => {
   try {
@@ -148,6 +158,7 @@ export const getPaymentById = async (req, res, next) => {
     if (!payment) {
       return sendError(res, 'Payment transaction not found', 404);
     }
+<<<<<<< HEAD
 
     // Verify ownership (prevent IDOR)
     const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
@@ -160,6 +171,13 @@ export const getPaymentById = async (req, res, next) => {
       return sendError(res, 'Access denied: You are not authorized to view this payment record', 403);
     }
 
+=======
+    const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
+    const isOwner = payment.userEmail && req.user?.email && payment.userEmail.toLowerCase() === req.user.email.toLowerCase();
+    if (!isPrivileged && !isOwner) {
+      return sendError(res, 'Access denied. You do not have permission to view this transaction.', 403);
+    }
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
     return sendSuccess(res, payment, 'Payment transaction retrieved');
   } catch (error) {
     next(error);

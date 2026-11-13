@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, useInView } from 'motion/react';
-import { TRUST_NUMBERS } from '../data/landingData';
 import {
   FileCheck,
   TrendingUp,
   Building2,
   Award,
   CheckCircle,
-  ShieldCheck
+  ShieldCheck,
+  Loader2
 } from 'lucide-react';
+import api from '../utils/apiClient';
+import { TrustNumber } from '../types';
 
 interface CounterProps {
   end: number;
@@ -53,9 +55,35 @@ const AnimatedCounter: React.FC<CounterProps> = ({ end, prefix = '', suffix = ''
 };
 
 export const TrustNumbers: React.FC = () => {
+<<<<<<< HEAD
   if (!TRUST_NUMBERS || TRUST_NUMBERS.length === 0) {
     return null;
   }
+=======
+  const [stats, setStats] = useState<TrustNumber[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.stats
+      .getAll()
+      .then((data) => {
+        if (!isMounted) return;
+        const list = Array.isArray(data) ? data : (data as any)?.data || [];
+        setStats(list);
+      })
+      .catch((err) => {
+        console.error('Failed to load trust statistics:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 
   const getIcon = (iconName: string) => {
     switch (iconName) {
@@ -95,41 +123,51 @@ export const TrustNumbers: React.FC = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {TRUST_NUMBERS.map((item, index) => (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.25, delay: index * 0.04 }}
-              className="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-3.5 shadow-2xs hover:shadow-sm hover:border-blue-300 transition-all duration-200 flex flex-col justify-between group"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="w-6 h-6 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-colors">
-                  {React.cloneElement(getIcon(item.icon), {
-                    className: "w-3 h-3 text-blue-600 group-hover:text-white transition-colors"
-                  })}
+        {loading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="bg-white rounded-xl border border-slate-200/80 p-4 animate-pulse space-y-2">
+                <div className="w-6 h-6 bg-slate-200 rounded-md" />
+                <div className="h-7 w-20 bg-slate-200 rounded" />
+                <div className="h-4 w-32 bg-slate-200 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : stats.length > 0 ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {stats.map((item, index) => (
+              <motion.div
+                key={item.id || item.statId || index}
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.25, delay: index * 0.04 }}
+                className="bg-white rounded-xl border border-slate-200/90 p-3 sm:p-3.5 shadow-2xs hover:shadow-sm hover:border-blue-300 transition-all duration-200 flex flex-col justify-between group"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="w-6 h-6 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 transition-colors">
+                    {React.cloneElement(getIcon(item.icon), {
+                      className: "w-3 h-3 text-blue-600 group-hover:text-white transition-colors"
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-0.5">
-                <AnimatedCounter
-                  end={item.value}
-                  prefix={item.prefix}
-                  suffix={item.suffix}
-                />
-                <h3 className="font-manrope font-semibold text-slate-800 text-xs tracking-tight">
-                  {item.label}
-                </h3>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 font-inter leading-normal line-clamp-1">
-                  {item.description}
-                </p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
+                <div className="space-y-0.5">
+                  <AnimatedCounter
+                    end={item.value}
+                    prefix={item.prefix || ''}
+                    suffix={item.suffix || ''}
+                  />
+                  <h3 className="font-manrope font-semibold text-slate-800 text-xs tracking-tight">
+                    {item.label}
+                  </h3>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </section>
   );
 };
+export default TrustNumbers;

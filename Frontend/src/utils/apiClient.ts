@@ -369,6 +369,24 @@ export const api = {
     getAll: () => request<any[]>('/services'),
     getBySlug: (slug: string) => request<any>(`/services/${slug}`),
   },
+
+  // Dynamic Landing & Content Modules
+  testimonials: {
+    getAll: (industry?: string) => {
+      const q = industry && industry !== 'All' ? `?industry=${encodeURIComponent(industry)}` : '';
+      return request<any[]>(`/testimonials${q}`);
+    },
+  },
+  stats: {
+    getAll: () => request<any[]>('/stats'),
+  },
+  blogs: {
+    getAll: () => request<any[]>('/blogs'),
+    getBySlug: (slug: string) => request<any>(`/blogs/${slug}`),
+  },
+  faqs: {
+    getAll: () => request<any[]>('/faqs'),
+  },
 };
 
 export const apiClient = api;

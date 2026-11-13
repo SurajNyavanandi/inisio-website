@@ -112,6 +112,7 @@ const projectSchema = new mongoose.Schema(
   }
 );
 
+<<<<<<< HEAD
 // Indexes for filters, sorts, and lookups
 projectSchema.index({ userId: 1 });
 projectSchema.index({ email: 1 });
@@ -120,6 +121,12 @@ projectSchema.index({ status: 1 });
 projectSchema.index({ assignedCA: 1 });
 projectSchema.index({ createdAt: -1 });
 projectSchema.index({ updatedAt: -1 });
+=======
+projectSchema.index({ userId: 1 });
+projectSchema.index({ email: 1 });
+projectSchema.index({ status: 1 });
+projectSchema.index({ createdAt: -1 });
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 
 const Project = mongoose.models.Project || mongoose.model('Project', projectSchema);
 export default Project;

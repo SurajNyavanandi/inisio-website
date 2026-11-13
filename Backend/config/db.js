@@ -1,8 +1,21 @@
+import dns from 'dns';
 import mongoose from 'mongoose';
+<<<<<<< HEAD
 import dotenv from 'dotenv';
+=======
+import config from './env.js';
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 import logger from '../utils/logger.js';
 
-dotenv.config();
+// Automatically configure public DNS servers (Google 8.8.8.8, Cloudflare 1.1.1.1)
+// for mongodb+srv:// to resolve MongoDB Atlas SRV records reliably across all Windows/local network resolvers.
+try {
+  if (config.databaseUri && config.databaseUri.startsWith('mongodb+srv://')) {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  }
+} catch (e) {
+  // Ignore if network environment restricts custom DNS
+}
 
 // Disable buffering so queries fail-fast or fallback immediately instead of hanging
 mongoose.set('bufferCommands', false);
@@ -28,9 +41,12 @@ export const connectDB = async () => {
     return connectingPromise;
   }
 
-  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  const uri = config.databaseUri;
 
   if (!uri) {
+    if (config.isProduction) {
+      logger.error('CRITICAL: MongoDB URI not provided in production environment.');
+    }
     return null;
   }
 
@@ -56,7 +72,11 @@ export const connectDB = async () => {
       logger.info(`MongoDB Connected Successfully: ${conn.connection.host}`);
       return conn;
     } catch (error) {
+<<<<<<< HEAD
       logger.warn(`MongoDB Connection not established (${error.message}).`);
+=======
+      logger.warn(`MongoDB Connection not established (${error.message}). Resilient storage active.`);
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
       return null;
     } finally {
       connectingPromise = null;

@@ -1,3 +1,7 @@
+# ==============================================================
+# Inisio Unified Root .gitignore (Root, Backend, & Frontend)
+# ==============================================================
+
 # Logs
 logs
 *.log
@@ -7,23 +11,66 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Dependencies
+node_modules/
+**/node_modules/
 
-# Editor directories and files
+# Production Build Artifacts
+dist/
+**/dist/
+dist-ssr/
+build/
+*.local
+*.tsbuildinfo
+
+# Environment & Secret Files (Keep secrets out of Git)
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Uploaded Files & Private Local Storage
+uploads/
+**/uploads/*
+!**/uploads/.gitkeep
+storage/private/*
+!storage/private/.gitkeep
+
+# Editor & IDE Directories
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
+<<<<<<< HEAD
 node_modules/
 .env
 .env.*
 !.env.example
+=======
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Cache & Temporary Directories
+.vite/
+**/.vite/
+**/.vite-temp/
+.eslintcache
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92

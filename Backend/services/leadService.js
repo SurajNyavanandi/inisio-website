@@ -4,6 +4,8 @@ import Notification from '../models/Notification.js';
 import mongoose from 'mongoose';
 import { isDBConnected } from '../config/db.js';
 import { isAuthorizedAdminEmail } from '../utils/memoryUserStore.js';
+import { escapeRegex } from '../middleware/validateMiddleware.js';
+import { sendLeadAssessmentConfirmationEmail } from '../utils/emailService.js';
 
 let memoryLeads = [];
 
@@ -32,12 +34,16 @@ const canAccessLead = (lead, requester) => {
 };
 
 export const getAllLeads = async (query = {}, requester = null) => {
+<<<<<<< HEAD
   if (!requester) {
     const error = new Error('Authentication required to access leads.');
     error.statusCode = 401;
     throw error;
   }
 
+=======
+  if (!requester) return [];
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   let leadsList = [];
   const isAdmin = isSuperAdminOrAdmin(requester?.role, requester?.email);
   const limit = Math.min(Math.max(parseInt(query.limit) || 100, 1), 200);
@@ -50,7 +56,7 @@ export const getAllLeads = async (query = {}, requester = null) => {
         if (requester.email) {
           filter.$or = [
             { userId: requester._id },
-            { email: { $regex: new RegExp(`^${requester.email.trim()}$`, 'i') } }
+            { email: { $regex: new RegExp(`^${escapeRegex(requester.email.trim())}$`, 'i') } }
           ];
         } else {
           filter.userId = requester._id;
@@ -64,16 +70,16 @@ export const getAllLeads = async (query = {}, requester = null) => {
       }
 
       if (query.email) {
-        filter.email = { $regex: new RegExp(`^${query.email.trim()}$`, 'i') };
+        filter.email = { $regex: new RegExp(`^${escapeRegex(query.email.trim())}$`, 'i') };
       }
       if (query.search) {
-        const s = query.search;
+        const safeSearch = escapeRegex(query.search.trim());
         filter.$or = [
-          { fullName: { $regex: s, $options: 'i' } },
-          { mobile: { $regex: s, $options: 'i' } },
-          { email: { $regex: s, $options: 'i' } },
-          { projectName: { $regex: s, $options: 'i' } },
-          { industry: { $regex: s, $options: 'i' } },
+          { fullName: { $regex: safeSearch, $options: 'i' } },
+          { mobile: { $regex: safeSearch, $options: 'i' } },
+          { email: { $regex: safeSearch, $options: 'i' } },
+          { projectName: { $regex: safeSearch, $options: 'i' } },
+          { industry: { $regex: safeSearch, $options: 'i' } },
         ];
       }
       if (query.filterSource === 'PDF') {
@@ -82,12 +88,17 @@ export const getAllLeads = async (query = {}, requester = null) => {
         filter.downloadedPDF = false;
       }
 
+<<<<<<< HEAD
       // Fetch Lead documents with pagination and .lean()
       const dbLeads = await Lead.find(filter)
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .lean();
+=======
+      // Fetch Lead documents (lean query for performance)
+      const dbLeads = await Lead.find(filter).sort({ updatedAt: -1, createdAt: -1 }).lean();
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 
       // For admin / superadmin view, also synchronize standalone Project records so nothing in DB is omitted
       let dbProjectsAsLeads = [];
@@ -194,7 +205,12 @@ export const getAllLeads = async (query = {}, requester = null) => {
     }
   });
 
-  return Array.from(uniqueById.values());
+  const finalResults = Array.from(uniqueById.values());
+  const limit = Math.min(100, Math.max(1, parseInt(query.limit || '100', 10)));
+  const page = Math.max(1, parseInt(query.page || '1', 10));
+  const skip = (page - 1) * limit;
+
+  return finalResults.slice(skip, skip + limit);
 };
 
 export const createLead = async (rawLeadData, userId = null) => {
@@ -247,6 +263,9 @@ export const createLead = async (rawLeadData, userId = null) => {
         });
       } catch (e) {}
 
+      // Dispatch confirmation & admin alert via Resend SDK
+      sendLeadAssessmentConfirmationEmail(lead).catch(() => {});
+
       return lead;
     } catch (err) {
       console.warn('MongoDB create failed in createLead, storing in memory fallback:', err.message);
@@ -260,18 +279,42 @@ export const createLead = async (rawLeadData, userId = null) => {
     updatedAt: new Date(),
   };
   memoryLeads.unshift(created);
+  sendLeadAssessmentConfirmationEmail(created).catch(() => {});
   return created;
 };
 
 export const getLeadById = async (id, requester = null) => {
+  if (!requester) {
+    const error = new Error('Authentication required to access lead record');
+    error.statusCode = 401;
+    throw error;
+  }
   if (isDBConnected()) {
     try {
-      const lead = await Lead.findById(id);
-      if (lead && canAccessLead(lead, requester)) return lead;
-    } catch (err) {}
+      const lead = await Lead.findById(id).lean();
+      if (lead) {
+        if (!canAccessLead(lead, requester)) {
+          const error = new Error('Access denied. You do not have permission to view this lead.');
+          error.statusCode = 403;
+          throw error;
+        }
+        return lead;
+      }
+    } catch (err) {
+      if (err.statusCode) throw err;
+    }
   }
   const found = memoryLeads.find((l) => String(l._id) === String(id));
-  if (!found) throw new Error('Lead not found');
+  if (!found) {
+    const error = new Error('Lead not found');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!canAccessLead(found, requester)) {
+    const error = new Error('Access denied. You do not have permission to view this lead.');
+    error.statusCode = 403;
+    throw error;
+  }
   return found;
 };
 
@@ -354,6 +397,7 @@ export const updateLead = async (id, rawUpdates, requester = null) => {
     updatedAt: new Date(),
   };
   memoryLeads.unshift(created);
+  sendLeadAssessmentConfirmationEmail(created).catch(() => {});
   return created;
 };
 

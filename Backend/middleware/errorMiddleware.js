@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+import { sendError } from '../utils/responseHandler.js';
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 import logger from '../utils/logger.js';
 import config from '../config/env.js';
 
@@ -5,18 +9,47 @@ import config from '../config/env.js';
  * 404 Route Not Found Middleware
  */
 export const notFound = (req, res, next) => {
+<<<<<<< HEAD
   const error = new Error(`Resource Not Found - ${req.method} ${req.originalUrl}`);
   res.status(404);
+=======
+  const error = new Error(`Resource not found - ${req.originalUrl}`);
+  error.statusCode = 404;
+  error.code = 'NOT_FOUND';
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   next(error);
 };
 
 /**
+<<<<<<< HEAD
  * Centralized Error Handling Middleware
  * Returns consistent format: { success: false, message, code }
  */
 export const errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || (res.statusCode && res.statusCode !== 200 ? res.statusCode : 500);
+=======
+ * Centralized Global Error Handling Middleware
+ * Guarantees consistent JSON output: { success: false, message, code }
+ * Never leaks stack traces or internal details in production
+ */
+export const errorHandler = (err, req, res, next) => {
+  let statusCode = err.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   let message = err.message || 'Internal Server Error';
+  let code = err.code || 'INTERNAL_ERROR';
+
+  // Handle Mongoose disconnection / buffer timeout gracefully
+  if (
+    err.name === 'MongooseError' ||
+    err.name === 'MongoNetworkError' ||
+    err.name === 'MongoServerSelectionError' ||
+    err.message?.includes('buffering timed out') ||
+    err.message?.includes('connect ECONNREFUSED')
+  ) {
+    statusCode = 503;
+    message = 'Service temporarily unavailable. Database connection offline.';
+    code = 'DATABASE_OFFLINE';
+  }
 
   // Handle Mongoose disconnection / buffer timeout gracefully
   if (
@@ -43,13 +76,21 @@ export const errorHandler = (err, req, res, next) => {
   if (err.name === 'CastError' && err.kind === 'ObjectId') {
     statusCode = 404;
     message = `Resource not found with ID of ${err.value}`;
+    code = 'RESOURCE_NOT_FOUND';
   }
 
   // Handle Mongoose duplicate key (E11000) -> 409 Conflict
   if (err.code === 11000) {
+<<<<<<< HEAD
     statusCode = 409;
     const field = Object.keys(err.keyValue || {})[0] || 'record';
     message = `A record with this ${field} already exists. Please choose a different ${field}.`;
+=======
+    statusCode = 400;
+    const field = Object.keys(err.keyValue || {})[0] || 'field';
+    message = `Duplicate value entered for '${field}'. Please use another value.`;
+    code = 'DUPLICATE_KEY';
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   }
 
   // Handle Mongoose validation errors
@@ -58,16 +99,23 @@ export const errorHandler = (err, req, res, next) => {
     message = Object.values(err.errors)
       .map((val) => val.message)
       .join(', ');
+    code = 'VALIDATION_ERROR';
   }
 
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
     statusCode = 401;
+<<<<<<< HEAD
     message = 'Invalid authentication credentials';
+=======
+    message = 'Invalid authentication token';
+    code = 'INVALID_TOKEN';
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   }
 
   if (err.name === 'TokenExpiredError') {
     statusCode = 401;
+<<<<<<< HEAD
     message = 'Authentication token expired. Please log in again.';
   }
 
@@ -92,6 +140,31 @@ export const errorHandler = (err, req, res, next) => {
   }
 
   return res.status(statusCode).json(responsePayload);
+=======
+    message = 'Authentication token expired. Please login again';
+    code = 'TOKEN_EXPIRED';
+  }
+
+  if (message.includes('Invalid email or password') || message.includes('Please provide your password')) {
+    statusCode = 401;
+    code = 'INVALID_CREDENTIALS';
+  }
+
+  // Server-side logging only
+  if (statusCode >= 500) {
+    logger.error(`[Server Error] ${req.method} ${req.originalUrl} (${statusCode}) - ${err.message}`, err.stack);
+  } else {
+    logger.warn(`[Client Error] ${req.method} ${req.originalUrl} (${statusCode}) - ${message}`);
+  }
+
+  return sendError(
+    res,
+    message,
+    statusCode,
+    config.isProduction ? undefined : err.stack,
+    code
+  );
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 };
 
 export default {

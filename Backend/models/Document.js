@@ -18,5 +18,7 @@ const documentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+documentSchema.index({ createdAt: -1 });
+
 const Document = mongoose.models.Document || mongoose.model('Document', documentSchema);
 export default Document;

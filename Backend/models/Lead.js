@@ -270,6 +270,7 @@ const leadSchema = new mongoose.Schema(
   }
 );
 
+<<<<<<< HEAD
 // Indexes for filters, sorts, and fast lookups in production
 leadSchema.index({ email: 1 });
 leadSchema.index({ mobile: 1 });
@@ -279,6 +280,15 @@ leadSchema.index({ dprAssignedTo: 1 });
 leadSchema.index({ consultationAssignedTo: 1 });
 leadSchema.index({ createdAt: -1 });
 leadSchema.index({ updatedAt: -1 });
+=======
+leadSchema.index({ email: 1 });
+leadSchema.index({ mobile: 1 });
+leadSchema.index({ status: 1 });
+leadSchema.index({ createdAt: -1 });
+leadSchema.index({ assignedCA: 1 });
+leadSchema.index({ dprAssignedTo: 1 });
+leadSchema.index({ consultationAssignedTo: 1 });
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 
 const Lead = mongoose.models.Lead || mongoose.model('Lead', leadSchema);
 export default Lead;

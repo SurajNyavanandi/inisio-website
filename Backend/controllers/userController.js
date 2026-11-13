@@ -13,36 +13,54 @@ import {
 
 export const getAllUsers = async (req, res, next) => {
   try {
+<<<<<<< HEAD
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
     const page = Math.max(parseInt(req.query.page) || 1, 1);
+=======
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '50', 10)));
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const skip = (page - 1) * limit;
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 
     if (isDBConnected()) {
       try {
         const users = await User.find({})
           .select('-password')
           .sort({ createdAt: -1 })
+<<<<<<< HEAD
           .skip((page - 1) * limit)
+=======
+          .skip(skip)
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
           .limit(limit)
           .lean();
 
         if (users && users.length > 0) {
           const userIds = users.map((u) => u._id);
+<<<<<<< HEAD
           const userEmails = users.map((u) => u.email).filter(Boolean);
 
           // Batch aggregate counts to completely eliminate N+1 queries
           const [leadCountsById, leadCountsByEmail, projectCountsById, projectCountsByEmail] = await Promise.all([
+=======
+          const [leadCounts, projectCounts] = await Promise.all([
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
             Lead.aggregate([
               { $match: { userId: { $in: userIds } } },
               { $group: { _id: '$userId', count: { $sum: 1 } } },
             ]),
+<<<<<<< HEAD
             Lead.aggregate([
               { $match: { email: { $in: userEmails } } },
               { $group: { _id: '$email', count: { $sum: 1 } } },
             ]),
+=======
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
             Project.aggregate([
               { $match: { userId: { $in: userIds } } },
               { $group: { _id: '$userId', count: { $sum: 1 } } },
             ]),
+<<<<<<< HEAD
             Project.aggregate([
               { $match: { email: { $in: userEmails } } },
               { $group: { _id: '$email', count: { $sum: 1 } } },
@@ -68,6 +86,22 @@ export const getAllUsers = async (req, res, next) => {
             };
           });
 
+=======
+          ]);
+
+          const leadCountMap = new Map(leadCounts.map((c) => [String(c._id), c.count]));
+          const projectCountMap = new Map(projectCounts.map((c) => [String(c._id), c.count]));
+
+          const enrichedUsers = users.map((u) => {
+            const idStr = String(u._id);
+            const lCount = leadCountMap.get(idStr) || 0;
+            const pCount = projectCountMap.get(idStr) || 0;
+            return {
+              ...u,
+              projectsCount: Math.max(lCount, pCount),
+            };
+          });
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
           return sendSuccess(res, enrichedUsers, 'Users retrieved successfully');
         }
         return sendSuccess(res, [], 'Users retrieved successfully');
@@ -75,10 +109,14 @@ export const getAllUsers = async (req, res, next) => {
         console.warn('DB error in getAllUsers:', err.message);
       }
     }
+<<<<<<< HEAD
 
     const safeUsers = getMemoryUsers()
       .map(({ password, ...u }) => u)
       .slice((page - 1) * limit, page * limit);
+=======
+    const safeUsers = getMemoryUsers().map(({ password, ...u }) => u).slice(skip, skip + limit);
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
     return sendSuccess(res, safeUsers, 'Users retrieved successfully');
   } catch (error) {
     next(error);

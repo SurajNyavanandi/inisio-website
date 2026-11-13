@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { saveLeadRecord } from '../utils/leadStore';
 import api from '../utils/apiClient';
 import {
@@ -11,7 +11,6 @@ import {
   ShieldCheck,
   Sparkles
 } from 'lucide-react';
-import { MAIN_SECTORS } from '../data/landingData';
 import { validateIndianMobileNumber } from '../utils/validation';
 
 interface ContactSectionProps {
@@ -30,6 +29,28 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
     loanRequirement: '',
     message: ''
   });
+
+  const [sectors, setSectors] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.industries.getAll()
+      .then((data) => {
+        if (!isMounted) return;
+        const list = Array.isArray(data) ? data : (data as any)?.data || [];
+        const names = list.map((item: any) => item.name).filter(Boolean);
+        if (names.length > 0) {
+          setSectors(names);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load industries in contact section:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -257,7 +278,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
                       className="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all cursor-pointer"
                     >
                       <option value="">Select Industry Sector</option>
-                      {MAIN_SECTORS.map((sector) => (
+                      {sectors.map((sector) => (
                         <option key={sector} value={sector}>{sector}</option>
                       ))}
                     </select>

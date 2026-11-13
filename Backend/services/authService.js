@@ -1,7 +1,8 @@
 import User from '../models/User.js';
 import { generateToken } from '../utils/generateToken.js';
 import { isDBConnected } from '../config/db.js';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailService.js';
+import config from '../config/env.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordResetSuccessEmail } from '../utils/emailService.js';
 import { captureLoginMetadata } from '../utils/geoIpService.js';
 import {
   memoryUsers,
@@ -57,9 +58,10 @@ const shouldAllowMemoryFallback = () => {
 
 /**
  * Sync memory users to MongoDB to ensure preloaded demo & registered users exist in DB
+ * Skipped in production unless SEED_DEMO_USERS=true is explicitly set
  */
 export const syncMemoryUsersToDB = async () => {
-  if (!isDBConnected()) return;
+  if (!isDBConnected() || (config.isProduction && process.env.SEED_DEMO_USERS !== 'true')) return;
   try {
     const authorizedList = getAuthorizedAdminEmails();
     const admin1 = getAdminEmail1();
@@ -159,9 +161,9 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
       const userExists = await User.findOne({ email: cleanEmail });
       if (userExists) {
         if (!userExists.isVerified) {
-          userExists.isVerified = true;
-          userExists.verificationOtp = null;
-          userExists.verificationExpires = null;
+          userExists.verificationOtp = otp;
+          userExists.verificationExpires = otpExpiry;
+          userExists.otpAttempts = 0;
           if (password && password.length >= 6) {
             userExists.password = password; // Mongoose will re-hash
           }
@@ -170,15 +172,11 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
           if (company) userExists.company = company;
           await userExists.save();
 
-          const token = generateToken({
-            id: userExists._id,
-            email: userExists.email,
-            role: userExists.role,
+          sendVerificationEmail({
+            to: cleanEmail,
             name: userExists.name,
-            company: userExists.company,
-            phone: userExists.phone,
-            isVerified: true,
-          });
+            otp,
+          }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
 
           return {
             _id: userExists._id,
@@ -187,10 +185,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
             role: userExists.role,
             company: userExists.company,
             phone: userExists.phone,
-            avatarUrl: userExists.avatarUrl,
-            isVerified: true,
-            token,
-            message: 'Account exists and is active. You can sign in now.',
+            isVerified: false,
+            requiresVerification: true,
+            otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+            message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter the code to activate your account.`,
           };
         }
 
@@ -206,20 +204,18 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         role: assignedRole,
         company: defaultCompany,
         phone: phone || '',
-        isVerified: true,
-        verificationOtp: null,
-        verificationExpires: null,
+        isVerified: false,
+        verificationOtp: otp,
+        verificationExpires: otpExpiry,
+        otpAttempts: 0,
       });
 
-      const token = generateToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
+      // Dispatch 6-digit verification OTP email via Resend SDK
+      sendVerificationEmail({
+        to: cleanEmail,
         name: user.name,
-        company: user.company,
-        phone: user.phone,
-        isVerified: true,
-      });
+        otp,
+      }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
 
       return {
         _id: user._id,
@@ -229,9 +225,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         company: user.company,
         phone: user.phone,
         avatarUrl: user.avatarUrl,
-        isVerified: true,
-        token,
-        message: 'Account created successfully. You are now signed in.',
+        isVerified: false,
+        requiresVerification: true,
+        otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+        message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter the code to activate your account.`,
       };
     } catch (err) {
       if (err.message.includes('already') || err.message.includes('valid') || err.message.includes('Password')) {
@@ -368,7 +365,18 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       }
 
       if (!user.verificationOtp || user.verificationOtp !== cleanOtp) {
-        const error = new Error('Invalid verification code. Please check your email or click Resend Code.');
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.verificationOtp = null;
+          user.verificationExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect verification attempts. Code has been invalidated. Please click Resend Code.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid verification code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
@@ -382,6 +390,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       user.isVerified = true;
       user.verificationOtp = null;
       user.verificationExpires = null;
+      user.otpAttempts = 0;
       await recordSuccessfulLogin(user, req);
 
       const token = generateToken({
@@ -546,6 +555,7 @@ export const sendVerificationOtp = async (email) => {
     email: cleanEmail,
     message: `A new 6-digit verification code has been dispatched to ${cleanEmail}.`,
     expiresIn: '15 minutes',
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };
 
@@ -665,6 +675,35 @@ export const loginUser = async ({ email, password, req }) => {
 
   if (isAdminEmail) {
     user.role = adminRole;
+  }
+
+  // If user has not verified their email, dispatch OTP and require verification
+  if (user.isVerified === false) {
+    const freshOtp = generateOtp();
+    user.verificationOtp = freshOtp;
+    user.verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.otpAttempts = 0;
+    if (user.save) {
+      await user.save().catch(() => {});
+    }
+
+    sendVerificationEmail({
+      to: cleanEmail,
+      name: user.name,
+      otp: freshOtp,
+    }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
+
+    return {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      company: user.company,
+      phone: user.phone,
+      isVerified: false,
+      requiresVerification: true,
+      message: `Your account is not verified yet. A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter it to continue.`,
+    };
   }
 
   await recordSuccessfulLogin(user, req);
@@ -854,6 +893,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     maskedEmail,
     resetLink,
     expiresIn: '15 minutes',
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };
 
@@ -951,13 +991,24 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       }
 
       if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
-        const error = new Error('Invalid or expired OTP code.');
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.resetPasswordOtp = null;
+          user.resetPasswordExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect OTP attempts. Code has been invalidated. Please request a new password reset.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid or expired OTP code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
 
       if (user.resetPasswordExpires && new Date() > new Date(user.resetPasswordExpires)) {
-        const error = new Error('OTP code has expired.');
+        const error = new Error('OTP code has expired. Please request a new one.');
         error.statusCode = 400;
         throw error;
       }
@@ -965,8 +1016,12 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       user.password = newPassword;
       user.resetPasswordOtp = null;
       user.resetPasswordExpires = null;
+      user.otpAttempts = 0;
       user.isVerified = true;
       await user.save();
+
+      // Dispatch security notification via Resend
+      sendPasswordResetSuccessEmail({ to: user.email, name: user.name }).catch(() => {});
 
       const token = generateToken({
         id: user._id,
@@ -1019,6 +1074,9 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
   memUser.resetPasswordOtp = null;
   memUser.resetPasswordExpires = null;
   memUser.isVerified = true;
+
+  // Dispatch security notification via Resend
+  sendPasswordResetSuccessEmail({ to: cleanEmail, name: memUser.name }).catch(() => {});
 
   const token = generateToken({
     id: memUser._id,

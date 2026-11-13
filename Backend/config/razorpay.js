@@ -1,4 +1,5 @@
 import Razorpay from 'razorpay';
+import envConfig from './env.js';
 
 let razorpayInstance = null;
 
@@ -6,9 +7,9 @@ let razorpayInstance = null;
  * Returns the current Razorpay gateway configuration state.
  */
 export const getRazorpayConfig = () => {
-  const key_id = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
-  const key_secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
-  const webhook_secret = (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
+  const key_id = (envConfig.razorpay.keyId || process.env.RAZORPAY_KEY_ID || '').trim();
+  const key_secret = (envConfig.razorpay.keySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
+  const webhook_secret = (envConfig.razorpay.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
   const isConfigured = Boolean(key_id && key_secret);
 
   return {

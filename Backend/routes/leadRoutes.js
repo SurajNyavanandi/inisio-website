@@ -17,7 +17,11 @@ const router = express.Router();
 // Public submission
 router.post('/', optionalAuth, validateBody(['fullName', 'mobile', 'email']), validateIndianPhone('mobile'), createLead);
 
+<<<<<<< HEAD
 // Lead retrieval & management (Authenticated - scoped by role: Admins, CAs, DPR, Prosync, or own leads for user)
+=======
+// Lead retrieval & management (Admins & CAs & Super Admin viewer & Authenticated users)
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 router.get('/', authenticateUser, getLeads);
 router.get('/:id', authenticateUser, getLeadById);
 router.put('/:id/assignment', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), assignLead);

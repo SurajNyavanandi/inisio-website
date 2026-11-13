@@ -1,12 +1,10 @@
 import express from 'express';
-import multer from 'multer';
-import crypto from 'crypto';
-import fs from 'fs';
-import path from 'path';
 import { authenticateUser, restrictSuperAdminViewer } from '../middleware/authMiddleware.js';
+import { upload, verifyFileContent } from '../middleware/uploadMiddleware.js';
 import { uploadDocument, listDocuments, downloadDocument } from '../controllers/documentController.js';
 
 const router = express.Router();
+<<<<<<< HEAD
 const defaultStorageDir = path.join(process.cwd(), 'Backend', 'storage', 'private');
 const storageRoot = path.resolve(
   process.env.DOCUMENT_STORAGE_DIR || defaultStorageDir
@@ -63,9 +61,12 @@ const upload = multer({
     cb(null, true);
   },
 });
+=======
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 
 router.use(authenticateUser);
-router.post('/upload', restrictSuperAdminViewer, upload.single('file'), uploadDocument);
+
+router.post('/upload', restrictSuperAdminViewer, upload.single('file'), verifyFileContent, uploadDocument);
 router.get('/project/:leadId', listDocuments);
 router.get('/:id/download', downloadDocument);
 

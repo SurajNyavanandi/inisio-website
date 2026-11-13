@@ -20,10 +20,17 @@ router.post('/create-order', optionalAuth, createCheckoutOrder);
 // Verify signature and fulfill payment
 router.post('/verify-signature', optionalAuth, verifyPaymentSignature);
 
+<<<<<<< HEAD
 // Payment history (Authenticated - strictly scoped by user or admin)
 router.get('/history', authenticateUser, getPaymentHistory);
 
 // Single transaction lookup (Authenticated - verified ownership)
+=======
+// Payment history (Authenticated & scoped to user)
+router.get('/history', authenticateUser, getPaymentHistory);
+
+// Single transaction lookup (Authenticated & owner-checked)
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 router.get('/:id', authenticateUser, getPaymentById);
 
 // Razorpay Webhook endpoint

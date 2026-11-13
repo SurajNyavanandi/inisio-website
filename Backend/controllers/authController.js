@@ -100,7 +100,17 @@ export const verifyOtp = async (req, res, next) => {
     if (!email || !otp) {
       return sendError(res, 'Email and OTP verification code are required', 400);
     }
-    const result = await authService.verifyResetOtp({ email, otp });
+    let result;
+    try {
+      result = await authService.verifyEmailOtp({ email, otp, req });
+    } catch (emailErr) {
+      // If not an unverified signup OTP, try reset OTP
+      try {
+        result = await authService.verifyResetOtp({ email, otp });
+      } catch (resetErr) {
+        throw emailErr;
+      }
+    }
     return sendSuccess(res, result, result.message);
   } catch (error) {
     next(error);

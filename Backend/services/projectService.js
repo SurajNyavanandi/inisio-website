@@ -1,27 +1,38 @@
 import Project from '../models/Project.js';
 import Notification from '../models/Notification.js';
 import { isDBConnected } from '../config/db.js';
+import { escapeRegex } from '../middleware/validateMiddleware.js';
 
 let memoryProjects = [];
 
 export const getProjects = async (filter = {}, userRole = 'admin', userId = null) => {
+<<<<<<< HEAD
   const limit = Math.min(Math.max(parseInt(filter.limit) || 50, 1), 100);
+=======
+  if (userRole === 'user' && !userId) {
+    return [];
+  }
+
+  const limit = Math.min(100, Math.max(1, parseInt(filter.limit || '100', 10)));
+  const page = Math.max(1, parseInt(filter.page || '1', 10));
+  const skip = (page - 1) * limit;
+
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   if (isDBConnected()) {
     try {
       let query = {};
-      
-      if (filter.email && userId) {
-        query.$or = [
-          { userId: userId },
-          { email: { $regex: new RegExp(`^${filter.email.trim()}$`, 'i') } }
-        ];
-      } else if (filter.email) {
-        query.email = { $regex: new RegExp(`^${filter.email.trim()}$`, 'i') };
-      } else if (userRole === 'user' && userId) {
+
+      if (userRole === 'user') {
         query.userId = userId;
+      } else if (filter.email) {
+        query.email = { $regex: new RegExp(`^${escapeRegex(filter.email.trim())}$`, 'i') };
       }
 
+<<<<<<< HEAD
       const projects = await Project.find(query).sort({ updatedAt: -1 }).limit(limit).lean();
+=======
+      const projects = await Project.find(query).sort({ updatedAt: -1 }).skip(skip).limit(limit).lean();
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
       return projects;
     } catch (err) {
       console.warn('MongoDB query failed in getProjects, using memory fallback:', err.message);
@@ -30,13 +41,19 @@ export const getProjects = async (filter = {}, userRole = 'admin', userId = null
 
   // Memory fallback filtering
   let results = [...memoryProjects];
-  if (filter.email) {
+  if (userRole === 'user') {
+    results = results.filter((p) => String(p.userId) === String(userId));
+  } else if (filter.email) {
     const em = filter.email.toLowerCase();
-    results = results.filter((p) => (p.email && p.email.toLowerCase() === em) || (userId && p.userId === userId));
-  } else if (userRole === 'user' && userId) {
-    results = results.filter((p) => p.userId === userId);
+    results = results.filter((p) => p.email && p.email.toLowerCase() === em);
   }
+<<<<<<< HEAD
   return results.slice(0, limit).sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+=======
+  return results
+    .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())
+    .slice(skip, skip + limit);
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
 };
 
 export const createProject = async (rawProjectData, userId = null) => {
@@ -86,6 +103,14 @@ export const createProject = async (rawProjectData, userId = null) => {
 };
 
 export const getProjectById = async (id, requester = null) => {
+<<<<<<< HEAD
+=======
+  if (!requester) {
+    const error = new Error('Authentication required');
+    error.statusCode = 401;
+    throw error;
+  }
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   let project = null;
   if (isDBConnected()) {
     try {
@@ -100,6 +125,7 @@ export const getProjectById = async (id, requester = null) => {
     error.statusCode = 404;
     throw error;
   }
+<<<<<<< HEAD
 
   // Authorization check (prevent IDOR)
   if (requester) {
@@ -114,6 +140,17 @@ export const getProjectById = async (id, requester = null) => {
     }
   }
 
+=======
+  const isPrivileged = ['admin', 'superadmin', 'ca', 'admin1', 'admin2', 'admin3'].includes(requester.role);
+  const isOwner =
+    String(project.userId) === String(requester._id) ||
+    Boolean(project.email && requester.email && project.email.toLowerCase() === requester.email.toLowerCase());
+  if (!isPrivileged && !isOwner) {
+    const error = new Error('Access denied. You do not have permission to view this project.');
+    error.statusCode = 403;
+    throw error;
+  }
+>>>>>>> eff249abd87115d2970592cca5ca8dd14ee08b92
   return project;
 };
 
