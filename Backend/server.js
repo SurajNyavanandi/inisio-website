@@ -31,9 +31,9 @@ connectDB().catch(() => {});
 const corsOrigin = config.CORS_ORIGIN || process.env.CORS_ORIGIN || '*';
 
 const corsOptions = {
-  origin: corsOrigin.includes(',')
-    ? corsOrigin.split(',').map((o) => o.trim())
-    : corsOrigin,
+  origin: corsOrigin === '*'
+    ? '*'
+    : corsOrigin.split(',').map((o) => o.trim().replace(/\/$/, '')),
   credentials: corsOrigin !== '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
