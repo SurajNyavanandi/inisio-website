@@ -2,26 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   LayoutDashboard,
   Building2,
-  Users,
   FileText,
   PhoneCall,
   Globe,
   Plus,
   Trash2,
-  Edit3,
   X,
   LogOut,
   Upload,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowRight,
-  TrendingUp,
-  Shield,
-  Laptop
+  CheckCircle2
 } from 'lucide-react';
 import {
-  ADMIN_EMAIL,
-  SUPER_ADMIN_EMAIL,
   AdminRole,
   validateAdminEmail
 } from '../config/adminAccess';
@@ -119,12 +110,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     return null;
   });
 
-  // Access Gate Form
+  // Minimal Email Access Form (no helper text, no placeholder instructions, no labels, no passwords)
   const [emailInput, setEmailInput] = useState('');
   const [authError, setAuthError] = useState('');
 
-  // Active Navigation
+  // Active Navigation: Overview, Projects, DPR Requests, Consultations, Visitors
   const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'dpr' | 'consultations' | 'visitors'>('overview');
+
+  // New Project Modal State (Super Admin CRUD)
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [newProjName, setNewProjName] = useState('');
+  const [newProjIndustry, setNewProjIndustry] = useState('');
+  const [newProjLocation, setNewProjLocation] = useState('');
 
   // Currency Display Unit
   const [currencyUnit, setCurrencyUnit] = useState<CurrencyUnit>('Cr');
@@ -132,7 +129,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   // Selected Project for details view
   const [selectedProjectId, setSelectedProjectId] = useState<string>('proj_1');
 
-  // Projects State
+  // 1. Projects State
   const [projects, setProjects] = useState<ProjectEntity[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -235,7 +232,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     ];
   });
 
-  // DPR Requests State
+  // 2. DPR Requests State
   const [dprRequests, setDprRequests] = useState<DprRequest[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -264,7 +261,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     ];
   });
 
-  // Consultations State
+  // 3. Consultations State
   const [consultations, setConsultations] = useState<ConsultationItem[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -293,7 +290,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     ];
   });
 
-  // Visitors State
+  // 4. Visitors State
   const [visitors, setVisitors] = useState<VisitorSessionRecord[]>([]);
 
   // Sync to localStorage
@@ -339,7 +336,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen, onClose]);
 
-  // Email-based Access Handler (No Passwords)
+  // Minimal Email Access Handler (Matches ADMIN_EMAIL or SUPER_ADMIN_EMAIL, otherwise denies)
   const handleAccessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
@@ -358,6 +355,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       );
     } catch {}
     setEmailInput('');
+  };
+
+  // Super Admin CRUD: Project Creation
+  const handleCreateProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeRole !== 'superadmin' || !newProjName.trim()) return;
+
+    const newProj: ProjectEntity = {
+      id: `proj_${Date.now()}`,
+      name: newProjName.trim(),
+      industry: newProjIndustry.trim() || 'General Infrastructure',
+      location: newProjLocation.trim() || 'India',
+      promoterCount: 1,
+      promoters: [
+        {
+          id: `prom_${Date.now()}`,
+          name: 'Lead Promoter',
+          experience: '10 Years',
+          qualification: 'Executive Signatory',
+          shareholdingPct: 100,
+          role: 'Promoter'
+        }
+      ],
+      costComponents: [
+        { id: `cost_${Date.now()}`, category: 'Infrastructure & Site Development', amountCr: 10.0 }
+      ],
+      meansOfFinance: {
+        equityCr: 3.0,
+        debtCr: 7.0,
+        subsidyCr: 0
+      },
+      checklistUploaded: false,
+      documents: {},
+      isFunded: false
+    };
+
+    setProjects((prev) => [newProj, ...prev]);
+    setSelectedProjectId(newProj.id);
+    setNewProjName('');
+    setNewProjIndustry('');
+    setNewProjLocation('');
+    setShowNewProjectModal(false);
+  };
+
+  // Super Admin CRUD: Project Deletion
+  const handleDeleteProject = (projId: string) => {
+    if (activeRole !== 'superadmin') return;
+    if (projects.length <= 1) return;
+    const remaining = projects.filter((p) => p.id !== projId);
+    setProjects(remaining);
+    setSelectedProjectId(remaining[0].id);
   };
 
   const handleSignOut = () => {
@@ -402,7 +450,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     );
   }, [currentProject]);
 
-  // Super Admin CRUD: Promoters
+  // Feature 2: Promoters CRUD (Super Admin adds multiple promoters)
   const [newPromoterName, setNewPromoterName] = useState('');
   const [newPromoterExp, setNewPromoterExp] = useState('');
   const [newPromoterQual, setNewPromoterQual] = useState('');
@@ -461,7 +509,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     );
   };
 
-  // Super Admin CRUD: Project Cost Component
+  // Feature 3: Project Cost and Means of finance CRUD
   const [newCostCat, setNewCostCat] = useState('');
   const [newCostAmount, setNewCostAmount] = useState('5.0');
   const [showAddCostForm, setShowAddCostForm] = useState(false);
@@ -509,7 +557,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     );
   };
 
-  // Super Admin CRUD: Means of finance
   const handleUpdateFinance = (field: 'equityCr' | 'debtCr' | 'subsidyCr', val: number) => {
     if (activeRole !== 'superadmin' || !currentProject) return;
     setProjects((prev) =>
@@ -610,7 +657,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     );
   };
 
-  // Feature 7: DPR Request Assignment
+  // Feature 7: DPR Requests (Super Admin assigns to DPR Consultant 1, 2, 3...)
   const handleAssignDprConsultant = (dprId: string, consultant: string) => {
     if (activeRole !== 'superadmin') return;
     setDprRequests((prev) =>
@@ -618,7 +665,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     );
   };
 
-  // Feature 8: Consultation Assignment to Prosync
+  // Feature 8: Consultations (Super Admin assigns to Prosync)
   const handleAssignConsultationToProsync = (consId: string) => {
     if (activeRole !== 'superadmin') return;
     setConsultations((prev) =>
@@ -632,7 +679,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-50 w-screen h-screen bg-slate-50 flex flex-col font-inter overflow-hidden animate-in fade-in duration-150">
       <div className="relative w-full h-full bg-white flex flex-col overflow-hidden">
         
-        {/* State 1: Minimal Email-Only Access Gate (No passwords, no helper text, no labels, no placeholder instructions) */}
+        {/* State 1: Minimal Email-Only Access Gate (No helper text, no placeholder instructions, no extra labels, no passwords) */}
         {!activeRole ? (
           <div className="flex-1 flex items-center justify-center p-6 bg-slate-100/70">
             <div className="w-full max-w-sm bg-white rounded-2xl p-6 border border-slate-200 shadow-xl space-y-4">
@@ -690,7 +737,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </div>
                 </div>
 
-                {/* Role Pill */}
+                {/* Role Indicator */}
                 <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
                   <span
                     className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
@@ -800,7 +847,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 <div className="flex items-center gap-3">
                   <h1 className="text-sm font-extrabold text-slate-900 font-manrope capitalize">
                     {activeTab === 'overview' && 'Dashboard Overview'}
-                    {activeTab === 'projects' && 'Project Details & Management'}
+                    {activeTab === 'projects' && 'Projects & Entity Management'}
                     {activeTab === 'dpr' && 'DPR Requests'}
                     {activeTab === 'consultations' && 'Consultations'}
                     {activeTab === 'visitors' && 'Visitor Tracking'}
@@ -929,12 +976,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </div>
                 )}
 
-                {/* 2, 3, 4, 5, 6: Projects (Cost, Promoters, Checklist, Documents, Probability) */}
+                {/* 2. Projects (Promoters, Cost & Means of Finance, Checklist, Documents, Probability) */}
                 {activeTab === 'projects' && (
                   <div className="space-y-6">
-                    {/* Project Selector & Unit Switcher */}
+                    {/* Project Selector, Super Admin CRUD Buttons, & Unit Switcher */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-                      <div className="flex items-center gap-3 min-w-[260px]">
+                      <div className="flex flex-wrap items-center gap-3 min-w-65">
                         <UISelect
                           value={selectedProjectId}
                           onValueChange={setSelectedProjectId}
@@ -942,6 +989,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           triggerClassName="h-9 px-3 py-1.5 text-xs font-bold bg-slate-50 border-slate-200"
                         />
                         <span className="text-xs text-slate-500 font-medium shrink-0">{currentProject?.location}</span>
+
+                        {activeRole === 'superadmin' && projects.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProject(selectedProjectId)}
+                            title="Delete this project"
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        {activeRole === 'superadmin' && (
+                          <button
+                            type="button"
+                            onClick={() => setShowNewProjectModal(true)}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>New Project</span>
+                          </button>
+                        )}
                       </div>
 
                       {/* Display Unit Switcher (INR Crores, INR Lakhs, INR Millions) */}
@@ -982,7 +1051,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     </div>
 
-                    {/* Feature 6: Probability Meter (Starts at 25%, rises to 100% when marked as funded) */}
+                    {/* Probability Meter (Starts at 25%, rises to 100% when marked as funded) */}
                     <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
@@ -996,7 +1065,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           </span>
 
                           {/* Super Admin funded marker */}
-                          {activeRole === 'superadmin' && (
+                          {activeRole === 'superadmin' ? (
                             <button
                               type="button"
                               onClick={handleToggleFunded}
@@ -1008,6 +1077,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             >
                               {currentProject?.isFunded ? 'Funded (100%)' : 'Mark as Funded'}
                             </button>
+                          ) : (
+                            <span
+                              className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
+                                currentProject?.isFunded
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {currentProject?.isFunded ? 'Funded' : 'In Appraisal'}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1022,7 +1101,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     </div>
 
-                    {/* Feature 2: Promoters (Add multiple promoters when promoter count > 1) */}
+                    {/* Promoters (Add multiple promoters, view or manage) */}
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
@@ -1130,7 +1209,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     </div>
 
-                    {/* Feature 3: Project Cost and Means of Finance (with unit display) */}
+                    {/* Project Cost and Means of Finance (with unit display) */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                       {/* Project Cost Components */}
                       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
@@ -1265,7 +1344,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     </div>
 
-                    {/* Feature 4: Checklist (Upload generic checklist, NO download allowed, disclaimer) */}
+                    {/* Checklist (Upload generic checklist, NO download allowed, disclaimer) */}
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1308,7 +1387,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </p>
                     </div>
 
-                    {/* Feature 5: Documents (Optional Uploads) */}
+                    {/* Documents (Optional Uploads) */}
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
                       <div>
                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1377,7 +1456,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </div>
                 )}
 
-                {/* 7. DPR Requests (Super Admin can assign to DPR Consultant 1, 2, 3...) */}
+                {/* 3. DPR Requests (Super Admin can assign to DPR Consultant 1, 2, 3...) */}
                 {activeTab === 'dpr' && (
                   <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -1437,7 +1516,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </div>
                 )}
 
-                {/* 8. Consultations (Super Admin can assign to Prosync) */}
+                {/* 4. Consultations (Super Admin can assign to Prosync) */}
                 {activeTab === 'consultations' && (
                   <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -1492,7 +1571,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </div>
                 )}
 
-                {/* 9. Visitors (Read-Only for both roles) */}
+                {/* 5. Visitors (Read-Only for both roles) */}
                 {activeTab === 'visitors' && (
                   <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden space-y-4">
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -1541,6 +1620,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
               </div>
             </main>
+          </div>
+        )}
+
+        {/* Modal: Super Admin New Project Creation */}
+        {showNewProjectModal && activeRole === 'superadmin' && (
+          <div className="fixed inset-0 z-60 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 font-manrope">Create New Project</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowNewProjectModal(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <form onSubmit={handleCreateProject} className="p-5 space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Project Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={newProjName}
+                    onChange={(e) => setNewProjName(e.target.value)}
+                    placeholder="e.g. Solar Park Alpha"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Industry</label>
+                  <input
+                    type="text"
+                    value={newProjIndustry}
+                    onChange={(e) => setNewProjIndustry(e.target.value)}
+                    placeholder="e.g. Renewable Energy"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={newProjLocation}
+                    onChange={(e) => setNewProjLocation(e.target.value)}
+                    placeholder="e.g. Gujarat, India"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewProjectModal(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer"
+                  >
+                    Create Project
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

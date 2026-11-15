@@ -239,6 +239,7 @@ export default function App() {
 
     return () => {
       window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [currentUser?.email]);
 
