@@ -13,6 +13,8 @@ import { DPRRequestModal } from './DPRRequestModal';
 import { FundingRequestModal } from './FundingRequestModal';
 import { PromoterFundAssistanceModal } from './PromoterFundAssistanceModal';
 import { recordAssessmentCompletion } from '../utils/membershipStore';
+import { UISelect } from './ui/Select';
+import { showToast } from './ui/Toast';
 import {
   Calculator,
   CheckCircle2,
@@ -450,7 +452,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
     if (stage === 1) {
       if (!formData.projectName.trim() || !formData.industry || !formData.location.trim()) {
-        alert('Please enter your Project Name, select Industry, and choose Location to continue.');
+        showToast('Please enter your Project Name, select Industry, and choose Location to continue.', { type: 'warning', title: 'Missing Information' });
         return;
       }
       setStage(2);
@@ -504,28 +506,28 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       window.scrollTo({ top: 120, behavior: 'smooth' });
     } else if (stage === 3) {
       if (!formData.landStatus) {
-        alert('Please select Land Status.');
+        showToast('Please select Land Status.', { type: 'warning' });
         return;
       }
       if (!formData.collateralStatus) {
-        alert('Please select Collateral Status.');
+        showToast('Please select Collateral Status.', { type: 'warning' });
         return;
       }
       if (!formData.promoterExp) {
-        alert('Please select Promoter Track Record.');
+        showToast('Please select Promoter Track Record.', { type: 'warning' });
         return;
       }
       if (!formData.fullName.trim() || !formData.mobile.trim() || !formData.email.trim()) {
         setMobileTouched(true);
-        alert('Please enter your full name, mobile number, and email address.');
+        showToast('Please enter your full name, mobile number, and email address.', { type: 'warning' });
         return;
       }
       if (!formData.bankName || !formData.bankName.trim()) {
-        alert('Please select your Preferred Bank for the Term Loan proposal.');
+        showToast('Please select your Preferred Bank for the Term Loan proposal.', { type: 'warning' });
         return;
       }
       if (!formData.branchLocation || !formData.branchLocation.trim()) {
-        alert('Please enter your Preferred Bank Branch Location / City.');
+        showToast('Please enter your Preferred Bank Branch Location / City.', { type: 'warning' });
         return;
       }
       if (!mobileValidation.isValid) {
@@ -817,7 +819,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       await generateProjectTeaserDOCX(pdfData);
     } catch (err) {
       console.error('Failed to generate DOCX teaser:', err);
-      alert('Could not generate DOCX teaser. Please try again.');
+      showToast('Could not generate DOCX teaser. Please try again.', { type: 'error' });
     } finally {
       setIsDownloadingDocx(false);
     }
@@ -826,7 +828,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const handleSaveAndRedirectToOutputs = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!formData.projectName.trim()) {
-      alert('Please enter your Project Name before saving.');
+      showToast('Please enter your Project Name before saving.', { type: 'warning' });
       return;
     }
 
@@ -852,7 +854,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     const totalFin = tLoan + pContrib + oFin;
 
     if (totalCost > 0 && totalFin > 0 && Math.abs(totalCost - totalFin) > 0.05) {
-      alert(`Total Project Cost (₹${totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹${totalFin.toFixed(2)} Cr).`);
+      showToast(`Total Project Cost (₹${totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹${totalFin.toFixed(2)} Cr).`, { type: 'warning' });
       return;
     }
 
@@ -926,7 +928,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
   const handleSaveProjectEdits = async (skipRedirect = false) => {
     if (!formData.projectName.trim()) {
-      alert('Please enter your Project Name before saving.');
+      showToast('Please enter your Project Name before saving.', { type: 'warning' });
       return;
     }
     const computed = computeResults();
@@ -1313,36 +1315,30 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <label className="block text-xs font-bold text-gray-700 mb-1">
                         Industry / Sector <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        name="industry"
+                      <UISelect
                         value={formData.industry}
-                        onChange={handleInputChange}
-                        required
-                        className={`w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium ${
-                          formData.industry ? 'text-gray-900' : 'text-gray-400'
-                        }`}
-                      >
-                        <option value="" disabled hidden>Select Industry / Sector</option>
-                        {formData.industry && !['Renewable Energy & CBG / Bio-Gas', 'Solar & Wind Power Infrastructure', 'Renewable Energy & Solar', 'Manufacturing & Heavy Industry', 'Food Processing & Cold Chain', 'Pharmaceuticals & Healthcare', 'Pharmaceuticals & Life Sciences', 'Textiles & Apparel', 'Real Estate & Commercial Infra', 'Hospitality & Commercial', 'Logistics & Warehousing', 'Chemicals & Fertilizers', 'Specialty Chemicals', 'Hotels & Hospitality', 'Data Centers & Tech Parks', 'Other Greenfield Sector'].includes(formData.industry) && (
-                          <option value={formData.industry} className="text-gray-900">{formData.industry}</option>
-                        )}
-                        <option value="Renewable Energy & CBG / Bio-Gas" className="text-gray-900">Renewable Energy &amp; CBG / Bio-Gas</option>
-                        <option value="Solar & Wind Power Infrastructure" className="text-gray-900">Solar &amp; Wind Power Infrastructure</option>
-                        <option value="Renewable Energy & Solar" className="text-gray-900">Renewable Energy &amp; Solar</option>
-                        <option value="Manufacturing & Heavy Industry" className="text-gray-900">Manufacturing &amp; Heavy Industry</option>
-                        <option value="Food Processing & Cold Chain" className="text-gray-900">Food Processing &amp; Cold Chain</option>
-                        <option value="Pharmaceuticals & Healthcare" className="text-gray-900">Pharmaceuticals &amp; Healthcare</option>
-                        <option value="Pharmaceuticals & Life Sciences" className="text-gray-900">Pharmaceuticals &amp; Life Sciences</option>
-                        <option value="Textiles & Apparel" className="text-gray-900">Textiles &amp; Apparel</option>
-                        <option value="Real Estate & Commercial Infra" className="text-gray-900">Real Estate &amp; Commercial Infra</option>
-                        <option value="Hotels & Hospitality" className="text-gray-900">Hotels &amp; Hospitality</option>
-                        <option value="Hospitality & Commercial" className="text-gray-900">Hospitality &amp; Commercial</option>
-                        <option value="Logistics & Warehousing" className="text-gray-900">Logistics &amp; Warehousing</option>
-                        <option value="Chemicals & Fertilizers" className="text-gray-900">Chemicals &amp; Fertilizers</option>
-                        <option value="Specialty Chemicals" className="text-gray-900">Specialty Chemicals</option>
-                        <option value="Data Centers & Tech Parks" className="text-gray-900">Data Centers &amp; Tech Parks</option>
-                        <option value="Other Greenfield Sector" className="text-gray-900">Other Greenfield Sector</option>
-                      </select>
+                        onValueChange={(val) => setFormData((prev) => ({ ...prev, industry: val }))}
+                        placeholder="Select Industry / Sector"
+                        options={[
+                          'Renewable Energy & CBG / Bio-Gas',
+                          'Solar & Wind Power Infrastructure',
+                          'Renewable Energy & Solar',
+                          'Manufacturing & Heavy Industry',
+                          'Food Processing & Cold Chain',
+                          'Pharmaceuticals & Healthcare',
+                          'Pharmaceuticals & Life Sciences',
+                          'Textiles & Apparel',
+                          'Real Estate & Commercial Infra',
+                          'Hotels & Hospitality',
+                          'Hospitality & Commercial',
+                          'Logistics & Warehousing',
+                          'Chemicals & Fertilizers',
+                          'Specialty Chemicals',
+                          'Data Centers & Tech Parks',
+                          'Other Greenfield Sector'
+                        ]}
+                        triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
+                      />
                     </div>
 
                     <div className="md:col-span-2">
@@ -1769,82 +1765,64 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <label className="block text-xs font-bold text-gray-700 mb-1">
                         Land Status <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        name="landStatus"
+                      <UISelect
                         value={formData.landStatus}
-                        onChange={handleInputChange}
-                        required
-                        className={`w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 ${
-                          formData.landStatus ? 'text-gray-900' : 'text-gray-400'
-                        }`}
-                      >
-                        <option value="" disabled hidden>Select Land Status</option>
-                        {formData.landStatus && !['Owned & Registered', 'Land Owned & Registered', 'Leased / Govt Allotted', 'Industrial Lease Signed', 'TSIIC / Industrial Park Allotted', 'MoU Signed / Under Acquisition', 'Land Selection Pending'].includes(formData.landStatus) && (
-                          <option value={formData.landStatus} className="text-gray-900">{formData.landStatus}</option>
-                        )}
-                        <option value="Owned & Registered" className="text-gray-900">Owned &amp; Registered</option>
-                        <option value="Land Owned & Registered" className="text-gray-900">Land Owned &amp; Registered</option>
-                        <option value="Leased / Govt Allotted" className="text-gray-900">Leased / Govt Allotted</option>
-                        <option value="Industrial Lease Signed" className="text-gray-900">Industrial Lease Signed</option>
-                        <option value="TSIIC / Industrial Park Allotted" className="text-gray-900">TSIIC / Industrial Park Allotted</option>
-                        <option value="MoU Signed / Under Acquisition" className="text-gray-900">MoU Signed / Under Acquisition</option>
-                        <option value="Land Selection Pending" className="text-gray-900">Land Selection Pending</option>
-                      </select>
+                        onValueChange={(val) => setFormData((prev) => ({ ...prev, landStatus: val }))}
+                        placeholder="Select Land Status"
+                        options={[
+                          'Owned & Registered',
+                          'Land Owned & Registered',
+                          'Leased / Govt Allotted',
+                          'Industrial Lease Signed',
+                          'TSIIC / Industrial Park Allotted',
+                          'MoU Signed / Under Acquisition',
+                          'Land Selection Pending'
+                        ]}
+                        triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
+                      />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-gray-700 mb-1">
                         Collateral / Mortgage Status <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        name="collateralStatus"
+                      <UISelect
                         value={formData.collateralStatus}
-                        onChange={handleInputChange}
-                        required
-                        className={`w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 ${
-                          formData.collateralStatus ? 'text-gray-900' : 'text-gray-400'
-                        }`}
-                      >
-                        <option value="" disabled hidden>Select Collateral Status</option>
-                        {formData.collateralStatus && !['Freehold (Clear Title)', 'Prime Land & Building Mortgage', 'Plant & Machinery Hypothecation', 'Factory Premises & Fixed Assets', 'Leasehold (Bank Clause)', 'Govt. Allotted Land', 'Under Mortgage / Encumbered', 'Agricultural / Conversion Pending'].includes(formData.collateralStatus) && (
-                          <option value={formData.collateralStatus} className="text-gray-900">{formData.collateralStatus}</option>
-                        )}
-                        <option value="Freehold (Clear Title)" className="text-gray-900">Freehold (Clear Title)</option>
-                        <option value="Prime Land & Building Mortgage" className="text-gray-900">Prime Land &amp; Building Mortgage</option>
-                        <option value="Plant & Machinery Hypothecation" className="text-gray-900">Plant &amp; Machinery Hypothecation</option>
-                        <option value="Factory Premises & Fixed Assets" className="text-gray-900">Factory Premises &amp; Fixed Assets</option>
-                        <option value="Leasehold (Bank Clause)" className="text-gray-900">Leasehold (Bank Clause)</option>
-                        <option value="Govt. Allotted Land" className="text-gray-900">Govt. Allotted Land</option>
-                        <option value="Under Mortgage / Encumbered" className="text-gray-900">Under Mortgage / Encumbered</option>
-                        <option value="Agricultural / Conversion Pending" className="text-gray-900">Agricultural / Conversion Pending</option>
-                      </select>
+                        onValueChange={(val) => setFormData((prev) => ({ ...prev, collateralStatus: val }))}
+                        placeholder="Select Collateral Status"
+                        options={[
+                          'Freehold (Clear Title)',
+                          'Prime Land & Building Mortgage',
+                          'Plant & Machinery Hypothecation',
+                          'Factory Premises & Fixed Assets',
+                          'Leasehold (Bank Clause)',
+                          'Govt. Allotted Land',
+                          'Under Mortgage / Encumbered',
+                          'Agricultural / Conversion Pending'
+                        ]}
+                        triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
+                      />
                     </div>
 
                     <div className="md:col-span-2">
                       <label className="block text-xs font-bold text-gray-700 mb-1">
                         Promoter Track Record <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        name="promoterExp"
+                      <UISelect
                         value={formData.promoterExp}
-                        onChange={handleInputChange}
-                        required
-                        className={`w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 ${
-                          formData.promoterExp ? 'text-gray-900' : 'text-gray-400'
-                        }`}
-                      >
-                        <option value="" disabled hidden>Select Promoter Track Record</option>
-                        {formData.promoterExp && !['10+ Years (Industry Veteran)', '12+ Years Manufacturing', '10+ Years Pharma R&D', '8+ Years Hospitality & Infrastructure', '5-10 Years (Established Player)', '3-5 Years (Relevant Sector)', '0-3 Years (First-Time Promoter)'].includes(formData.promoterExp) && (
-                          <option value={formData.promoterExp} className="text-gray-900">{formData.promoterExp}</option>
-                        )}
-                        <option value="10+ Years (Industry Veteran)" className="text-gray-900">10+ Years (Industry Veteran)</option>
-                        <option value="12+ Years Manufacturing" className="text-gray-900">12+ Years Manufacturing</option>
-                        <option value="10+ Years Pharma R&D" className="text-gray-900">10+ Years Pharma R&amp;D</option>
-                        <option value="8+ Years Hospitality & Infrastructure" className="text-gray-900">8+ Years Hospitality &amp; Infrastructure</option>
-                        <option value="5-10 Years (Established Player)" className="text-gray-900">5-10 Years (Established Player)</option>
-                        <option value="3-5 Years (Relevant Sector)" className="text-gray-900">3-5 Years (Relevant Sector)</option>
-                        <option value="0-3 Years (First-Time Promoter)" className="text-gray-900">0-3 Years (First-Time Promoter)</option>
-                      </select>
+                        onValueChange={(val) => setFormData((prev) => ({ ...prev, promoterExp: val }))}
+                        placeholder="Select Promoter Track Record"
+                        options={[
+                          '10+ Years (Industry Veteran)',
+                          '12+ Years Manufacturing',
+                          '10+ Years Pharma R&D',
+                          '8+ Years Hospitality & Infrastructure',
+                          '5-10 Years (Established Player)',
+                          '3-5 Years (Relevant Sector)',
+                          '0-3 Years (First-Time Promoter)'
+                        ]}
+                        triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
+                      />
                     </div>
 
                     <div className="md:col-span-2">
@@ -1870,21 +1848,22 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <span>Promoter &amp; Contact Details</span>
                       </h3>
                       
-                      <div className="flex items-center gap-2">
-                        <label className="text-[11px] font-bold text-gray-600">
+                      <div className="flex items-center gap-2 min-w-[190px]">
+                        <label className="text-[11px] font-bold text-gray-600 shrink-0">
                           Number of Promoters:
                         </label>
-                        <select
-                          value={numPromoters}
-                          onChange={(e) => handleNumPromotersChange(Number(e.target.value))}
-                          className="px-2.5 py-1 bg-white border border-gray-300 rounded-lg text-xs font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                        >
-                          <option value={1}>1 (Single Promoter)</option>
-                          <option value={2}>2 Promoters</option>
-                          <option value={3}>3 Promoters</option>
-                          <option value={4}>4 Promoters</option>
-                          <option value={5}>5+ Promoters</option>
-                        </select>
+                        <UISelect
+                          value={String(numPromoters)}
+                          onValueChange={(val) => handleNumPromotersChange(Number(val))}
+                          options={[
+                            { value: '1', label: '1 (Single Promoter)' },
+                            { value: '2', label: '2 Promoters' },
+                            { value: '3', label: '3 Promoters' },
+                            { value: '4', label: '4 Promoters' },
+                            { value: '5', label: '5+ Promoters' }
+                          ]}
+                          triggerClassName="h-8 px-2.5 py-1 bg-white border-gray-300 text-xs font-bold text-blue-700"
+                        />
                       </div>
                     </div>
 
@@ -2000,36 +1979,38 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                                 <label className="block text-[11px] font-bold text-gray-600 mb-1">
                                   Experience (Years) *
                                 </label>
-                                <select
+                                <UISelect
                                   value={promoter.experienceYears || ''}
-                                  onChange={(e) => handleUpdateAdditionalPromoter(index, 'experienceYears', e.target.value)}
-                                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-                                >
-                                  <option value="">Select Experience</option>
-                                  <option value="1-3 Years">1-3 Years (Early Career)</option>
-                                  <option value="3-5 Years">3-5 Years (Relevant Domain)</option>
-                                  <option value="5-10 Years">5-10 Years (Senior Track Record)</option>
-                                  <option value="10+ Years">10+ Years (Industry Veteran)</option>
-                                  <option value="15+ Years">15+ Years (Executive Experience)</option>
-                                </select>
+                                  onValueChange={(val) => handleUpdateAdditionalPromoter(index, 'experienceYears', val)}
+                                  placeholder="Select Experience"
+                                  options={[
+                                    '1-3 Years (Early Career)',
+                                    '3-5 Years (Relevant Domain)',
+                                    '5-10 Years (Senior Track Record)',
+                                    '10+ Years (Industry Veteran)',
+                                    '15+ Years (Executive Experience)'
+                                  ]}
+                                  triggerClassName="bg-gray-50 border-gray-200 text-xs"
+                                />
                               </div>
 
                               <div>
                                 <label className="block text-[11px] font-bold text-gray-600 mb-1">
                                   Qualification *
                                 </label>
-                                <select
+                                <UISelect
                                   value={promoter.qualification}
-                                  onChange={(e) => handleUpdateAdditionalPromoter(index, 'qualification', e.target.value)}
-                                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-                                >
-                                  <option value="B.Tech / Engineering">B.Tech / Engineering</option>
-                                  <option value="MBA / Business Management">MBA / Business Management</option>
-                                  <option value="Chartered Accountant (CA)">Chartered Accountant (CA)</option>
-                                  <option value="Post Graduate / Master's">Post Graduate / Master's</option>
-                                  <option value="Doctorate (Ph.D)">Doctorate (Ph.D)</option>
-                                  <option value="Graduate / Other">Graduate / Other</option>
-                                </select>
+                                  onValueChange={(val) => handleUpdateAdditionalPromoter(index, 'qualification', val)}
+                                  options={[
+                                    'B.Tech / Engineering',
+                                    'MBA / Business Management',
+                                    'Chartered Accountant (CA)',
+                                    "Post Graduate / Master's",
+                                    'Doctorate (Ph.D)',
+                                    'Graduate / Other'
+                                  ]}
+                                  triggerClassName="bg-gray-50 border-gray-200 text-xs"
+                                />
                               </div>
                             </div>
                           </div>
@@ -2057,31 +2038,30 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           <span>Preferred Target Bank</span>
                           <span className="text-red-500 font-bold">*</span>
                         </label>
-                        <select
-                          name="bankName"
+                        <UISelect
                           value={formData.bankName}
-                          onChange={handleInputChange}
-                          required
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                        >
-                          <option value="">Select your preferred bank (Required)...</option>
-                          <option value="State Bank of India (SBI)">State Bank of India (SBI)</option>
-                          <option value="Punjab National Bank (PNB)">Punjab National Bank (PNB)</option>
-                          <option value="Canara Bank">Canara Bank</option>
-                          <option value="Bank of Baroda (BOB)">Bank of Baroda (BOB)</option>
-                          <option value="Union Bank of India">Union Bank of India</option>
-                          <option value="Indian Bank">Indian Bank</option>
-                          <option value="Bank of India">Bank of India</option>
-                          <option value="Central Bank of India">Central Bank of India</option>
-                          <option value="HDFC Bank (Commercial Banking)">HDFC Bank (Commercial Banking)</option>
-                          <option value="ICICI Bank (Corporate & SME)">ICICI Bank (Corporate & SME)</option>
-                          <option value="Axis Bank">Axis Bank</option>
-                          <option value="Kotak Mahindra Bank">Kotak Mahindra Bank</option>
-                          <option value="Federal Bank">Federal Bank</option>
-                          <option value="SIDBI (Small Industries Development Bank of India)">SIDBI</option>
-                          <option value="NABARD / State Financial Corporation (SFC)">NABARD / SFC</option>
-                          <option value="Other Commercial / Private Bank">Other Commercial / Private Bank</option>
-                        </select>
+                          onValueChange={(val) => setFormData((prev) => ({ ...prev, bankName: val }))}
+                          placeholder="Select your preferred bank (Required)..."
+                          options={[
+                            'State Bank of India (SBI)',
+                            'Punjab National Bank (PNB)',
+                            'Canara Bank',
+                            'Bank of Baroda (BOB)',
+                            'Union Bank of India',
+                            'Indian Bank',
+                            'Bank of India',
+                            'Central Bank of India',
+                            'HDFC Bank (Commercial Banking)',
+                            'ICICI Bank (Corporate & SME)',
+                            'Axis Bank',
+                            'Kotak Mahindra Bank',
+                            'Federal Bank',
+                            'SIDBI (Small Industries Development Bank of India)',
+                            'NABARD / State Financial Corporation (SFC)',
+                            'Other Commercial / Private Bank'
+                          ]}
+                          triggerClassName="bg-white border-gray-200 text-xs font-medium"
+                        />
                       </div>
 
                       <div>
@@ -2674,7 +2654,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 type="button"
                 onClick={() => {
                   if (totalCost > 0 && totalFin > 0 && Math.abs(totalCost - totalFin) > 0.05) {
-                    alert(`Total Project Cost (₹${totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹${totalFin.toFixed(2)} Cr).`);
+                    showToast(`Total Project Cost (₹${totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹${totalFin.toFixed(2)} Cr).`, { type: 'warning' });
                     return;
                   }
                   handleSaveAndRedirectToOutputs();

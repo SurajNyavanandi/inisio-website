@@ -38,6 +38,7 @@ const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ defau
 const AdminLeadsModal = lazy(() => import('./components/AdminLeadsModal').then(m => ({ default: m.AdminLeadsModal })));
 const MembershipPlansModal = lazy(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
 const ConsultationModal = lazy(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
+const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
 
 export default function App() {
   const [activeBlogSlug, setActiveBlogSlug] = useState<string>(() => {
@@ -83,6 +84,11 @@ export default function App() {
 
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname;
+    return path === '/admin' || path === '/admin-panel';
+  });
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [membershipModalOpen, setMembershipModalOpen] = useState(false);
   const [membershipModalReason, setMembershipModalReason] = useState('');
@@ -151,10 +157,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Check if URL has #admin or ?admin
+    // Check if URL has #admin, ?admin, or /admin
     const checkAdminHash = () => {
-      if (window.location.hash === '#admin' || window.location.search.includes('admin')) {
-        setAdminModalOpen(true);
+      const path = window.location.pathname;
+      if (window.location.hash === '#admin' || window.location.search.includes('admin') || path === '/admin' || path === '/admin-panel') {
+        setIsAdminPanelOpen(true);
       }
       const anchor = window.location.hash.replace('#', '');
       if (['solutions', 'industries', 'faqs', 'contact'].includes(anchor)) {
@@ -234,7 +241,7 @@ export default function App() {
     // Track initial page view
     recordPageView('Home / Greenfield Landing', currentUser?.email);
 
-    // Keyboard shortcut Ctrl+Shift+S or Cmd+Shift+S to open Admin Portal
+    // Global keyboard shortcut Ctrl+Shift+S or Cmd+Shift+S to open Admin Panel
     const handleKeyDown = (e: KeyboardEvent) => {
       const isModifierActive = e.ctrlKey || e.metaKey;
       const isShift = e.shiftKey;
@@ -242,15 +249,9 @@ export default function App() {
       const code = e.code || '';
 
       if (isModifierActive && isShift && (key === 's' || code === 'KeyS')) {
+        // Prevent browser's default Save action
         e.preventDefault();
-        const isAdmin = currentUser && ['superadmin', 'admin', 'admin1', 'admin2', 'admin3'].includes(currentUser.role);
-        if (isAdmin) {
-          setActiveTab('admin-dashboard');
-          window.history.pushState({}, '', '/admin-dashboard');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        } else {
-          setAdminModalOpen((prev) => !prev);
-        }
+        setIsAdminPanelOpen((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -434,24 +435,34 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const isNonAdminDashboard =
+    (activeTab === 'user-dashboard' ||
+      activeTab === 'ca-dashboard' ||
+      activeTab === 'dpr-dashboard' ||
+      activeTab === 'prosync-dashboard') &&
+    Boolean(currentUser) &&
+    isRoleAuthorizedForDashboard(currentUser?.role, activeTab);
+
   return (
-    <div className="min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col justify-between overflow-x-hidden">
-      <div className="w-full min-w-0">
+    <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isNonAdminDashboard ? 'h-screen overflow-hidden' : 'justify-between overflow-x-hidden'}`}>
+      <div className={`w-full min-w-0 ${isNonAdminDashboard ? 'h-full flex flex-col' : ''}`}>
         {/* Navbar */}
-        <Navbar
-          activeTab={activeTab}
-          onSelectTab={handleSelectTab}
-          onOpenAssessment={() => handleOpenAssessment()}
-          onOpenConsultation={() => setConsultationModalOpen(true)}
-          selectedIndustryName={selectedIndustryForAssessment}
-          onSelectIndustry={handleSelectIndustryFromNav}
-          currentUser={currentUser}
-          onOpenAuth={handleOpenAuth}
-          onLogout={handleLogout}
-        />
+        {!isNonAdminDashboard && (
+          <Navbar
+            activeTab={activeTab}
+            onSelectTab={handleSelectTab}
+            onOpenAssessment={() => handleOpenAssessment()}
+            onOpenConsultation={() => setConsultationModalOpen(true)}
+            selectedIndustryName={selectedIndustryForAssessment}
+            onSelectIndustry={handleSelectIndustryFromNav}
+            currentUser={currentUser}
+            onOpenAuth={handleOpenAuth}
+            onLogout={handleLogout}
+          />
+        )}
 
         {/* View Switcher */}
-        <main className="transition-all duration-300 pt-16 sm:pt-20">
+        <main className={isNonAdminDashboard ? "w-full h-full overflow-hidden p-0 m-0" : "transition-all duration-300 pt-16 sm:pt-20"}>
           {activeTab === 'home' && (
             <div className="animate-in fade-in duration-300 pt-0 font-sans space-y-0">
               <div id="hero">
@@ -559,6 +570,8 @@ export default function App() {
                       setMembershipModalReason('');
                       setMembershipModalOpen(true);
                     }}
+                    onLogout={handleLogout}
+                    onNavigateHome={() => handleSelectTab('home')}
                   />
                 </div>
               </Suspense>
@@ -584,7 +597,11 @@ export default function App() {
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
                 <div className="animate-in fade-in duration-300">
-                  <CADashboard user={currentUser} />
+                  <CADashboard
+                    user={currentUser}
+                    onLogout={handleLogout}
+                    onNavigateHome={() => handleSelectTab('home')}
+                  />
                 </div>
               </Suspense>
             )
@@ -608,7 +625,11 @@ export default function App() {
               />
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
-                <DPRConsultantDashboard user={currentUser} onLogout={handleLogout} />
+                <DPRConsultantDashboard
+                  user={currentUser}
+                  onLogout={handleLogout}
+                  onNavigateHome={() => handleSelectTab('home')}
+                />
               </Suspense>
             )
           )}
@@ -657,7 +678,11 @@ export default function App() {
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
                 <div className="animate-in fade-in duration-300">
-                  <ProsyncDashboard user={currentUser} onLogout={handleLogout} />
+                  <ProsyncDashboard
+                    user={currentUser}
+                    onLogout={handleLogout}
+                    onNavigateHome={() => handleSelectTab('home')}
+                  />
                 </div>
               </Suspense>
             )
@@ -755,14 +780,16 @@ export default function App() {
         </main>
       </div>
 
-      <div>
-        {/* Footer */}
-        <Footer
-          onSelectTab={handleSelectTab}
-          onOpenAssessment={() => handleOpenAssessment()}
-          onOpenConsultation={() => setConsultationModalOpen(true)}
-        />
-      </div>
+      {!isNonAdminDashboard && (
+        <div>
+          {/* Footer */}
+          <Footer
+            onSelectTab={handleSelectTab}
+            onOpenAssessment={() => handleOpenAssessment()}
+            onOpenConsultation={() => setConsultationModalOpen(true)}
+          />
+        </div>
+      )}
 
       {/* Interactive Modals (Code-Split / Suspense Loaded) */}
       {authModalOpen && (
@@ -817,8 +844,23 @@ export default function App() {
         </Suspense>
       )}
 
+      {/* Admin Panel (Opened via Ctrl+Shift+S or /admin) */}
+      {isAdminPanelOpen && (
+        <Suspense fallback={null}>
+          <AdminPanel
+            isOpen={isAdminPanelOpen}
+            onClose={() => {
+              setIsAdminPanelOpen(false);
+              if (window.location.pathname === '/admin' || window.location.pathname === '/admin-panel') {
+                window.history.pushState({}, '', '/');
+              }
+            }}
+          />
+        </Suspense>
+      )}
+
       {/* Floating Call & WhatsApp Buttons */}
-      <FloatingContactButtons />
+      {!isNonAdminDashboard && <FloatingContactButtons />}
     </div>
   );
 }

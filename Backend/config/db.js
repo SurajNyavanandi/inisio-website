@@ -1,7 +1,19 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const backendEnvPath = fs.existsSync(path.resolve(__dirname, '../.env'))
+  ? path.resolve(__dirname, '../.env')
+  : fs.existsSync(path.resolve(process.cwd(), 'Backend/.env'))
+  ? path.resolve(process.cwd(), 'Backend/.env')
+  : path.resolve(process.cwd(), '.env');
+
+dotenv.config({ path: backendEnvPath });
 
 // Disable buffering so queries fail-fast or fallback immediately instead of hanging
 mongoose.set('bufferCommands', false);
@@ -27,7 +39,7 @@ export const connectDB = async () => {
     return connectingPromise;
   }
 
-  const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGO_URL;
 
   if (!uri) {
     return null;

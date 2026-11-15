@@ -16,6 +16,7 @@ import {
   FolderOpen
 } from 'lucide-react';
 import { fetchLeadsFromDatabase, deleteLeadRecord, clearAllLeads, exportLeadsToCSV, LeadRecord } from '../utils/leadStore';
+import { ConfirmDialog } from './ui/Dialog';
 
 export const AdminDashboardView: React.FC<{
   currentUser?: AuthUser | null;
@@ -24,6 +25,7 @@ export const AdminDashboardView: React.FC<{
   const [searchTerm, setSearchTerm] = useState('');
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const loadLeads = async () => {
     setLoading(true);
@@ -44,10 +46,11 @@ export const AdminDashboardView: React.FC<{
     return () => window.removeEventListener('inisio_lead_added', handleUpdate);
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this lead record from the database?')) return;
-    await deleteLeadRecord(id);
-    setLeads(prev => prev.filter(l => l.id !== id && l._id !== id));
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    await deleteLeadRecord(deleteTargetId);
+    setLeads(prev => prev.filter(l => l.id !== deleteTargetId && l._id !== deleteTargetId));
+    setDeleteTargetId(null);
   };
 
   const filtered = leads.filter(l =>
@@ -180,7 +183,7 @@ export const AdminDashboardView: React.FC<{
                   <td className="py-3.5 px-6 text-right">
                     <button
                       type="button"
-                      onClick={() => handleDelete(l.id || l._id || '')}
+                      onClick={() => setDeleteTargetId(l.id || l._id || '')}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                       title="Delete record"
                     >
@@ -216,6 +219,18 @@ export const AdminDashboardView: React.FC<{
           </table>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(deleteTargetId)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetId(null);
+        }}
+        title="Delete Lead Record"
+        description="Are you sure you want to delete this lead record from the database? This action cannot be undone."
+        onConfirm={confirmDelete}
+        confirmText="Delete Lead"
+        isDestructive={true}
+      />
     </div>
   );
 };

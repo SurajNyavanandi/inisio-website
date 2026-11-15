@@ -3,6 +3,7 @@ import { X, Calendar, Clock, CheckCircle2, Phone, Mail, ShieldCheck, ArrowRight,
 import { validateIndianMobileNumber } from '../utils/validation';
 import { saveLeadRecord } from '../utils/leadStore';
 import api from '../utils/apiClient';
+import { UISelect } from './ui/Select';
 
 interface ConsultationModalProps {
   isOpen: boolean;
@@ -150,15 +151,15 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({ isOpen, on
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700 block">Time Slot</label>
-                  <select
+                  <UISelect
                     value={formData.timeSlot}
-                    onChange={(e) => setFormData({ ...formData, timeSlot: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-                  >
-                    <option>Morning (10:00 AM - 1:00 PM)</option>
-                    <option>Afternoon (2:00 PM - 5:00 PM)</option>
-                    <option>Evening (5:00 PM - 7:30 PM)</option>
-                  </select>
+                    onValueChange={(val) => setFormData({ ...formData, timeSlot: val })}
+                    options={[
+                      'Morning (10:00 AM - 1:00 PM)',
+                      'Afternoon (2:00 PM - 5:00 PM)',
+                      'Evening (5:00 PM - 7:30 PM)'
+                    ]}
+                  />
                 </div>
               </div>
 

@@ -19,8 +19,10 @@ export const getAuthToken = (): string | null => {
 };
 
 export const getApiBaseUrl = (): string => {
-  const env = (import.meta as any).env || {};
-  const configuredUrl = env.BACKEND_API_URL || env.VITE_BACKEND_API_URL || env.VITE_API_URL || env.VITE_BACKEND_URL;
+  const configuredUrl =
+    import.meta.env.VITE_BACKEND_URL ||
+    import.meta.env.VITE_BACKEND_API_URL ||
+    import.meta.env.VITE_API_URL;
 
   if (configuredUrl) {
     const baseUrl = configuredUrl.replace(/\/$/, '');

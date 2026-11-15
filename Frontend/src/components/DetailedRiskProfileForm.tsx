@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { UISelect } from './ui/Select';
 
 export interface DetailedRiskProfileData {
   educationalBackground?: string;
@@ -54,32 +55,34 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
           <label className="text-xs font-semibold text-slate-700 block">
             Business Constitution *
           </label>
-          <select
-            value={formData.businessConstitution}
-            onChange={(e) => setFormData({ ...formData, businessConstitution: e.target.value })}
-            className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-          >
-            <option>Private Limited (Pvt Ltd)</option>
-            <option>Public Limited (Unlisted / Listed)</option>
-            <option>Limited Liability Partnership (LLP)</option>
-            <option>Proprietorship / Partnership Firm</option>
-          </select>
+          <UISelect
+            value={formData.businessConstitution || ''}
+            onValueChange={(val) => setFormData({ ...formData, businessConstitution: val })}
+            options={[
+              'Private Limited (Pvt Ltd)',
+              'Public Limited (Unlisted / Listed)',
+              'Limited Liability Partnership (LLP)',
+              'Proprietorship / Partnership Firm'
+            ]}
+            triggerClassName="bg-white border-slate-300 text-xs"
+          />
         </div>
 
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-700 block">
             Promoter Group Vintage *
           </label>
-          <select
-            value={formData.businessVintage}
-            onChange={(e) => setFormData({ ...formData, businessVintage: e.target.value })}
-            className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-          >
-            <option>10+ Years Established Operations</option>
-            <option>5-10 Years</option>
-            <option>3-5 Years</option>
-            <option>First Generation / Greenfield New Entity</option>
-          </select>
+          <UISelect
+            value={formData.businessVintage || ''}
+            onValueChange={(val) => setFormData({ ...formData, businessVintage: val })}
+            options={[
+              '10+ Years Established Operations',
+              '5-10 Years',
+              '3-5 Years',
+              'First Generation / Greenfield New Entity'
+            ]}
+            triggerClassName="bg-white border-slate-300 text-xs"
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -100,17 +103,18 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
           <label className="text-xs font-semibold text-slate-700 block">
             Available Collateral Coverage (% of Loan) *
           </label>
-          <select
-            value={formData.collateralCoveragePct}
-            onChange={(e) => setFormData({ ...formData, collateralCoveragePct: Number(e.target.value) })}
-            className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-          >
-            <option value="125">125%+ (High Tangible Security)</option>
-            <option value="100">100% (Fully Secured by Land / Fixed Assets)</option>
-            <option value="75">75% - 99%</option>
-            <option value="50">50% - 74%</option>
-            <option value="0">CGTMSE / Clean Infrastructure Lending (No Extra Collateral)</option>
-          </select>
+          <UISelect
+            value={String(formData.collateralCoveragePct || '100')}
+            onValueChange={(val) => setFormData({ ...formData, collateralCoveragePct: Number(val) })}
+            options={[
+              { value: '125', label: '125%+ (High Tangible Security)' },
+              { value: '100', label: '100% (Fully Secured by Land / Fixed Assets)' },
+              { value: '75', label: '75% - 99%' },
+              { value: '50', label: '50% - 74%' },
+              { value: '0', label: 'CGTMSE / Clean Infrastructure Lending (No Extra Collateral)' }
+            ]}
+            triggerClassName="bg-white border-slate-300 text-xs"
+          />
         </div>
       </div>
 

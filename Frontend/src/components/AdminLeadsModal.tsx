@@ -3,6 +3,7 @@ import { fetchLeadsFromDatabase, getStoredLeads, deleteLeadRecord, clearAllLeads
 import { UserProfileDetailModal } from './UserProfileDetailModal';
 import { LeadEditModal } from './LeadEditModal';
 import { AuthUser } from '../types';
+import { ConfirmDialog } from './ui/Dialog';
 import {
   X,
   Lock,
@@ -77,6 +78,12 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
   const [filterSource, setFilterSource] = useState<'ALL' | 'PDF' | 'FORM'>('ALL');
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
   const [editingLead, setEditingLead] = useState<LeadRecord | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const activeAdminUser: AuthUser = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')
     ? currentUser
@@ -851,10 +858,15 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
                               {activeAdminUser.role !== 'superadmin' && (
                                 <button
                                   onClick={() => {
-                                    if (confirm(`Delete lead entry for ${lead.fullName}?`)) {
-                                      deleteLeadRecord(lead.id);
-                                      loadData();
-                                    }
+                                    setConfirmAction({
+                                      isOpen: true,
+                                      title: 'Delete Lead Entry',
+                                      description: `Are you sure you want to delete lead entry for "${lead.fullName}"? This action cannot be undone.`,
+                                      onConfirm: () => {
+                                        deleteLeadRecord(lead.id);
+                                        loadData();
+                                      }
+                                    });
                                   }}
                                   className="p-1.5 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
                                   title="Delete record"
@@ -878,10 +890,15 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
               {activeAdminUser.role !== 'superadmin' && (
                 <button
                   onClick={() => {
-                    if (confirm('Are you sure you want to clear all leads data? This cannot be undone.')) {
-                      clearAllLeads();
-                      loadData();
-                    }
+                    setConfirmAction({
+                      isOpen: true,
+                      title: 'Clear All Leads Data',
+                      description: 'Are you sure you want to clear all leads data? This cannot be undone.',
+                      onConfirm: () => {
+                        clearAllLeads();
+                        loadData();
+                      }
+                    });
                   }}
                   className="text-red-400 hover:underline flex items-center gap-1 cursor-pointer"
                 >
@@ -921,6 +938,21 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
         onSaved={() => {
           loadData();
         }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmAction?.isOpen)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+        title={confirmAction?.title || 'Confirm Action'}
+        description={confirmAction?.description || ''}
+        onConfirm={() => {
+          if (confirmAction?.onConfirm) confirmAction.onConfirm();
+          setConfirmAction(null);
+        }}
+        confirmText="Confirm"
+        isDestructive={true}
       />
     </div>
   );

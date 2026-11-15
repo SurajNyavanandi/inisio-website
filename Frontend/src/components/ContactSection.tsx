@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { MAIN_SECTORS } from '../data/landingData';
 import { validateIndianMobileNumber } from '../utils/validation';
+import { UISelect } from './ui/Select';
 
 export const ContactSection: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
@@ -240,17 +241,13 @@ export const ContactSection: React.FC = () => {
                   {/* Project Type */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-700 block">Project Type / Sector *</label>
-                    <select
-                      required
+                    <UISelect
                       value={formData.projectType}
-                      onChange={(e) => setFormData({ ...formData, projectType: e.target.value })}
-                      className="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all cursor-pointer"
-                    >
-                      <option value="">Select Industry Sector</option>
-                      {MAIN_SECTORS.map((sector) => (
-                        <option key={sector} value={sector}>{sector}</option>
-                      ))}
-                    </select>
+                      onValueChange={(val) => setFormData({ ...formData, projectType: val })}
+                      placeholder="Select Industry Sector"
+                      options={MAIN_SECTORS.map((sector) => ({ value: sector, label: sector }))}
+                      triggerClassName="h-11 bg-white border-slate-300"
+                    />
                   </div>
                 </div>
 

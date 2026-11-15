@@ -1,7 +1,19 @@
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const backendEnvPath = fs.existsSync(path.resolve(__dirname, '../.env'))
+  ? path.resolve(__dirname, '../.env')
+  : fs.existsSync(path.resolve(process.cwd(), 'Backend/.env'))
+  ? path.resolve(process.cwd(), 'Backend/.env')
+  : path.resolve(process.cwd(), '.env');
+
+dotenv.config({ path: backendEnvPath });
 
 export const generateToken = (payload) => {
   const secret = process.env.JWT_SECRET || 'inisio_secure_jwt_secret_token_2026_greenfield';

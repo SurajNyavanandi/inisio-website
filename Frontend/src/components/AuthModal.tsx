@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AuthUser, UserRole } from '../types';
 import { validateIndianMobileNumber } from '../utils/validation';
+import { getAutoFillOtp } from '../utils/otpService';
+import { UISelect } from './ui/Select';
 import {
   X,
   Lock,
@@ -82,7 +84,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('');
       setSuccessMessage('');
       setIsVerifyingOtp(false);
-      setOtpCode(initialOtp || '');
+      setOtpCode(initialOtp || getAutoFillOtp());
       setNewPassword('');
       setConfirmPassword('');
       setResendCooldown(0);
@@ -297,6 +299,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setSuccessMessage(resData.message || `A password reset link and authorization code have been dispatched to ${cleanEmail}. Please check your email.`);
           setResendCooldown(30);
           setMode('reset-password');
+          setOtpCode(getAutoFillOtp());
         } else {
           setError(resData.message || 'Unable to process password reset request. Please check your email.');
         }
@@ -332,6 +335,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (response.ok && resData.success && resData.data) {
         const userData = resData.data;
+
+        if (userData.requiresVerification || userData.isVerified === false) {
+          setIsVerifyingOtp(true);
+          setOtpCode(getAutoFillOtp());
+          setSuccessMessage(resData.message || 'Please enter the verification code sent to your email.');
+          return;
+        }
 
         if (userData.token) {
           localStorage.setItem('inisio_auth_token', userData.token);
@@ -518,7 +528,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="text-xs text-blue-900 flex-1">
                     <p className="font-bold">Verification Code Sent to:</p>
                     <div className="flex items-center justify-between gap-2 mt-1">
-                      <span className="font-mono font-bold text-blue-950 bg-blue-100/80 px-2 py-0.5 rounded-md text-[12px] truncate max-w-[240px]">
+                      <span className="font-mono font-bold text-blue-950 bg-blue-100/80 px-2 py-0.5 rounded-md text-[12px] truncate max-w-60">
                         {email}
                       </span>
                       <button
@@ -810,19 +820,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         Account Type &amp; Professional Role *
                       </label>
                       <div className="relative">
-                        <ShieldCheck className="w-4 h-4 text-blue-600 absolute left-3 top-3 pointer-events-none" />
-                        <select
+                        <UISelect
                           value={role}
-                          onChange={(e) => setRole(e.target.value as UserRole)}
-                          className="w-full pl-9 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none cursor-pointer font-medium"
-                          required
-                        >
-                          <option value="user">Project Promoter / Business Owner</option>
-                          <option value="ca">Chartered Accountant (CA)</option>
-                          <option value="dpr_consultant">DPR Consultant</option>
-                          <option value="prosync">ProSync Team Partner</option>
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
+                          onValueChange={(val) => setRole(val as UserRole)}
+                          options={[
+                            { value: 'user', label: 'Project Promoter / Business Owner' },
+                            { value: 'ca', label: 'Chartered Accountant (CA)' },
+                            { value: 'dpr_consultant', label: 'DPR Consultant' },
+                            { value: 'prosync', label: 'ProSync Team Partner' }
+                          ]}
+                          placeholder="Select account type"
+                          triggerClassName="pl-4 py-2.5 bg-slate-50 border-slate-200 text-xs font-medium"
+                        />
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1">
                         {role === 'user' && 'Access financial modeling, bank eligibility scorecards & loan tracking.'}

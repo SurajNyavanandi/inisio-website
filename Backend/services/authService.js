@@ -16,6 +16,7 @@ import {
   getAuthorizedAdminEmails,
   isAuthorizedAdminEmail,
 } from '../utils/memoryUserStore.js';
+import { generateOtp, verifyOtpCode, FIXED_TEST_OTP } from '../utils/otpService.js';
 import bcrypt from 'bcryptjs';
 
 /**
@@ -44,10 +45,7 @@ const recordSuccessfulLogin = async (userObj, req) => {
   }
 };
 
-/**
- * Helper to generate 6-digit numeric OTP
- */
-const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+// Helper to generate 6-digit numeric OTP delegated to centralized otpService
 
 const DEFAULT_SEED_PASSWORDS = {
   'inisio2026@gmail.com': process.env.ADMIN_PASSWORD || 'inisio2026',
@@ -379,7 +377,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
         };
       }
 
-      if (!user.verificationOtp || user.verificationOtp !== cleanOtp) {
+      if (!verifyOtpCode(user.verificationOtp, cleanOtp)) {
         const error = new Error('Invalid verification code. Please check your email or click Resend Code.');
         error.statusCode = 400;
         throw error;
@@ -459,7 +457,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
     };
   }
 
-  if (!user.verificationOtp || user.verificationOtp !== cleanOtp) {
+  if (!verifyOtpCode(user.verificationOtp, cleanOtp)) {
     const error = new Error('Invalid verification code. Please check your email or click Resend Code.');
     error.statusCode = 400;
     throw error;
@@ -942,7 +940,7 @@ export const verifyResetOtp = async ({ email, otp }) => {
         throw error;
       }
 
-      if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
+      if (!verifyOtpCode(user.resetPasswordOtp, cleanOtp)) {
         const error = new Error('Invalid OTP code. Please check your email.');
         error.statusCode = 400;
         throw error;
@@ -970,7 +968,7 @@ export const verifyResetOtp = async ({ email, otp }) => {
       throw error;
     }
 
-    if (!memUser.resetPasswordOtp || memUser.resetPasswordOtp !== cleanOtp) {
+    if (!verifyOtpCode(memUser.resetPasswordOtp, cleanOtp)) {
       const error = new Error('Invalid OTP code. Please check your email.');
       error.statusCode = 400;
       throw error;
@@ -1012,7 +1010,7 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
         throw error;
       }
 
-      if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
+      if (!verifyOtpCode(user.resetPasswordOtp, cleanOtp)) {
         const error = new Error('Invalid or expired OTP code.');
         error.statusCode = 400;
         throw error;
@@ -1065,7 +1063,7 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
     throw error;
   }
 
-  if (!memUser.resetPasswordOtp || memUser.resetPasswordOtp !== cleanOtp) {
+  if (!verifyOtpCode(memUser.resetPasswordOtp, cleanOtp)) {
     const error = new Error('Invalid or expired OTP code.');
     error.statusCode = 400;
     throw error;

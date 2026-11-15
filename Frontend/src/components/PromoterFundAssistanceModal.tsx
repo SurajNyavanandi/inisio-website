@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Coins, CheckCircle2, Loader2 } from 'lucide-react';
 import { AuthUser } from '../types';
+import { UISelect } from './ui/Select';
 
 interface PromoterFundAssistanceModalProps {
   isOpen: boolean;
@@ -93,16 +94,17 @@ export const PromoterFundAssistanceModal: React.FC<PromoterFundAssistanceModalPr
             <label className="text-xs font-semibold text-slate-700 block">
               Assistance Structure
             </label>
-            <select
+            <UISelect
               value={assistanceType}
-              onChange={(e) => setAssistanceType(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-            >
-              <option>Equity Co-Investment / Angel Syndication</option>
-              <option>Mezzanine Debt / Quasi-Equity</option>
-              <option>Government Subsidy Bridge Advance</option>
-              <option>Equipment Vendor Supplier Credit</option>
-            </select>
+              onValueChange={setAssistanceType}
+              options={[
+                'Equity Co-Investment / Angel Syndication',
+                'Mezzanine Debt / Quasi-Equity',
+                'Government Subsidy Bridge Advance',
+                'Equipment Vendor Supplier Credit'
+              ]}
+              triggerClassName="bg-white border-slate-300 text-xs"
+            />
           </div>
 
           <button

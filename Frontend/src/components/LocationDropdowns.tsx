@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin } from 'lucide-react';
+import { UISelect } from './ui/Select';
 
 interface LocationDropdownsProps {
   value: string;
@@ -56,34 +57,28 @@ export const LocationDropdowns: React.FC<LocationDropdownsProps> = ({ value, onC
         <span>Proposed Project Location &amp; Industrial Cluster {required && '*'}</span>
       </label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <select
+        <UISelect
           value={selectedState}
-          required={required}
-          onChange={(e) => handleStateChange(e.target.value)}
-          className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-        >
-          <option value="">Select State</option>
-          {Object.keys(INDIAN_STATES_DISTRICTS).map((state) => (
-            <option key={state} value={state}>
-              {state}
-            </option>
-          ))}
-        </select>
+          onValueChange={handleStateChange}
+          placeholder="Select State"
+          options={Object.keys(INDIAN_STATES_DISTRICTS).map((state) => ({
+            value: state,
+            label: state
+          }))}
+          triggerClassName="bg-white border-slate-300 text-xs"
+        />
 
-        <select
+        <UISelect
           value={selectedDistrict}
-          required={required}
+          onValueChange={handleDistrictChange}
+          placeholder="Select Industrial Hub / Cluster"
           disabled={!selectedState}
-          onChange={(e) => handleDistrictChange(e.target.value)}
-          className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer disabled:opacity-50"
-        >
-          <option value="">Select Industrial Hub / Cluster</option>
-          {(INDIAN_STATES_DISTRICTS[selectedState] || []).map((district) => (
-            <option key={district} value={district}>
-              {district}
-            </option>
-          ))}
-        </select>
+          options={(INDIAN_STATES_DISTRICTS[selectedState] || []).map((district) => ({
+            value: district,
+            label: district
+          }))}
+          triggerClassName="bg-white border-slate-300 text-xs"
+        />
       </div>
     </div>
   );

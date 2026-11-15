@@ -10,11 +10,11 @@ const USER_HASH = bcrypt.hashSync('pravalika123', 10);
  * Dynamically resolves authorized administrative emails from environment variables
  */
 export const getAdminEmail1 = () => {
-  return (process.env.ADMIN_EMAIL_1 || process.env.ADMIN_EMAIL || 'inisio2026@gmail.com').toLowerCase().trim();
+  return (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAIL_1 || 'admin@example.com').toLowerCase().trim();
 };
 
 export const getAdminEmail2 = () => {
-  return (process.env.ADMIN_EMAIL_2 || process.env.SUPERADMIN_EMAIL || 'junnupravalika59@gmail.com').toLowerCase().trim();
+  return (process.env.SUPER_ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL_2 || 'superadmin@example.com').toLowerCase().trim();
 };
 
 export const getAuthorizedAdminEmails = () => {

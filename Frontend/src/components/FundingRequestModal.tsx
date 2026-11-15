@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Landmark, CheckCircle2, Loader2 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { saveLeadRecord } from '../utils/leadStore';
+import { UISelect } from './ui/Select';
 
 interface FundingRequestModalProps {
   isOpen: boolean;
@@ -90,16 +91,17 @@ export const FundingRequestModal: React.FC<FundingRequestModalProps> = ({
             <label className="text-xs font-semibold text-slate-700 block">
               Preferred Banking Channel
             </label>
-            <select
+            <UISelect
               value={bankPreference}
-              onChange={(e) => setBankPreference(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none cursor-pointer"
-            >
-              <option>PSU Nationalized Bank (SBI, PNB, BoB, Canara)</option>
-              <option>Private Commercial Bank (HDFC, ICICI, Axis)</option>
-              <option>Concessional Green Financing (IREDA / SIDBI)</option>
-              <option>Consortium / Multiple Lenders</option>
-            </select>
+              onValueChange={setBankPreference}
+              options={[
+                'PSU Nationalized Bank (SBI, PNB, BoB, Canara)',
+                'Private Commercial Bank (HDFC, ICICI, Axis)',
+                'Concessional Green Financing (IREDA / SIDBI)',
+                'Consortium / Multiple Lenders'
+              ]}
+              triggerClassName="bg-white border-slate-300 text-xs"
+            />
           </div>
 
           <button

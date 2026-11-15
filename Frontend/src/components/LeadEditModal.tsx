@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Loader2 } from 'lucide-react';
 import { LeadRecord, updateLeadRecord } from '../utils/leadStore';
+import { UISelect } from './ui/Select';
 
 interface LeadEditModalProps {
   lead: LeadRecord | null;
@@ -109,17 +110,19 @@ export const LeadEditModal: React.FC<LeadEditModalProps> = ({
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700 block">Status</label>
-            <select
+            <UISelect
               value={formData.status || 'Active Lead'}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl"
-            >
-              <option>New Lead</option>
-              <option>Active Lead</option>
-              <option>Underwriting In Progress</option>
-              <option>DPR Drafted</option>
-              <option>Bank Sanction Approved</option>
-            </select>
+              onValueChange={(val) => setFormData({ ...formData, status: val })}
+              options={[
+                'New Lead',
+                'Active Lead',
+                'Underwriting In Progress',
+                'DPR Drafted',
+                'Bank Sanction Approved'
+              ]}
+              disabled={readOnly}
+              triggerClassName="text-xs border-slate-300"
+            />
           </div>
 
           <div className="pt-2">

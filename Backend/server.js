@@ -1,11 +1,23 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
 import apiRouter from './routes/index.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const backendEnvPath = fs.existsSync(path.resolve(__dirname, '.env'))
+  ? path.resolve(__dirname, '.env')
+  : fs.existsSync(path.resolve(process.cwd(), 'Backend/.env'))
+  ? path.resolve(process.cwd(), 'Backend/.env')
+  : path.resolve(process.cwd(), '.env');
+
+dotenv.config({ path: backendEnvPath });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,39 +25,13 @@ const PORT = process.env.PORT || 5000;
 // Connect to MongoDB Atlas
 connectDB().catch(() => {});
 
-// CORS Configuration supporting inisio.vercel.app and localhost:5173
-const allowedOrigins = [
-  'https://inisio.vercel.app',
-  'https://www.inisio.vercel.app',
-  'http://inisio.vercel.app',
-  'http://www.inisio.vercel.app',
-  'https://inisio-web.vercel.app',
-  'http://inisio-web.vercel.app',
-  'http://localhost:5173',
-  'https://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:3000',
-  'http://localhost:5000',
-  process.env.CLIENT_URL,
-  process.env.FRONTEND_URL,
-  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
-  process.env.RENDER_EXTERNAL_URL,
-].filter(Boolean);
+// CORS Configuration
+const corsOrigin = process.env.CORS_ORIGIN || '*';
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    // Allow non-browser requests or same-origin
-    if (!origin) return callback(null, true);
-
-    const isExplicitlyAllowed = allowedOrigins.includes(origin);
-    const isVercel = origin.endsWith('.vercel.app') || origin.includes('vercel.app');
-    const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
-
-    if (isExplicitlyAllowed || isVercel || isLocalhost) {
-      return callback(null, true);
-    }
-    return callback(null, true);
-  },
+  origin: corsOrigin.includes(',')
+    ? corsOrigin.split(',').map((o) => o.trim())
+    : corsOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
