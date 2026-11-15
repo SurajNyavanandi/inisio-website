@@ -75,5 +75,9 @@ contactEnquirySchema.index({ name: 'text', email: 'text', phone: 'text', company
 contactEnquirySchema.index({ status: 1, createdAt: -1 });
 contactEnquirySchema.index({ isArchived: 1 });
 
+contactEnquirySchema.index({ email: 1 });
+contactEnquirySchema.index({ phone: 1 });
+contactEnquirySchema.index({ createdAt: -1 });
+
 const ContactEnquiry = mongoose.models.ContactEnquiry || mongoose.model('ContactEnquiry', contactEnquirySchema);
 export default ContactEnquiry;

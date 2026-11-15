@@ -31,6 +31,10 @@ export interface LeadRecord {
   assignedCA?: string;
   dprAssignedTo?: string;
   consultationAssignedTo?: string;
+  source?: string;
+  submittedAt?: string;
+  consultationStatus?: string;
+  assessmentCompleted?: boolean;
 }
 
 const STORAGE_KEY = 'inisio_stored_leads';
@@ -54,12 +58,12 @@ export function normalizeLead(item: any): LeadRecord {
   return {
     id,
     _id: item._id || id,
-    fullName: item.fullName || item.name || 'Anonymous Promoter',
+    fullName: item.fullName || item.name || '',
     email: item.email || '',
     phone: item.mobile || item.phone || '',
     mobile: item.mobile || item.phone || '',
-    projectName: item.projectName || 'Greenfield Project Proposal',
-    industry: item.industry || 'Manufacturing & Industrial',
+    projectName: item.projectName || '',
+    industry: item.industry || '',
     location: item.location || '',
     projectCost,
     totalCostCr: projectCost,
@@ -68,9 +72,9 @@ export function normalizeLead(item: any): LeadRecord {
     promoterContribCr: item.promoterContribCr || '0',
     dscr,
     dscrEstimate: dscr,
-    bankabilityScore: item.feasibilityScore || item.bankabilityScore || '85',
-    bankabilityRating: item.bankabilityRating || 'A',
-    feasibilityScore: item.feasibilityScore || '88',
+    bankabilityScore: item.feasibilityScore || item.bankabilityScore || '',
+    bankabilityRating: item.bankabilityRating || '',
+    feasibilityScore: item.feasibilityScore || '',
     stage: item.stage || 'Initial Assessment',
     status: item.status || 'Active Lead',
     createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
@@ -85,13 +89,18 @@ export function normalizeLead(item: any): LeadRecord {
   };
 }
 
-export function getStoredLeads(): LeadRecord[] {
+export function getStoredLeads(emailFilter?: string): LeadRecord[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.map(normalizeLead) : [];
+    const list: LeadRecord[] = Array.isArray(parsed) ? parsed.map(normalizeLead) : [];
+    if (emailFilter) {
+      const clean = emailFilter.toLowerCase().trim();
+      return list.filter(l => (l.email || '').toLowerCase().trim() === clean);
+    }
+    return list;
   } catch {
     return [];
   }
@@ -125,17 +134,17 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
   try {
     const payload = {
       fullName: norm.fullName,
-      mobile: norm.phone || norm.mobile || '9999999999',
-      email: norm.email || 'lead@inisio.in',
-      projectName: norm.projectName || 'Greenfield Project',
-      industry: norm.industry || 'Manufacturing',
-      location: norm.location || 'India',
+      mobile: norm.phone || norm.mobile || '',
+      email: norm.email || '',
+      projectName: norm.projectName || '',
+      industry: norm.industry || '',
+      location: norm.location || '',
       totalCostCr: norm.projectCost,
       loanRequiredCr: norm.proposedLoan,
       promoterContribCr: norm.promoterContribCr,
-      feasibilityScore: Number(norm.feasibilityScore) || 85,
-      bankabilityRating: norm.bankabilityRating || 'A',
-      dscrEstimate: Number(norm.dscr) || 1.45,
+      feasibilityScore: Number(norm.feasibilityScore) || 0,
+      bankabilityRating: norm.bankabilityRating || '',
+      dscrEstimate: Number(norm.dscr) || 0,
       notes: norm.notes,
       meansOfFinance: norm.meansOfFinance,
       riskProfile: norm.riskProfile,
@@ -168,7 +177,7 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
   return norm;
 }
 
-export async function updateLeadRecord(id: string, updates: Partial<LeadRecord>): Promise<LeadRecord | null> {
+export async function updateLeadRecord(id: string, updates: Partial<LeadRecord>, updaterName?: string): Promise<LeadRecord | null> {
   try {
     await api.leads.update(id, updates);
   } catch (err) {

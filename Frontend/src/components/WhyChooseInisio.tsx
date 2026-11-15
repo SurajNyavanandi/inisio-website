@@ -19,11 +19,13 @@ import {
 interface WhyChooseInisioProps {
   onOpenAssessment?: () => void;
   onOpenConsultation?: () => void;
+  isStandalone?: boolean;
 }
 
 export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
   onOpenAssessment,
-  onOpenConsultation
+  onOpenConsultation,
+  isStandalone = false
 }) => {
   return (
     <section className="py-16 sm:py-24 bg-white relative font-inter overflow-hidden border-t border-slate-100">
@@ -37,9 +39,15 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
             <span>Greenfield Debt Advisory</span>
           </div>
 
-          <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.15]" style={{ textWrap: 'balance' }}>
-            Why Greenfield Promoters &amp; Institutional Lenders Partner with Inisio
-          </h2>
+          {isStandalone ? (
+            <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.15]" style={{ textWrap: 'balance' }}>
+              Why Greenfield Promoters &amp; Institutional Lenders Partner with Inisio
+            </h1>
+          ) : (
+            <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.15]" style={{ textWrap: 'balance' }}>
+              Why Greenfield Promoters &amp; Institutional Lenders Partner with Inisio
+            </h2>
+          )}
 
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
             Most greenfield projects face delays or loan rejections because promoters approach banks without institutional credit appraisal readiness. Inisio structures your debt capacity, financial ratios, and technical feasibility to clear lender underwriting committees.
@@ -65,7 +73,7 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                 </p>
               </div>
 
-              {/* Sample Financial Metric Strip */}
+              {/* Industry Benchmark Financial Metric Strip */}
               <div className="pt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-white rounded-xl p-3 border border-slate-200/90 shadow-2xs">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">DSCR Target</span>

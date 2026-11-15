@@ -15,11 +15,13 @@ import { FinalCTA } from './components/FinalCTA';
 import { Footer } from './components/Footer';
 import { FloatingContactButtons } from './components/FloatingContactButtons';
 import { DashboardSkeleton, LoadingSpinner } from './components/common';
+import { SEOHead } from './components/SEOHead';
 import { Shield } from 'lucide-react';
 import { canUserStartAssessment } from './utils/membershipStore';
 import { getStoredLeads } from './utils/leadStore';
 import { recordPageView } from './utils/visitorStore';
 import { recordUserLogin } from './utils/userStore';
+import { resolveApiUrl } from './utils/apiClient';
 import { ForbiddenPage } from './components/ForbiddenPage';
 import { InternalPortalLogin } from './components/InternalPortalLogin';
 
@@ -35,7 +37,6 @@ const BlogsPage = lazy(() => import('./components/BlogsPage').then(m => ({ defau
 
 // Code-split modals
 const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
-const AdminLeadsModal = lazy(() => import('./components/AdminLeadsModal').then(m => ({ default: m.AdminLeadsModal })));
 const MembershipPlansModal = lazy(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
 const ConsultationModal = lazy(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
@@ -52,21 +53,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === 'undefined') return 'home';
     const path = window.location.pathname;
-    const searchParams = new URLSearchParams(window.location.search);
-    const portal = searchParams.get('portal');
 
-    if (portal === 'admin' || portal === 'superadmin' || path === '/admin' || path === '/admin/login' || path === '/superadmin' || path === '/superadmin/login' || path === '/admin-dashboard') {
-      return 'admin-dashboard';
-    }
-    if (portal === 'ca' || path === '/ca' || path === '/ca/login' || path === '/ca-dashboard') {
-      return 'ca-dashboard';
-    }
-    if (portal === 'prosync' || path === '/prosync' || path === '/prosync/login' || path === '/prosync-dashboard') {
-      return 'prosync-dashboard';
-    }
-    if (portal === 'dpr' || path === '/dpr' || path === '/dpr/login' || path === '/dpr-dashboard') {
-      return 'dpr-dashboard';
-    }
     if (path === '/user-dashboard' || path === '/dashboard' || path === '/promoter-portal') {
       return 'user-dashboard';
     }
@@ -114,15 +101,17 @@ export default function App() {
 
   // Dynamically verify active user token and session with the backend API
   useEffect(() => {
+    let isMounted = true;
     const token = localStorage.getItem('inisio_auth_token');
     if (token) {
-      fetch('/api/auth/me', {
+      fetch(resolveApiUrl('/auth/me'), {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       })
         .then((res) => res.json())
         .then((data) => {
+          if (!isMounted) return;
           if (data && data.success && data.data) {
             const user: AuthUser = {
               email: data.data.email,
@@ -145,6 +134,9 @@ export default function App() {
           // Keep active state if network is temporarily offline
         });
     }
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleOpenAuth = (
@@ -196,18 +188,8 @@ export default function App() {
 
     const handlePopState = () => {
       const path = window.location.pathname;
-      const searchParams = new URLSearchParams(window.location.search);
-      const portal = searchParams.get('portal');
 
-      if (portal === 'admin' || portal === 'superadmin' || path === '/admin' || path === '/admin/login' || path === '/superadmin' || path === '/superadmin/login' || path === '/admin-dashboard') {
-        setActiveTab('admin-dashboard');
-      } else if (portal === 'ca' || path === '/ca' || path === '/ca/login' || path === '/ca-dashboard') {
-        setActiveTab('ca-dashboard');
-      } else if (portal === 'prosync' || path === '/prosync' || path === '/prosync/login' || path === '/prosync-dashboard') {
-        setActiveTab('prosync-dashboard');
-      } else if (portal === 'dpr' || path === '/dpr' || path === '/dpr/login' || path === '/dpr-dashboard') {
-        setActiveTab('dpr-dashboard');
-      } else if (path === '/user-dashboard' || path === '/dashboard' || path === '/promoter-portal') {
+      if (path === '/user-dashboard' || path === '/dashboard' || path === '/promoter-portal') {
         setActiveTab('user-dashboard');
       } else if (path === '/blogs' || path.startsWith('/blogs/') || path === '/blog' || path.startsWith('/blog/')) {
         setActiveTab('blogs');
@@ -235,7 +217,6 @@ export default function App() {
       }
     };
 
-    window.addEventListener('hashchange', checkAdminHash);
     window.addEventListener('popstate', handlePopState);
 
     // Track initial page view
@@ -257,9 +238,7 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.removeEventListener('hashchange', checkAdminHash);
       window.removeEventListener('popstate', handlePopState);
-      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [currentUser?.email]);
 
@@ -270,10 +249,6 @@ export default function App() {
       'blogs': 'Advisory Blogs & Research Hub',
       'assessment': 'Greenfield Project Assessment',
       'user-dashboard': 'Promoter Project Dashboard',
-      'admin-dashboard': 'Executive Admin Control Desk',
-      'ca-dashboard': 'Chartered Accountant Audit Desk',
-      'prosync-dashboard': 'Prosync Operations Hub',
-      'dpr-dashboard': 'DPR Consultant Desk',
       'about': 'Why Choose Inisio',
       'industries': 'Sector Directory',
       'contact': 'Contact Advisory',
@@ -282,38 +257,6 @@ export default function App() {
     };
     recordPageView(tabLabels[activeTab] || activeTab, currentUser?.email);
   }, [activeTab, currentUser?.email]);
-
-  const getDashboardTabForRole = (role?: string) => {
-    if (!role) return 'user-dashboard';
-    if (role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3') return 'admin-dashboard';
-    if (role === 'ca') return 'ca-dashboard';
-    if (role === 'prosync_admin' || role === 'prosync') return 'prosync-dashboard';
-    if (role === 'dpr_consultant') return 'dpr-dashboard';
-    return 'user-dashboard';
-  };
-
-  const isRoleAuthorizedForDashboard = (role: string | undefined, dashboardTab: string): boolean => {
-    if (!role) return false;
-    const isAdmin = role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3';
-    
-    // Admins and Superadmins have cross-portal supervisor audit access
-    if (isAdmin) return true;
-
-    switch (dashboardTab) {
-      case 'user-dashboard':
-        return role === 'user';
-      case 'admin-dashboard':
-        return isAdmin;
-      case 'ca-dashboard':
-        return role === 'ca';
-      case 'prosync-dashboard':
-        return role === 'prosync_admin' || role === 'prosync';
-      case 'dpr-dashboard':
-        return role === 'dpr_consultant';
-      default:
-        return false;
-    }
-  };
 
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
@@ -325,9 +268,7 @@ export default function App() {
       return;
     }
 
-    // Redirect to corresponding authorized dashboard based on assigned role
-    const targetDashboard = getDashboardTabForRole(user.role);
-    setActiveTab(targetDashboard);
+    setActiveTab('user-dashboard');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -433,6 +374,38 @@ export default function App() {
     setActiveTab('industries');
     window.history.pushState({}, '', '/industries');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getDashboardTabForRole = (role?: string) => {
+    if (!role) return 'user-dashboard';
+    if (role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3') return 'admin-dashboard';
+    if (role === 'ca') return 'ca-dashboard';
+    if (role === 'prosync_admin' || role === 'prosync') return 'prosync-dashboard';
+    if (role === 'dpr_consultant') return 'dpr-dashboard';
+    return 'user-dashboard';
+  };
+
+  const isRoleAuthorizedForDashboard = (role: string | undefined, dashboardTab: string): boolean => {
+    if (!role) return false;
+    const isAdmin = role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3';
+
+    // Admins and Superadmins have cross-portal supervisor audit access
+    if (isAdmin) return true;
+
+    switch (dashboardTab) {
+      case 'user-dashboard':
+        return role === 'user';
+      case 'admin-dashboard':
+        return isAdmin;
+      case 'ca-dashboard':
+        return role === 'ca';
+      case 'prosync-dashboard':
+        return role === 'prosync_admin' || role === 'prosync';
+      case 'dpr-dashboard':
+        return role === 'dpr_consultant';
+      default:
+        return false;
+    }
   };
 
   const isNonAdminDashboard =
@@ -551,14 +524,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            ) : !isRoleAuthorizedForDashboard(currentUser.role, 'user-dashboard') ? (
-              <ForbiddenPage
-                currentUser={currentUser}
-                attemptedDashboard="user-dashboard"
-                onNavigateToAuthorizedDashboard={() => handleSelectTab(getDashboardTabForRole(currentUser.role))}
-                onNavigateHome={() => handleSelectTab('home')}
-                onSwitchAccount={() => { handleLogout(); handleOpenAuth('login'); }}
-              />
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
                 <div className="animate-in fade-in duration-300">
@@ -653,7 +618,7 @@ export default function App() {
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
                 <div className="animate-in fade-in duration-300">
-                  <AdminDashboardView user={currentUser} />
+                  <AdminDashboardView currentUser={currentUser} />
                 </div>
               </Suspense>
             )
@@ -716,6 +681,7 @@ export default function App() {
           {activeTab === 'how-it-works' && (
             <div className="animate-in fade-in duration-300">
               <HowItWorks
+                isStandalone
                 onOpenConsultation={() => setConsultationModalOpen(true)}
                 onOpenAssessment={() => handleOpenAssessment()}
                 onNavigateToContact={() => handleSelectTab('contact')}
@@ -726,6 +692,7 @@ export default function App() {
           {activeTab === 'about' && (
             <div className="animate-in fade-in duration-300">
               <WhyChooseInisio
+                isStandalone
                 onOpenAssessment={() => handleOpenAssessment()}
                 onOpenConsultation={() => setConsultationModalOpen(true)}
               />
@@ -735,6 +702,7 @@ export default function App() {
           {activeTab === 'industries' && (
             <div className="animate-in fade-in duration-300">
               <IndustriesSection
+                isStandalone
                 onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
                 onOpenAssessment={() => handleOpenAssessment()}
                 onOpenConsultation={() => setConsultationModalOpen(true)}
@@ -768,13 +736,13 @@ export default function App() {
 
           {activeTab === 'contact' && (
             <div className="animate-in fade-in duration-300">
-              <ContactSection />
+              <ContactSection isStandalone />
             </div>
           )}
 
           {activeTab === 'faq' && (
             <div className="animate-in fade-in duration-300">
-              <FAQSection onOpenConsultation={() => setConsultationModalOpen(true)} />
+              <FAQSection isStandalone onOpenConsultation={() => setConsultationModalOpen(true)} />
             </div>
           )}
         </main>
@@ -812,21 +780,6 @@ export default function App() {
           <ConsultationModal
             isOpen={consultationModalOpen}
             onClose={() => setConsultationModalOpen(false)}
-          />
-        </Suspense>
-      )}
-
-      {adminModalOpen && (
-        <Suspense fallback={null}>
-          <AdminLeadsModal
-            isOpen={adminModalOpen}
-            onClose={() => setAdminModalOpen(false)}
-            currentUser={currentUser}
-            onLoginSuccess={(user) => {
-              handleLoginSuccess(user);
-              setActiveTab('admin-dashboard');
-            }}
-            onOpenAdminDashboard={() => setActiveTab('admin-dashboard')}
           />
         </Suspense>
       )}

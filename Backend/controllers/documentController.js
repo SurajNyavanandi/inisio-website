@@ -4,11 +4,7 @@ import Document from '../models/Document.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import { sendError, sendSuccess } from '../utils/responseHandler.js';
-
-const defaultStorageDir = path.join(process.cwd(), 'Backend', 'storage', 'private');
-const storageRoot = path.resolve(
-  process.env.DOCUMENT_STORAGE_DIR || defaultStorageDir
-);
+import { storageRoot } from '../middleware/uploadMiddleware.js';
 
 const matchesAssignment = (assignment, user, team) => {
   const assigned = String(assignment || '').trim().toLowerCase();
@@ -18,9 +14,9 @@ const matchesAssignment = (assignment, user, team) => {
 
 const canAccess = (project, user) => {
   if (!project || !user) return false;
-  if (['superadmin', 'admin', 'admin1', 'admin2', 'admin3'].includes(user.role)) return true;
+  if (['superadmin', 'admin'].includes(user.role)) return true;
   if (user.role === 'ca') return matchesAssignment(project.assignedCA, user, 'ca');
-  if (user.role === 'dpr_consultant') return matchesAssignment(project.dprAssignedTo, user, 'dpr');
+  if (user.role === 'dpr' || user.role === 'dpr_consultant') return matchesAssignment(project.dprAssignedTo, user, 'dpr');
   if (user.role === 'prosync' || user.role === 'prosync_admin') return matchesAssignment(project.consultationAssignedTo, user, 'prosync');
   const leadEmail = String(project.email || '').trim().toLowerCase();
   const userEmail = String(user.email || '').trim().toLowerCase();

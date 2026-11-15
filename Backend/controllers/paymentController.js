@@ -6,6 +6,7 @@ import {
 } from '../services/razorpayService.js';
 import { getRazorpayConfig } from '../config/razorpay.js';
 import { sendSuccess, sendError } from '../utils/responseHandler.js';
+import logger from '../utils/logger.js';
 
 /**
  * @desc Get public payment gateway config (Key ID, currency, test mode status)
@@ -18,7 +19,7 @@ export const getGatewayConfig = async (req, res, next) => {
     return sendSuccess(
       res,
       {
-        keyId: config.key_id || 'rzp_test_inisio_demo_key',
+        keyId: config.key_id || '',
         isConfigured: config.isConfigured,
         isTestMode: config.isTestMode,
         currency: 'INR',
@@ -123,8 +124,12 @@ export const verifyPaymentSignature = async (req, res, next) => {
  */
 export const getPaymentHistory = async (req, res, next) => {
   try {
-    const email = req.user?.email || req.query.email;
-    const payments = await getUserPayments(email);
+    const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
+    const targetEmail = isPrivileged && req.query.email ? req.query.email : req.user?.email;
+    if (!targetEmail) {
+      return sendError(res, 'User email not found', 400);
+    }
+    const payments = await getUserPayments(targetEmail);
     return sendSuccess(res, payments, 'Payment transactions retrieved successfully');
   } catch (error) {
     next(error);
@@ -134,7 +139,7 @@ export const getPaymentHistory = async (req, res, next) => {
 /**
  * @desc Get payment transaction by Order ID or Payment ID
  * @route GET /api/payments/:id
- * @access Public / Authenticated
+ * @access Authenticated (Owner or Admin)
  */
 export const getPaymentById = async (req, res, next) => {
   try {
@@ -142,6 +147,17 @@ export const getPaymentById = async (req, res, next) => {
     const payment = await getPaymentDetails(id);
     if (!payment) {
       return sendError(res, 'Payment transaction not found', 404);
+    }
+
+    // Verify ownership (prevent IDOR)
+    const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
+    const isOwner = Boolean(
+      (payment.userEmail && req.user?.email && payment.userEmail.toLowerCase() === req.user.email.toLowerCase()) ||
+      (payment.userId && req.user?._id && String(payment.userId) === String(req.user._id))
+    );
+
+    if (!isPrivileged && !isOwner) {
+      return sendError(res, 'Access denied: You are not authorized to view this payment record', 403);
     }
     return sendSuccess(res, payment, 'Payment transaction retrieved');
   } catch (error) {
@@ -172,7 +188,7 @@ export const handleWebhook = async (req, res, next) => {
     }
 
     const event = req.body.event;
-    console.log(`[Razorpay Webhook] Received event: ${event}`);
+    logger.info(`[Razorpay Webhook] Received event: ${event}`);
 
     return res.status(200).json({ status: 'ok', eventReceived: event });
   } catch (error) {

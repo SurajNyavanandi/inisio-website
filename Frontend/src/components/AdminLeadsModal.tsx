@@ -75,7 +75,7 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
   // Leads & data state
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterSource, setFilterSource] = useState<'ALL' | 'PDF' | 'FORM'>('ALL');
+  const [filterSource, setFilterSource] = useState<'ALL' | 'PDF' | 'CONSULTATION' | 'FORM'>('ALL');
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
   const [editingLead, setEditingLead] = useState<LeadRecord | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -291,11 +291,11 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
 
   const filteredLeads = leads.filter(l => {
     const matchesSearch =
-      l.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.mobile.includes(searchQuery) ||
-      l.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.industry.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.projectName.toLowerCase().includes(searchQuery.toLowerCase());
+      (l.fullName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (l.mobile || l.phone || '').includes(searchQuery) ||
+      (l.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (l.industry || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (l.projectName || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     if (filterSource === 'PDF') return matchesSearch && l.downloadedPDF;
     if (filterSource === 'CONSULTATION') return matchesSearch && isConsultationLead(l);
@@ -772,7 +772,7 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
                     </tr>
                   ) : (
                     filteredLeads.map((lead) => {
-                      const dateFormatted = new Date(lead.submittedAt).toLocaleDateString('en-IN', {
+                      const dateFormatted = new Date(lead.submittedAt || lead.createdAt || Date.now()).toLocaleDateString('en-IN', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric'
@@ -846,7 +846,7 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
 
                               {/* WhatsApp Promoter */}
                               <a
-                                href={`https://wa.me/${lead.mobile.replace(/\D/g, '')}?text=Hello%20${encodeURIComponent(lead.fullName)}%2C%20thank%20you%20for%20your%20interest%20in%20Inisio%20Greenfield%20Advisory.`}
+                                href={`https://wa.me/${(lead.mobile || lead.phone || '').replace(/\D/g, '')}?text=Hello%20${encodeURIComponent(lead.fullName)}%2C%20thank%20you%20for%20your%20interest%20in%20Inisio%20Greenfield%20Advisory.`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg transition-colors"
@@ -918,11 +918,11 @@ export const AdminLeadsModal: React.FC<AdminLeadsModalProps> = ({
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
         readOnly={activeAdminUser.role === 'superadmin'}
-        onEdit={(leadToEdit) => {
+        onEdit={(leadToEdit: LeadRecord) => {
           setSelectedLead(null);
           setEditingLead(leadToEdit);
         }}
-        onDelete={activeAdminUser.role !== 'superadmin' ? (id) => {
+        onDelete={activeAdminUser.role !== 'superadmin' ? (id: string) => {
           deleteLeadRecord(id);
           loadData();
         } : undefined}

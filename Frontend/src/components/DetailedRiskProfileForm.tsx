@@ -13,6 +13,12 @@ export interface DetailedRiskProfileData {
   promoterExpYears?: number | string;
   managementTeamStrength?: string;
   offtakeSecurity?: string;
+  industryExperience?: string;
+  contributionType?: string;
+  debtEquityRatio?: string;
+  managementTeamSize?: string;
+  technicalWorkforceCount?: string;
+  [key: string]: any;
 }
 
 interface DetailedRiskProfileFormProps {

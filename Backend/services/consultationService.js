@@ -76,14 +76,15 @@ export const createConsultation = async (data) => {
 };
 
 export const getAllConsultations = async (filter = {}) => {
+  const limit = Math.min(Math.max(parseInt(filter.limit) || 50, 1), 100);
   if (isDBConnected()) {
     try {
-      return await Consultation.find(filter).sort({ createdAt: -1 });
+      return await Consultation.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
     } catch (err) {
       console.warn('MongoDB query failed in getAllConsultations, using memory fallback:', err.message);
     }
   }
-  return memoryConsultations;
+  return memoryConsultations.slice(0, limit);
 };
 
 export const getConsultationById = async (id) => {

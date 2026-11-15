@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, User, Phone, Mail, Building, TrendingUp, Calendar, Trash2, Edit } from 'lucide-react';
+import { X, Phone, Mail, Building, TrendingUp, Trash2, Edit } from 'lucide-react';
 import { LeadRecord } from '../utils/leadStore';
 
 interface UserProfileDetailModalProps {
@@ -48,7 +48,7 @@ export const UserProfileDetailModal: React.FC<UserProfileDetailModalProps> = ({
             </div>
             <div className="p-3.5 bg-slate-50 rounded-xl space-y-1">
               <span className="text-slate-400 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Phone</span>
-              <p className="font-semibold text-slate-800">{lead.phone || 'N/A'}</p>
+              <p className="font-semibold text-slate-800">{lead.phone || lead.mobile || 'N/A'}</p>
             </div>
             <div className="p-3.5 bg-slate-50 rounded-xl space-y-1">
               <span className="text-slate-400 flex items-center gap-1.5"><Building className="w-3.5 h-3.5" /> Industry</span>
@@ -56,7 +56,7 @@ export const UserProfileDetailModal: React.FC<UserProfileDetailModalProps> = ({
             </div>
             <div className="p-3.5 bg-slate-50 rounded-xl space-y-1">
               <span className="text-slate-400 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Outlay / Loan</span>
-              <p className="font-semibold text-slate-800">₹{lead.projectCost} Cr / ₹{lead.proposedLoan} Cr</p>
+              <p className="font-semibold text-slate-800">₹{lead.projectCost || lead.totalCostCr || 0} Cr / ₹{lead.proposedLoan || lead.loanRequiredCr || 0} Cr</p>
             </div>
           </div>
 

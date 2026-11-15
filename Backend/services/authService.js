@@ -1,7 +1,8 @@
 import User from '../models/User.js';
 import { generateToken } from '../utils/generateToken.js';
 import { isDBConnected } from '../config/db.js';
-import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailService.js';
+import config from '../config/env.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendPasswordResetSuccessEmail } from '../utils/emailService.js';
 import { captureLoginMetadata } from '../utils/geoIpService.js';
 import {
   memoryUsers,
@@ -45,22 +46,18 @@ const recordSuccessfulLogin = async (userObj, req) => {
   }
 };
 
-// Helper to generate 6-digit numeric OTP delegated to centralized otpService
-
-const DEFAULT_SEED_PASSWORDS = {
-  'inisio2026@gmail.com': process.env.ADMIN_PASSWORD || 'inisio2026',
-  'junnupravalika59@gmail.com': process.env.SUPERADMIN_PASSWORD || 'inisio2026',
-};
-
 const shouldAllowMemoryFallback = () => {
-  return !isDBConnected() || process.env.ALLOW_MEMORY_FALLBACK !== 'false';
+  // Production must always use MongoDB. Memory fallback is dev-only.
+  if (process.env.NODE_ENV === 'production') return false;
+  return !isDBConnected();
 };
 
 /**
  * Sync memory users to MongoDB to ensure preloaded demo & registered users exist in DB
+ * Skipped in production unless SEED_DEMO_USERS=true is explicitly set
  */
 export const syncMemoryUsersToDB = async () => {
-  if (!isDBConnected()) return;
+  if (!isDBConnected() || (config.isProduction && process.env.SEED_DEMO_USERS !== 'true')) return;
   try {
     const authorizedList = getAuthorizedAdminEmails();
     const admin1 = getAdminEmail1();
@@ -75,7 +72,7 @@ export const syncMemoryUsersToDB = async () => {
     const usersToSync = getMemoryUsers();
     for (const memUser of usersToSync) {
       const cleanEmail = memUser.email.toLowerCase().trim();
-      const rawSeedPassword = DEFAULT_SEED_PASSWORDS[cleanEmail] || cleanEmail || 'Password@123';
+      const rawSeedPassword = cleanEmail;
       const existing = await User.findOne({ email: cleanEmail });
       if (!existing) {
         await User.create({
@@ -108,10 +105,7 @@ export const syncMemoryUsersToDB = async () => {
   }
 };
 
-// Initial sync attempt
-setTimeout(() => {
-  syncMemoryUsersToDB().catch(() => {});
-}, 3000);
+// Startup auto-sync removed for production readiness. Run seed scripts explicitly if needed.
 
 /**
  * Register a new user and dispatch email verification OTP via Nodemailer
@@ -131,18 +125,12 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
 
-  // Strict role security: admin2 is superadmin, admin1 is admin
+  // Strict role security: public self-registration strictly defaults to 'user'
   let assignedRole = 'user';
   if (cleanEmail === admin2) {
     assignedRole = 'superadmin';
   } else if (cleanEmail === admin1 || isAuthorizedAdminEmail(cleanEmail)) {
     assignedRole = 'admin';
-  } else if (role === 'ca') {
-    assignedRole = 'ca';
-  } else if (role === 'prosync' || role === 'prosync_admin') {
-    assignedRole = 'prosync_admin';
-  } else if (role === 'dpr_consultant') {
-    assignedRole = 'dpr_consultant';
   } else {
     assignedRole = 'user';
   }
@@ -169,9 +157,9 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
       const userExists = await User.findOne({ email: cleanEmail });
       if (userExists) {
         if (!userExists.isVerified) {
-          userExists.isVerified = true;
-          userExists.verificationOtp = null;
-          userExists.verificationExpires = null;
+          userExists.verificationOtp = otp;
+          userExists.verificationExpires = otpExpiry;
+          userExists.otpAttempts = 0;
           if (password && password.length >= 6) {
             userExists.password = password; // Mongoose will re-hash
           }
@@ -180,15 +168,11 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
           if (company) userExists.company = company;
           await userExists.save();
 
-          const token = generateToken({
-            id: userExists._id,
-            email: userExists.email,
-            role: userExists.role,
+          sendVerificationEmail({
+            to: cleanEmail,
             name: userExists.name,
-            company: userExists.company,
-            phone: userExists.phone,
-            isVerified: true,
-          });
+            otp,
+          }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
 
           return {
             _id: userExists._id,
@@ -197,10 +181,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
             role: userExists.role,
             company: userExists.company,
             phone: userExists.phone,
-            avatarUrl: userExists.avatarUrl,
-            isVerified: true,
-            token,
-            message: 'Account exists and is active. You can sign in now.',
+            isVerified: false,
+            requiresVerification: true,
+            otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+            message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter the code to activate your account.`,
           };
         }
 
@@ -216,20 +200,18 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         role: assignedRole,
         company: defaultCompany,
         phone: phone || '',
-        isVerified: true,
-        verificationOtp: null,
-        verificationExpires: null,
+        isVerified: false,
+        verificationOtp: otp,
+        verificationExpires: otpExpiry,
+        otpAttempts: 0,
       });
 
-      const token = generateToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
+      // Dispatch 6-digit verification OTP email via Resend SDK
+      sendVerificationEmail({
+        to: cleanEmail,
         name: user.name,
-        company: user.company,
-        phone: user.phone,
-        isVerified: true,
-      });
+        otp,
+      }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
 
       return {
         _id: user._id,
@@ -239,9 +221,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         company: user.company,
         phone: user.phone,
         avatarUrl: user.avatarUrl,
-        isVerified: true,
-        token,
-        message: 'Account created successfully. You are now signed in.',
+        isVerified: false,
+        requiresVerification: true,
+        otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
+        message: `A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter the code to activate your account.`,
       };
     } catch (err) {
       if (err.message.includes('already') || err.message.includes('valid') || err.message.includes('Password')) {
@@ -377,8 +360,19 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
         };
       }
 
-      if (!verifyOtpCode(user.verificationOtp, cleanOtp)) {
-        const error = new Error('Invalid verification code. Please check your email or click Resend Code.');
+      if (!user.verificationOtp || user.verificationOtp !== cleanOtp) {
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.verificationOtp = null;
+          user.verificationExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect verification attempts. Code has been invalidated. Please click Resend Code.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid verification code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
@@ -392,6 +386,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       user.isVerified = true;
       user.verificationOtp = null;
       user.verificationExpires = null;
+      user.otpAttempts = 0;
       await recordSuccessfulLogin(user, req);
 
       const token = generateToken({
@@ -556,6 +551,7 @@ export const sendVerificationOtp = async (email) => {
     email: cleanEmail,
     message: `A new 6-digit verification code has been dispatched to ${cleanEmail}.`,
     expiresIn: '15 minutes',
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };
 
@@ -584,12 +580,7 @@ export const loginUser = async ({ email, password, req }) => {
       const user = await User.findOne({ email: cleanEmail }).select('+password');
       
       if (user) {
-        let isMatch = false;
-        if (isAdminEmail && (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0])) {
-          isMatch = true;
-        } else {
-          isMatch = await user.matchPassword(password);
-        }
+        const isMatch = await user.matchPassword(password);
 
         if (!isMatch) {
           const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
@@ -632,41 +623,6 @@ export const loginUser = async ({ email, password, req }) => {
           token,
           message: 'Login successful',
         };
-      } else if (isAdminEmail && (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0])) {
-        // Auto-provision admin user in DB
-        const newUser = await User.create({
-          name: cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
-          email: cleanEmail,
-          password: password,
-          role: adminRole,
-          company: cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
-          phone: '+91 63020 26462',
-          isVerified: true,
-        });
-
-        await recordSuccessfulLogin(newUser, req);
-
-        const token = generateToken({
-          id: newUser._id,
-          email: newUser.email,
-          role: newUser.role,
-          name: newUser.name,
-          company: newUser.company,
-          phone: newUser.phone,
-          isVerified: true,
-        });
-
-        return {
-          _id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          company: newUser.company,
-          phone: newUser.phone,
-          isVerified: true,
-          token,
-          message: `${newUser.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
-        };
       }
     } catch (err) {
       if (err.statusCode || err.message.includes('password') || err.message.includes('Password')) {
@@ -705,12 +661,7 @@ export const loginUser = async ({ email, password, req }) => {
     throw error;
   }
 
-  let isMatch = false;
-  if (isAdminEmail && (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0])) {
-    isMatch = true;
-  } else {
-    isMatch = await bcrypt.compare(password, user.password);
-  }
+  const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
     const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
@@ -720,6 +671,35 @@ export const loginUser = async ({ email, password, req }) => {
 
   if (isAdminEmail) {
     user.role = adminRole;
+  }
+
+  // If user has not verified their email, dispatch OTP and require verification
+  if (user.isVerified === false) {
+    const freshOtp = generateOtp();
+    user.verificationOtp = freshOtp;
+    user.verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.otpAttempts = 0;
+    if (user.save) {
+      await user.save().catch(() => {});
+    }
+
+    sendVerificationEmail({
+      to: cleanEmail,
+      name: user.name,
+      otp: freshOtp,
+    }).catch((e) => console.warn('[Email] Background dispatch notice:', e.message));
+
+    return {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      company: user.company,
+      phone: user.phone,
+      isVerified: false,
+      requiresVerification: true,
+      message: `Your account is not verified yet. A 6-digit verification code has been dispatched to ${cleanEmail}. Please enter it to continue.`,
+    };
   }
 
   await recordSuccessfulLogin(user, req);
@@ -889,13 +869,8 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     throw error;
   }
 
-  // Determine base application URL
-  const baseUrl = (
-    clientOrigin ||
-    process.env.APP_URL ||
-    process.env.FRONTEND_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '');
+  // Determine base application URL from incoming request origin
+  const baseUrl = (clientOrigin || 'http://localhost:3000').replace(/\/$/, '');
 
   const resetLink = `${baseUrl}/?action=reset-password&email=${encodeURIComponent(cleanEmail)}&otp=${otp}&token=${otp}`;
 
@@ -914,6 +889,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     maskedEmail,
     resetLink,
     expiresIn: '15 minutes',
+    otp: process.env.NODE_ENV !== 'production' ? otp : undefined,
   };
 };
 
@@ -1010,14 +986,25 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
         throw error;
       }
 
-      if (!verifyOtpCode(user.resetPasswordOtp, cleanOtp)) {
-        const error = new Error('Invalid or expired OTP code.');
+      if (!user.resetPasswordOtp || user.resetPasswordOtp !== cleanOtp) {
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.resetPasswordOtp = null;
+          user.resetPasswordExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect OTP attempts. Code has been invalidated. Please request a new password reset.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid or expired OTP code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
 
       if (user.resetPasswordExpires && new Date() > new Date(user.resetPasswordExpires)) {
-        const error = new Error('OTP code has expired.');
+        const error = new Error('OTP code has expired. Please request a new one.');
         error.statusCode = 400;
         throw error;
       }
@@ -1025,8 +1012,12 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       user.password = newPassword;
       user.resetPasswordOtp = null;
       user.resetPasswordExpires = null;
+      user.otpAttempts = 0;
       user.isVerified = true;
       await user.save();
+
+      // Dispatch security notification via Resend
+      sendPasswordResetSuccessEmail({ to: user.email, name: user.name }).catch(() => {});
 
       const token = generateToken({
         id: user._id,
@@ -1080,6 +1071,9 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
   memUser.resetPasswordExpires = null;
   memUser.isVerified = true;
 
+  // Dispatch security notification via Resend
+  sendPasswordResetSuccessEmail({ to: cleanEmail, name: memUser.name }).catch(() => {});
+
   const token = generateToken({
     id: memUser._id,
     email: cleanEmail,
@@ -1129,18 +1123,12 @@ export const adminLogin = async ({ email, password, req }) => {
   // 1. Try DB first
   if (isDBConnected()) {
     try {
-      let user = await User.findOne({ email: cleanEmail }).select('+password');
+      const user = await User.findOne({ email: cleanEmail }).select('+password');
       if (user) {
-        let isMatch = false;
-        // Check if password matches email (case-insensitive) or prefix or standard password
-        if (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0]) {
-          isMatch = true;
-        } else {
-          isMatch = await user.matchPassword(password);
-        }
+        const isMatch = await user.matchPassword(password);
 
         if (!isMatch) {
-          const error = new Error(`Incorrect administrative password for ${cleanEmail}. Enter your assigned administrative password or password identical to your email address.`);
+          const error = new Error(`Incorrect administrative password for ${cleanEmail}.`);
           error.statusCode = 401;
           throw error;
         }
@@ -1177,42 +1165,6 @@ export const adminLogin = async ({ email, password, req }) => {
           token,
           message: `${user.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
         };
-      } else if (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0] || password === 'Password@123') {
-        // Auto-provision admin user in DB
-        const newUser = await User.create({
-          name: cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
-          email: cleanEmail,
-          password: password,
-          role: role,
-          company: cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
-          phone: '+91 63020 26462',
-          isVerified: true,
-        });
-
-        await recordSuccessfulLogin(newUser, req);
-
-        const token = generateToken({
-          id: newUser._id,
-          email: newUser.email,
-          role: newUser.role,
-          name: newUser.name,
-          company: newUser.company,
-          phone: newUser.phone,
-          isVerified: true,
-        });
-
-        return {
-          _id: newUser._id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          company: newUser.company,
-          phone: newUser.phone,
-          avatarUrl: newUser.avatarUrl,
-          isVerified: true,
-          token,
-          message: `${newUser.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
-        };
       }
     } catch (err) {
       if (err.statusCode || err.message.includes('password') || err.message.includes('Password') || err.message.includes('Access Denied')) {
@@ -1222,37 +1174,24 @@ export const adminLogin = async ({ email, password, req }) => {
     }
   }
 
-  // 2. Memory fallback
-  let memUser = findMemoryUserByEmail(cleanEmail);
+  // 2. Memory fallback (for local development/testing without DB)
+  if (!shouldAllowMemoryFallback()) {
+    const error = new Error('Database connection unavailable.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const memUser = findMemoryUserByEmail(cleanEmail);
   if (!memUser) {
-    memUser = {
-      _id: `user_${Date.now()}`,
-      name: cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
-      email: cleanEmail,
-      password: await bcrypt.hash(cleanEmail, 10),
-      role: role,
-      company: cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
-      phone: '+91 63020 26462',
-      isVerified: true,
-      createdAt: new Date(),
-    };
-    addMemoryUser(memUser);
+    const error = new Error(`Administrator account ${cleanEmail} is not provisioned.`);
+    error.statusCode = 404;
+    throw error;
   }
 
-  let isMatch = false;
-  if (password.toLowerCase() === cleanEmail || password === cleanEmail.split('@')[0]) {
-    isMatch = true;
-  } else {
-    isMatch = await bcrypt.compare(password, memUser.password);
-  }
-
-  if (!isMatch && (password === 'inisio2026' || password === 'admin' || password === 'Password@123' || password === '6302026462')) {
-    isMatch = true;
-    memUser.password = await bcrypt.hash(password, 10);
-  }
+  const isMatch = await bcrypt.compare(password, memUser.password);
 
   if (!isMatch) {
-    const error = new Error(`Incorrect administrative password for ${cleanEmail}. Click 'Forgot Password?' to reset.`);
+    const error = new Error(`Incorrect administrative password for ${cleanEmail}.`);
     error.statusCode = 401;
     throw error;
   }

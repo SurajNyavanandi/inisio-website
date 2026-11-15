@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { generateProjectTeaserPDF, sendLeadToWhatsApp, TeaserPDFData } from '../utils/pdfGenerator';
-import { generateProjectTeaserDOCX } from '../utils/docxGenerator';
+import type { TeaserPDFData } from '../utils/pdfGenerator';
 import { getFeasibilityTerm, AuthUser, UserRole, PromoterDetail } from '../types';
 import { LocationDropdowns } from './LocationDropdowns';
 import { validateIndianMobileNumber } from '../utils/validation';
@@ -797,15 +796,21 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
   };
 
-  const handleDownloadTeaser = (action: 'download' | 'preview' = 'download') => {
+  const handleDownloadTeaser = async (action: 'download' | 'preview' = 'download') => {
     if (!activeUser) {
       handleRequireAuth('login', 'Please sign in or create an account to preview or download the AI Project Teaser.');
       return;
     }
     setIsDownloadingPdf(true);
-    const pdfData = getPDFData();
-    generateProjectTeaserPDF(pdfData, action);
-    setTimeout(() => setIsDownloadingPdf(false), 1000);
+    try {
+      const pdfData = getPDFData();
+      const { generateProjectTeaserPDF } = await import('../utils/pdfGenerator');
+      generateProjectTeaserPDF(pdfData, action);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+    } finally {
+      setTimeout(() => setIsDownloadingPdf(false), 1000);
+    }
   };
 
   const handleDownloadDocxTeaser = async () => {
@@ -816,6 +821,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     try {
       setIsDownloadingDocx(true);
       const pdfData = getPDFData();
+      const { generateProjectTeaserDOCX } = await import('../utils/docxGenerator');
       await generateProjectTeaserDOCX(pdfData);
     } catch (err) {
       console.error('Failed to generate DOCX teaser:', err);
@@ -1070,7 +1076,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           </div>
 
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight font-manrope">
-            {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Assessment'}
+            {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Feasibility Assessment & Bankability Scorecard'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-3xl mx-auto font-inter">
             {editingProject
@@ -1114,7 +1120,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 onClick={() => handleSaveProjectEdits()}
                 className="flex-1 sm:flex-none px-4 py-2 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                <Check className="w-3.5 h-3.5 stroke-3" />
                 <span>Save Updates</span>
               </button>
 
@@ -1495,7 +1501,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
                     {/* Assistance Card shown when user selects "No" */}
                     {formData.promoterContributionAvailable === 'No' && (
-                      <div className="p-4 sm:p-5 bg-gradient-to-br from-amber-50 via-white to-blue-50/60 border border-amber-200 rounded-xl space-y-3.5 animate-in fade-in duration-200">
+                      <div className="p-4 sm:p-5 bg-linear-to-br from-amber-50 via-white to-blue-50/60 border border-amber-200 rounded-xl space-y-3.5 animate-in fade-in duration-200">
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-2xs">
                             <Coins className="w-5 h-5" />
@@ -2034,7 +2040,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <label className="text-[11px] font-bold text-gray-700 mb-1 flex items-center gap-1">
                           <span>Preferred Target Bank</span>
                           <span className="text-red-500 font-bold">*</span>
                         </label>
@@ -2065,7 +2071,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <label className="text-[11px] font-bold text-gray-700 mb-1 flex items-center gap-1">
                           <span>Preferred Branch Name / City</span>
                           <span className="text-red-500 font-bold">*</span>
                         </label>
@@ -2333,7 +2339,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             </div>
 
             {/* Direct Bankability Overview Based Purely on User Inputs */}
-            <div className="p-6 bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 text-white rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-lg">
+            <div className="p-6 bg-linear-to-br from-slate-900 via-slate-900 to-blue-950 text-white rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-6 shadow-lg">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-blue-300 uppercase tracking-wider block">
@@ -2810,7 +2816,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Output 1: Bankability */}
-                    <div className="p-5 bg-gradient-to-br from-blue-900 to-slate-900 text-white rounded-2xl shadow-md border border-blue-800 flex flex-col justify-between">
+                    <div className="p-5 bg-linear-to-br from-blue-900 to-slate-900 text-white rounded-2xl shadow-md border border-blue-800 flex flex-col justify-between">
                       <div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[11px] font-bold text-blue-300 uppercase tracking-wider">
@@ -2830,7 +2836,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     </div>
 
                     {/* Output 2: Feasibility */}
-                    <div className="p-5 bg-gradient-to-br from-emerald-900 to-slate-900 text-white rounded-2xl shadow-md border border-emerald-800 flex flex-col justify-between">
+                    <div className="p-5 bg-linear-to-br from-emerald-900 to-slate-900 text-white rounded-2xl shadow-md border border-emerald-800 flex flex-col justify-between">
                       <div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">
@@ -3036,7 +3042,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               {/* AUTHENTICATION GATE CARD (MANDATORY FOR DOWNSTREAM PROCEEDINGS)           */}
               {/* ========================================================================= */}
               {!activeUser ? (
-                <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-indigo-500/40 space-y-6 animate-in fade-in">
+                <div className="bg-linear-to-br from-slate-900 via-slate-800 to-indigo-950 text-white rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-indigo-500/40 space-y-6 animate-in fade-in">
                   <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 pb-6 border-b border-slate-700/80">
                     <div className="space-y-2 max-w-2xl">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full text-xs font-bold">
@@ -3138,7 +3144,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                             required
                             value={inlineEmail || formData.email}
                             onChange={(e) => setInlineEmail(e.target.value)}
-                            placeholder="e.g. ramesh@example.com"
+                            placeholder="e.g. ramesh@enterprise.in"
                             className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
@@ -3376,7 +3382,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               </div>
 
               {/* Membership Call-to-Action Card */}
-              <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-blue-500/30 relative overflow-hidden">
+              <div className="bg-linear-to-r from-slate-900 via-blue-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-blue-500/30 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="space-y-2 max-w-2xl">
@@ -3395,7 +3401,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsMembershipModalOpen(true)}
-                      className="w-full sm:w-auto px-7 py-3.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 active:from-blue-600 active:to-indigo-700 text-white font-black text-sm rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 flex items-center justify-center gap-2.5 cursor-pointer"
+                      className="w-full sm:w-auto px-7 py-3.5 bg-linear-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 active:from-blue-600 active:to-indigo-700 text-white font-black text-sm rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 flex items-center justify-center gap-2.5 cursor-pointer"
                     >
                       <Crown className="w-4 h-4 text-amber-300" />
                       <span>View Membership Plans</span>
@@ -3409,7 +3415,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 {/* DPR Pathway Card */}
-                <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-indigo-500/30 flex flex-col justify-between relative overflow-hidden">
+                <div className="bg-linear-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-indigo-500/30 flex flex-col justify-between relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
                   
                   <div className="relative z-10 space-y-3">
@@ -3438,7 +3444,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsDPRModalOpen(true)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-indigo-500/30 flex items-center gap-2 cursor-pointer"
+                      className="px-5 py-2.5 bg-linear-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-indigo-500/30 flex items-center gap-2 cursor-pointer"
                     >
                       <span>Request DPR Assistance</span>
                       <ArrowRight className="w-4 h-4" />
@@ -3447,7 +3453,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 </div>
 
                 {/* Funding Pathway Card */}
-                <div className="bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-emerald-500/30 flex flex-col justify-between relative overflow-hidden">
+                <div className="bg-linear-to-br from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-emerald-500/30 flex flex-col justify-between relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
                   
                   <div className="relative z-10 space-y-3">
@@ -3476,7 +3482,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsFundingModalOpen(true)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-emerald-500/30 flex items-center gap-2 cursor-pointer"
+                      className="px-5 py-2.5 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-emerald-500/30 flex items-center gap-2 cursor-pointer"
                     >
                       <Coins className="w-4 h-4 text-emerald-300" />
                       <span>Request Funding Assistance</span>

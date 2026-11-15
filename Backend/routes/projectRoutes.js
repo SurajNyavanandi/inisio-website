@@ -11,8 +11,8 @@ import { validateBody } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
-router.get('/', optionalAuth, getProjects);
-router.get('/:id', optionalAuth, getProjectById);
+router.get('/', authenticateUser, getProjects);
+router.get('/:id', authenticateUser, getProjectById);
 router.post('/', optionalAuth, validateBody(['promoterName', 'projectName', 'industry', 'capexCr', 'loanCr']), createProject);
 router.put('/:id/audit', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin', 'ca'), updateProjectAudit);
 router.delete('/:id', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), deleteProject);

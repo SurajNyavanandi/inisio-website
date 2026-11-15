@@ -1,0 +1,9 @@
+# robots.txt for Inisio Capital (https://inisio.vercel.app)
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /user-dashboard
+Disallow: /dashboard
+
+# Sitemaps
+Sitemap: https://inisio.vercel.app/sitemap.xml

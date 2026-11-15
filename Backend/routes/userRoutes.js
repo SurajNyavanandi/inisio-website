@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getAllUsers,
   getUserById,
+  getUserByEmail,
   updateUserRole,
   updateUserStatus,
   deleteUser,
@@ -15,11 +16,12 @@ router.use(authenticateUser);
 
 // Viewing routes (Admin & Super Admin Viewer)
 router.get('/', authorizeRoles('admin', 'superadmin'), getAllUsers);
+router.get('/profile/:email', authorizeRoles('admin', 'superadmin'), getUserByEmail);
 router.get('/:id', authorizeRoles('admin', 'superadmin'), getUserById);
 
 // Modification routes (Admin only)
-router.put('/:id/role', restrictSuperAdminViewer, authorizeRoles('admin', 'admin1', 'admin2', 'admin3'), updateUserRole);
-router.put('/:id/status', restrictSuperAdminViewer, authorizeRoles('admin', 'admin1', 'admin2', 'admin3'), updateUserStatus);
-router.delete('/:id', restrictSuperAdminViewer, authorizeRoles('admin', 'admin1', 'admin2', 'admin3'), deleteUser);
+router.put('/:id/role', restrictSuperAdminViewer, authorizeRoles('admin'), updateUserRole);
+router.put('/:id/status', restrictSuperAdminViewer, authorizeRoles('admin'), updateUserStatus);
+router.delete('/:id', restrictSuperAdminViewer, authorizeRoles('admin'), deleteUser);
 
 export default router;

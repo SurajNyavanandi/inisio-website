@@ -2,74 +2,10 @@ import ContactEnquiry from '../models/ContactEnquiry.js';
 import { isDBConnected } from '../config/db.js';
 import { sendWhatsAppNotification } from '../utils/whatsappService.js';
 import { sendContactEnquiryAlertEmail } from '../utils/emailService.js';
+import { escapeRegex } from '../middleware/validateMiddleware.js';
 
-// In-memory fallback repository with initial demo records
-let memoryEnquiries = [
-  {
-    _id: 'enq_001',
-    name: 'Suresh Reddy',
-    phone: '9876543210',
-    email: 'suresh.reddy@suryaindustries.in',
-    company: 'Surya Solar & Glass Packaging Pvt Ltd',
-    subject: '₹ 45 Cr Greenfield Float Glass Manufacturing Unit - Bank Loan & DPR',
-    message: 'We are setting up a 150 TPD Greenfield Float Glass processing plant in Telangana. We need detailed project report (DPR), TEFR vetting, and bank funding syndication with SBI/Canara Bank. We have already acquired 12 acres of industrial land.',
-    status: 'New',
-    notes: 'High priority greenfield inquiry. Has 12 acres clear title land.',
-    assignedTo: 'Senior Project Advisory Desk',
-    isArchived: false,
-    source: 'Website Contact Us Form',
-    createdAt: new Date(Date.now() - 2 * 3600 * 1000),
-    updatedAt: new Date(Date.now() - 2 * 3600 * 1000),
-  },
-  {
-    _id: 'enq_002',
-    name: 'Ananya Deshmukh',
-    phone: '9845012345',
-    email: 'ananya.d@greenbioenergy.com',
-    company: 'GreenBio Energy Solutions LLP',
-    subject: 'CBG (Compressed Bio-Gas) SATAT Scheme Subsidy & Term Loan',
-    message: 'Seeking advisory on ₹ 28 Cr CBG plant under SATAT scheme in Maharashtra. Need CA financial modeling, subsidy documentation, and debt syndication support.',
-    status: 'In Progress',
-    notes: 'Initial introductory call scheduled. Sent SATAT checklist.',
-    assignedTo: 'CA Rajesh Sharma',
-    isArchived: false,
-    source: 'Website Contact Us Form',
-    createdAt: new Date(Date.now() - 24 * 3600 * 1000),
-    updatedAt: new Date(Date.now() - 5 * 3600 * 1000),
-  },
-  {
-    _id: 'enq_003',
-    name: 'Vikramjit Singh',
-    phone: '9988776655',
-    email: 'v.singh@punjabcoldchain.org',
-    company: 'Northern Agro Logistics Pvt Ltd',
-    subject: 'Multi-Commodity Controlled Atmosphere Cold Storage Project',
-    message: 'Planning 10,000 MT multi-commodity cold chain facility in Ludhiana with ₹ 32 Cr project outlay. Looking for MoFPI subsidy consultancy and consortium lending.',
-    status: 'Contacted',
-    notes: 'Spoke with promoter on phone. Requested balance sheets of parent firm.',
-    assignedTo: 'Prosync Advisory Desk',
-    isArchived: false,
-    source: 'Website Contact Us Form',
-    createdAt: new Date(Date.now() - 48 * 3600 * 1000),
-    updatedAt: new Date(Date.now() - 12 * 3600 * 1000),
-  },
-  {
-    _id: 'enq_004',
-    name: 'Kavitha Ramachandran',
-    phone: '9711223344',
-    email: 'kavitha@chennaiautoancillary.com',
-    company: 'Sri Ram Precision Engineering Ltd',
-    subject: '₹ 60 Cr EV Component Casting Unit - Term Loan Assistance',
-    message: 'We are expanding into aluminum die casting for EV powertrain casings. Required debt is ₹ 42 Cr. Looking for end-to-end DPR, CMA data, and banker liaison.',
-    status: 'Closed',
-    notes: 'Term sheet issued by Union Bank of India. Vetting completed.',
-    assignedTo: 'Senior Project Advisory Desk',
-    isArchived: false,
-    source: 'Website Contact Us Form',
-    createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000),
-    updatedAt: new Date(Date.now() - 24 * 3600 * 1000),
-  },
-];
+// In-memory fallback repository for local offline development resilience
+let memoryEnquiries = [];
 
 /**
  * Validate and clean 10-digit Indian mobile number
@@ -207,13 +143,14 @@ export const getAllEnquiries = async (query = {}) => {
       }
 
       if (searchTerm) {
+        const safeSearch = escapeRegex(searchTerm);
         filter.$or = [
-          { name: { $regex: searchTerm, $options: 'i' } },
-          { email: { $regex: searchTerm, $options: 'i' } },
-          { phone: { $regex: searchTerm, $options: 'i' } },
-          { company: { $regex: searchTerm, $options: 'i' } },
-          { subject: { $regex: searchTerm, $options: 'i' } },
-          { message: { $regex: searchTerm, $options: 'i' } },
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { email: { $regex: safeSearch, $options: 'i' } },
+          { phone: { $regex: safeSearch, $options: 'i' } },
+          { company: { $regex: safeSearch, $options: 'i' } },
+          { subject: { $regex: safeSearch, $options: 'i' } },
+          { message: { $regex: safeSearch, $options: 'i' } },
         ];
       }
 
@@ -231,7 +168,8 @@ export const getAllEnquiries = async (query = {}) => {
       const enquiries = await ContactEnquiry.find(filter)
         .sort(sort)
         .skip((pageNum - 1) * limitNum)
-        .limit(limitNum);
+        .limit(limitNum)
+        .lean();
 
       return {
         enquiries,

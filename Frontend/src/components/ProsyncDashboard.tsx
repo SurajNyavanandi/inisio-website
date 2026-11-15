@@ -47,9 +47,10 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({ user, onLogo
       setLeads(leadData);
 
       // Load consultations assigned to ProSync
-      const res = await api.consultations.getAll().catch(() => null);
-      if (res && res.data) {
-        setConsultations(Array.isArray(res.data) ? res.data : []);
+      const res: any = await api.consultations.getAll().catch(() => null);
+      if (res) {
+        const list = Array.isArray(res) ? res : res.data || [];
+        setConsultations(Array.isArray(list) ? list : []);
       }
     } catch (err) {
       console.warn('Error loading Prosync data:', err);

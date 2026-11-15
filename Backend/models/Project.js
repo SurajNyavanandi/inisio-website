@@ -48,19 +48,19 @@ const projectSchema = new mongoose.Schema(
     },
     dscr: {
       type: Number,
-      default: 1.45,
+      default: 0,
     },
     feasibilityScore: {
       type: Number,
-      default: 85,
+      default: 0,
     },
     bankabilityRating: {
       type: String,
-      default: 'A',
+      default: '',
     },
     subsidyEligible: {
       type: Boolean,
-      default: true,
+      default: false,
     },
     status: {
       type: String,
@@ -73,7 +73,7 @@ const projectSchema = new mongoose.Schema(
     },
     assignedCA: {
       type: String,
-      default: 'CA Rajesh Sharma (FCA)',
+      default: '',
     },
     dprAssignedTo: {
       type: String,
@@ -101,7 +101,7 @@ const projectSchema = new mongoose.Schema(
     },
     assignedBank: {
       type: String,
-      default: 'State Bank of India / Punjab National Bank',
+      default: '',
     },
     sanctionDate: {
       type: Date,
@@ -111,6 +111,15 @@ const projectSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Indexes for filters, sorts, and lookups
+projectSchema.index({ userId: 1 });
+projectSchema.index({ email: 1 });
+projectSchema.index({ mobile: 1 });
+projectSchema.index({ status: 1 });
+projectSchema.index({ assignedCA: 1 });
+projectSchema.index({ createdAt: -1 });
+projectSchema.index({ updatedAt: -1 });
 
 const Project = mongoose.models.Project || mongoose.model('Project', projectSchema);
 export default Project;

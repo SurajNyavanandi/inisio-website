@@ -21,7 +21,10 @@ export const ProjectActionCards: React.FC<ProjectActionCardsProps> = ({
           >
             <img
               src="https://res.cloudinary.com/aessymvl/image/upload/v1786723928/WhatsApp_Image_2026-08-14_at_9.41.08_PM_qb41zh.jpg"
-              alt="About"
+              alt="About Inisio Greenfield Advisory"
+              loading="lazy"
+              width={420}
+              height={260}
               className="w-full h-auto object-contain block group-hover:scale-[1.01] transition-transform duration-300"
               referrerPolicy="no-referrer"
             />
@@ -34,7 +37,10 @@ export const ProjectActionCards: React.FC<ProjectActionCardsProps> = ({
           >
             <img
               src="https://res.cloudinary.com/aessymvl/image/upload/v1786723927/WhatsApp_Image_2026-08-14_at_9.41.14_PM_m1cokg.jpg"
-              alt="Work With Us"
+              alt="Work With Us - Inisio Project Syndicate"
+              loading="lazy"
+              width={420}
+              height={260}
               className="w-full h-auto object-contain block group-hover:scale-[1.01] transition-transform duration-300"
               referrerPolicy="no-referrer"
             />

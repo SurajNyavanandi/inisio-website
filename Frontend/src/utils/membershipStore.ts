@@ -1,6 +1,6 @@
 import { AuthUser } from '../types';
 
-export function canUserStartAssessment(user: AuthUser | null): { allowed: boolean; reason?: string } {
+export function canUserStartAssessment(user?: AuthUser | null | string, submittedAssessmentCount?: number): { allowed: boolean; reason?: string } {
   // Free assessments are open to all users and guests
   return { allowed: true };
 }

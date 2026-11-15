@@ -1,6 +1,7 @@
 export interface ComprehensiveRiskResult {
   scoreOutOf10: number;
   ratingLetter: string;
+  ratingLabel?: string;
   riskLevel: string;
   strengths: string[];
   recommendations: string[];
@@ -44,6 +45,7 @@ export function calculateComprehensiveRiskScore(
   return {
     scoreOutOf10: score,
     ratingLetter,
+    ratingLabel: riskLevel,
     riskLevel,
     strengths: [
       'Healthy debt service capacity based on modeled cash flows',

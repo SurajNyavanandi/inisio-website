@@ -27,7 +27,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['user', 'ca', 'superadmin', 'dpr_consultant', 'prosync_admin', 'admin', 'admin1', 'admin2', 'admin3', 'prosync'],
+      enum: ['user', 'ca', 'superadmin', 'dpr', 'prosync', 'admin'],
       default: 'user',
     },
     company: {
@@ -61,6 +61,10 @@ const userSchema = new mongoose.Schema(
     verificationExpires: {
       type: Date,
       default: null,
+    },
+    otpAttempts: {
+      type: Number,
+      default: 0,
     },
     loginCount: {
       type: Number,

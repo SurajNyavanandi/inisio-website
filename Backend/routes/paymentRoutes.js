@@ -7,7 +7,7 @@ import {
   getPaymentById,
   handleWebhook,
 } from '../controllers/paymentController.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateUser, optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -20,11 +20,11 @@ router.post('/create-order', optionalAuth, createCheckoutOrder);
 // Verify signature and fulfill payment
 router.post('/verify-signature', optionalAuth, verifyPaymentSignature);
 
-// Payment history
-router.get('/history', optionalAuth, getPaymentHistory);
+// Payment history (Authenticated - strictly scoped by user or admin)
+router.get('/history', authenticateUser, getPaymentHistory);
 
-// Single transaction lookup
-router.get('/:id', optionalAuth, getPaymentById);
+// Single transaction lookup (Authenticated - verified ownership)
+router.get('/:id', authenticateUser, getPaymentById);
 
 // Razorpay Webhook endpoint
 router.post('/webhook', handleWebhook);

@@ -47,9 +47,10 @@ export const CADashboard: React.FC<CADashboardProps> = ({ user, onLogout, onNavi
       setLeads(leadData);
 
       // Fetch consultations assigned to CA / advisory desk
-      const res = await api.consultations.getAll().catch(() => null);
-      if (res && res.data) {
-        setConsultations(Array.isArray(res.data) ? res.data : []);
+      const res: any = await api.consultations.getAll().catch(() => null);
+      if (res) {
+        const list = Array.isArray(res) ? res : res.data || [];
+        setConsultations(Array.isArray(list) ? list : []);
       }
     } catch (err) {
       console.warn('Error loading CA dashboard data:', err);

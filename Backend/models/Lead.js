@@ -26,12 +26,12 @@ const leadSchema = new mongoose.Schema(
     },
     projectName: {
       type: String,
-      default: 'Greenfield Project Proposal',
+      default: '',
       trim: true,
     },
     industry: {
       type: String,
-      default: 'Manufacturing & Industrial',
+      default: '',
       trim: true,
     },
     location: {
@@ -40,19 +40,19 @@ const leadSchema = new mongoose.Schema(
     },
     totalCostCr: {
       type: mongoose.Schema.Types.Mixed,
-      default: '10',
+      default: '',
     },
     loanRequiredCr: {
       type: mongoose.Schema.Types.Mixed,
-      default: '7.5',
+      default: '',
     },
     feasibilityScore: {
       type: Number,
-      default: 80,
+      default: 0,
     },
     bankabilityRating: {
       type: String,
-      default: 'A',
+      default: '',
     },
     dscrEstimate: {
       type: Number,
@@ -165,7 +165,7 @@ const leadSchema = new mongoose.Schema(
     },
     successProbability: {
       type: Number,
-      default: 25,
+      default: 0,
     },
     isFunded: {
       type: Boolean,
@@ -269,6 +269,15 @@ const leadSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Indexes for filters, sorts, and fast lookups in production
+leadSchema.index({ email: 1 });
+leadSchema.index({ mobile: 1 });
+leadSchema.index({ assignedCA: 1 });
+leadSchema.index({ dprAssignedTo: 1 });
+leadSchema.index({ consultationAssignedTo: 1 });
+leadSchema.index({ createdAt: -1 });
+leadSchema.index({ updatedAt: -1 });
 
 const Lead = mongoose.models.Lead || mongoose.model('Lead', leadSchema);
 export default Lead;

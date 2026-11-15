@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert, ArrowLeft, LogOut, LayoutDashboard } from 'lucide-react';
+import { ShieldAlert, LogOut, LayoutDashboard } from 'lucide-react';
 import { AuthUser } from '../types';
 
 interface ForbiddenPageProps {

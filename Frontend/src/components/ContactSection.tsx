@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { saveLeadRecord } from '../utils/leadStore';
 import api from '../utils/apiClient';
 import {
@@ -11,11 +11,14 @@ import {
   ShieldCheck,
   Sparkles
 } from 'lucide-react';
-import { MAIN_SECTORS } from '../data/landingData';
 import { validateIndianMobileNumber } from '../utils/validation';
 import { UISelect } from './ui/Select';
 
-export const ContactSection: React.FC = () => {
+interface ContactSectionProps {
+  isStandalone?: boolean;
+}
+
+export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = false }) => {
   const [submitted, setSubmitted] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [formData, setFormData] = useState({
@@ -27,6 +30,28 @@ export const ContactSection: React.FC = () => {
     loanRequirement: '',
     message: ''
   });
+
+  const [sectors, setSectors] = useState<string[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.industries.getAll()
+      .then((data) => {
+        if (!isMounted) return;
+        const list = Array.isArray(data) ? data : (data as any)?.data || [];
+        const names = list.map((item: any) => item.name).filter(Boolean);
+        if (names.length > 0) {
+          setSectors(names);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load industries in contact section:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,9 +110,15 @@ export const ContactSection: React.FC = () => {
             <Sparkles className="w-3.5 h-3.5 text-blue-600" />
             <span>Senior Advisory Desk · Greenfield Capital</span>
           </p>
-          <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.2] tracking-tight">
-            Book Your Free Advisory Call
-          </h2>
+          {isStandalone ? (
+            <h1 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.2] tracking-tight">
+              Contact Inisio Capital Advisory | Hyderabad Desk
+            </h1>
+          ) : (
+            <h2 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-900 leading-[1.2] tracking-tight">
+              Book Your Free Advisory Call
+            </h2>
+          )}
           <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
             Discuss your greenfield project feasibility, capital requirements, and bank loan syndication with our senior advisory team.
           </p>
@@ -245,7 +276,7 @@ export const ContactSection: React.FC = () => {
                       value={formData.projectType}
                       onValueChange={(val) => setFormData({ ...formData, projectType: val })}
                       placeholder="Select Industry Sector"
-                      options={MAIN_SECTORS.map((sector) => ({ value: sector, label: sector }))}
+                      options={sectors.map((sector) => ({ value: sector, label: sector }))}
                       triggerClassName="h-11 bg-white border-slate-300"
                     />
                   </div>

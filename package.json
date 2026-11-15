@@ -1,0 +1,13 @@
+{
+  "name": "inisio-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Inisio - Greenfield Project Consultancy & Bank Funding Platform",
+  "scripts": {
+    "dev:backend": "npm run dev --prefix Backend",
+    "dev:frontend": "npm run dev --prefix Frontend",
+    "start:backend": "npm run start --prefix Backend",
+    "build": "npm run build --prefix Frontend",
+    "test:api": "node Backend/test-all-endpoints.js"
+  }
+}
