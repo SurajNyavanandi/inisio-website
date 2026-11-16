@@ -13,6 +13,8 @@ import { FundingRequestModal } from './FundingRequestModal';
 import { PromoterFundAssistanceModal } from './PromoterFundAssistanceModal';
 import { recordAssessmentCompletion } from '../utils/membershipStore';
 import { UISelect } from './ui/Select';
+import { Input } from './ui/Input';
+import { Checkbox } from './ui/Checkbox';
 import { showToast } from './ui/Toast';
 import {
   Calculator,
@@ -57,7 +59,9 @@ import {
   Star,
   Plus,
   Trash2,
-  X
+  X,
+  Mail,
+  Phone
 } from 'lucide-react';
 
 interface ProjectAssessmentPageProps {
@@ -92,6 +96,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   onLoginSuccess
 }) => {
   const [stage, setStage] = useState<AssessmentStage>(1);
+  const [maxStepReached, setMaxStepReached] = useState<number>(editingProject ? 6 : 1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mobileTouched, setMobileTouched] = useState(false);
   const [step2Error, setStep2Error] = useState('');
@@ -107,6 +112,111 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
   const [isPromoterFundAssistanceModalOpen, setIsPromoterFundAssistanceModalOpen] = useState(false);
   const [actionToast, setActionToast] = useState<string | null>(null);
+
+  const getStepIndex = (s: AssessmentStage): number => {
+    switch (s) {
+      case 1: return 1;
+      case 2: return 2;
+      case 3: return 3;
+      case 'feasibility_result':
+      case 'collect_bankability':
+      case 'bankability_result': return 4;
+      case 'collect_financials': return 5;
+      case 'final_assessment_results': return 6;
+      default: return 1;
+    }
+  };
+
+  const currentStep = getStepIndex(stage);
+
+  const ASSESSMENT_STEPS = [
+    { id: 1, name: 'Project Details' },
+    { id: 2, name: 'Financial Details' },
+    { id: 3, name: 'Readiness & Contact' },
+    { id: 4, name: 'Underwriting Scoring' },
+    { id: 5, name: 'Cost & Finance Breakup' },
+    { id: 6, name: 'AI Teaser & Outputs' }
+  ];
+
+  const [completedSteps, setCompletedSteps] = useState<number[]>(() =>
+    editingProject ? [1, 2, 3, 4, 5, 6] : []
+  );
+
+  const markStepComplete = (stepId: number) => {
+    setCompletedSteps(prev => (prev.includes(stepId) ? prev : [...prev, stepId]));
+  };
+
+  const isStepCompleted = (stepId: number): boolean => {
+    if (editingProject) return true;
+    if (completedSteps.includes(stepId)) return true;
+    switch (stepId) {
+      case 1:
+        return Boolean(formData.projectName?.trim() && formData.industry && formData.location?.trim());
+      case 2:
+        return Boolean(formData.totalCostCr && parseFloat(formData.totalCostCr) > 0 && formData.promoterContribCr && isEquityEligible);
+      case 3:
+        return Boolean(formData.landStatus && formData.collateralStatus && formData.fullName?.trim() && formData.mobile?.trim() && formData.email?.trim());
+      case 4:
+        return Boolean(riskProfileData);
+      case 5:
+        return Boolean(financials.totalProjectCost || (financials.termLoanCr && financials.promoterContributionCr));
+      case 6:
+        return Boolean(isDataSaved);
+      default:
+        return false;
+    }
+  };
+
+  useEffect(() => {
+    if (editingProject) {
+      setMaxStepReached(6);
+    }
+  }, [editingProject]);
+
+  useEffect(() => {
+    const idx = getStepIndex(stage);
+    setMaxStepReached(prev => Math.max(prev, idx));
+  }, [stage]);
+
+  const handleStepSelect = (stepId: number) => {
+    if (stepId === 1) setStage(1);
+    else if (stepId === 2) setStage(2);
+    else if (stepId === 3) setStage(3);
+    else if (stepId === 4) {
+      if (stage === 'bankability_result' || riskProfileData) {
+        setStage('bankability_result');
+      } else {
+        setStage('collect_bankability');
+      }
+    }
+    else if (stepId === 5) setStage('collect_financials');
+    else if (stepId === 6) setStage('final_assessment_results');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handlePreviousStep = () => {
+    if (currentStep === 2) setStage(1);
+    else if (currentStep === 3) setStage(2);
+    else if (currentStep === 4) setStage(3);
+    else if (currentStep === 5) {
+      if (riskProfileData) setStage('bankability_result');
+      else setStage('collect_bankability');
+    }
+    else if (currentStep === 6) setStage('collect_financials');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleGoBack = () => {
+    if (currentStep > 1) {
+      handlePreviousStep();
+    } else if (window.history.length > 1) {
+      window.history.back();
+    } else if (onNavigateToDashboard) {
+      onNavigateToDashboard();
+    } else if (onFinishEditing) {
+      onFinishEditing();
+    }
+  };
 
   // Authentication State
   const [activeUser, setActiveUser] = useState<AuthUser | null>(() => {
@@ -454,6 +564,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         showToast('Please enter your Project Name, select Industry, and choose Location to continue.', { type: 'warning', title: 'Missing Information' });
         return;
       }
+      markStepComplete(1);
       setStage(2);
       window.scrollTo({ top: 120, behavior: 'smooth' });
     } else if (stage === 2) {
@@ -469,6 +580,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         setStep2Error(`Promoter equity contribution is ${equityPercent}%, which is below the minimum required 20% for bank financing. Please increase promoter equity to proceed.`);
         return;
       }
+      markStepComplete(2);
 
       // Automatically sync Means of Finance and benchmark Capex from Step 2 inputs
       const currentCost = parseFloat(formData.totalCostCr) || 0;
@@ -534,6 +646,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         return;
       }
       setIsSubmitting(true);
+      markStepComplete(3);
       setTimeout(() => {
         setIsSubmitting(false);
         setStage('feasibility_result');
@@ -926,6 +1039,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
 
     setIsDataSaved(true);
+    markStepComplete(5);
+    markStepComplete(6);
     setSaveSuccessMessage('Project assessment saved successfully to your dashboard!');
     recordAssessmentCompletion(formData.email || activeUser?.email);
     setStage('final_assessment_results');
@@ -1066,228 +1181,160 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const civilLakhs = (parseFloat(costLakhs) * 0.30).toFixed(2);
 
   return (
-    <div className="min-h-screen bg-slate-50/70 pb-20">
-      {/* Header Banner */}
-      <section className="bg-slate-900 text-white pt-20 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto text-center space-y-3">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-            <Award className="w-3.5 h-3.5 text-emerald-400" />
-            <span>100% Free First Project Assessment</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight font-manrope">
-            {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Feasibility Assessment & Bankability Scorecard'}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-3xl mx-auto font-inter">
-            {editingProject
-              ? 'Update your project parameters, cost structure, land and risk inputs, and re-evaluate underwriting scores.'
-              : 'Assess your project viability, debt-capacity, and bankability rating before approaching lenders and credit committees.'}
-          </p>
-
-          {/* Tangible Outputs Chips */}
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-300 font-medium">
-            <span className="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">✓ Bankability Rating (AAA to BBB)</span>
-            <span className="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">✓ DSCR & Debt Capacity</span>
-            <span className="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">✓ Means of Finance</span>
-            <span className="bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">✓ Downloadable PDF Teaser</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 relative z-20 space-y-6">
-
-        {/* Editing Mode Banner */}
-        {editingProject && (
-          <div className="bg-blue-600 text-white px-5 py-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                <Sparkles className="w-4 h-4 text-white" />
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 font-inter">
+      {/* LEFT PANEL: Vertical Step Menu */}
+      <aside className="w-full lg:w-72 xl:w-80 bg-slate-900 text-white shrink-0 p-5 lg:p-6 flex flex-col justify-between border-r border-slate-800">
+        <div className="space-y-6">
+          {/* Brand & Mode Header */}
+          <div className="space-y-2 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs">
+                <Award className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider text-blue-200 block">
-                  Interactive Assessment Editing
-                </span>
-                <p className="text-xs font-semibold text-white">
-                  Editing project parameters for <strong>{formData.projectName || editingProject.projectName}</strong>
-                </p>
+                <div className="text-sm font-extrabold text-white font-manrope leading-tight">Inisio</div>
+                <span className="text-[10px] font-bold text-blue-400 tracking-wider uppercase">Project Assessment</span>
               </div>
             </div>
+            <p className="text-[11px] text-slate-400 pt-1">
+              {editingProject ? 'Interactive Assessment Editing' : '100% Free First Project Assessment'}
+            </p>
+          </div>
 
-            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+          {/* Vertical List of Existing Steps */}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 px-1">
+              Assessment Steps
+            </div>
+            <nav className="space-y-1.5">
+              {ASSESSMENT_STEPS.map((s) => {
+                const isCurrent = currentStep === s.id;
+                const isCompleted = isStepCompleted(s.id) && !isCurrent;
+
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => handleStepSelect(s.id)}
+                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs text-left transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-blue-600 text-white font-bold shadow-xs ring-1 ring-blue-400'
+                        : isCompleted
+                        ? 'text-slate-200 hover:bg-slate-800/80 font-medium'
+                        : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 font-medium'
+                    }`}
+                  >
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                        isCurrent
+                          ? 'bg-white text-blue-600 shadow-2xs'
+                          : isCompleted
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <Check className="w-3.5 h-3.5 stroke-3" />
+                      ) : (
+                        <span>{s.id}</span>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate leading-tight">{s.name}</div>
+                      <div className="text-[10px] opacity-75 truncate">
+                        {isCurrent ? 'In Progress' : isCompleted ? 'Completed' : ''}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+
+        {/* Sidebar Summary Footer */}
+        <div className="pt-6 border-t border-slate-800 text-xs text-slate-400 space-y-2 hidden lg:block">
+          <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-[11px]">
+            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+            <span>Tangible Outputs</span>
+          </div>
+          <div className="text-[11px] space-y-1 text-slate-400 font-medium">
+            <div>✓ Bankability Rating (AAA to BBB)</div>
+            <div>✓ DSCR &amp; Debt Capacity</div>
+            <div>✓ Means of Finance Breakup</div>
+            <div>✓ Downloadable PDF Teaser</div>
+          </div>
+        </div>
+      </aside>
+
+      {/* RIGHT PANEL: Form Content for the Selected Step */}
+      <main className="flex-1 flex flex-col min-w-0 bg-white overflow-y-auto w-full">
+        {/* Top Sub-screen Bar with Go Back Button and Step Title */}
+        <div className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-30 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleGoBack}
+              title="Go Back"
+              className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-2xs transition-colors cursor-pointer group shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+                  Step {currentStep} of 6
+                </span>
+                <span className="text-slate-300">•</span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {ASSESSMENT_STEPS.find(s => s.id === currentStep)?.name}
+                </span>
+              </div>
+              <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 font-manrope">
+                {editingProject ? `Edit: ${formData.projectName || editingProject.projectName}` : 'Greenfield Project Feasibility & Bankability'}
+              </h1>
+            </div>
+          </div>
+
+          {editingProject && (
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => handleSaveProjectEdits()}
-                className="flex-1 sm:flex-none px-4 py-2 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5 stroke-3" />
                 <span>Save Updates</span>
               </button>
-
               {onFinishEditing && (
                 <button
                   type="button"
                   onClick={onFinishEditing}
-                  className="px-3.5 py-2 bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
                 >
                   Back to Dashboard
                 </button>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Quick Section Navigation Bar */}
-        <div className="bg-white p-2 sm:p-2.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
-          <div className="flex items-center gap-1.5 min-w-max">
-            <button
-              type="button"
-              onClick={() => {
-                setStage(1);
-                window.scrollTo({ top: 120, behavior: 'smooth' });
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stage === 1 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[10px]">1</span>
-              <span>Project Details</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStage(2);
-                window.scrollTo({ top: 120, behavior: 'smooth' });
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stage === 2 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[10px]">2</span>
-              <span>Financials &amp; CAPEX</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStage(3);
-                window.scrollTo({ top: 120, behavior: 'smooth' });
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stage === 3 ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[10px]">3</span>
-              <span>Readiness &amp; Contact</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStage('collect_bankability');
-                window.scrollTo({ top: 120, behavior: 'smooth' });
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stage === 'collect_bankability' || stage === 'bankability_result' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[10px]">4</span>
-              <span>Underwriting Scoring</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStage('collect_financials');
-                window.scrollTo({ top: 120, behavior: 'smooth' });
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stage === 'collect_financials' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[10px]">5</span>
-              <span>Cost &amp; Finance Breakup</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStage('final_assessment_results');
-                window.scrollTo({ top: 120, behavior: 'smooth' });
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                stage === 'final_assessment_results' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-full bg-black/10 flex items-center justify-center text-[10px]">6</span>
-              <span>AI Teaser &amp; Outputs</span>
-            </button>
-          </div>
+          )}
         </div>
 
-        {/* Save Success Toast Banner */}
-        {saveSuccessMessage && (
-          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-bold flex items-center gap-2.5 shadow-sm animate-in fade-in">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span>{saveSuccessMessage} {isDataSaved ? '' : 'Returning to your dashboard...'}</span>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* STAGE 1: STEPS 1, 2, 3 FORM                                                */}
-        {/* ========================================================================= */}
-        {(stage === 1 || stage === 2 || stage === 3) && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden animate-in fade-in duration-300">
-            {/* Steps Progress */}
-            <div className="bg-slate-900 px-4 sm:px-6 py-4 border-b border-slate-800 text-white">
-              <div className="flex items-center justify-between max-w-4xl mx-auto">
-                <button
-                  type="button"
-                  onClick={() => setStage(1)}
-                  className="flex items-center gap-2 text-left group cursor-pointer"
-                >
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${stage >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                    1
-                  </div>
-                  <span className={`text-xs font-semibold ${stage === 1 ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
-                    Project Details
-                  </span>
-                </button>
-
-                <div className={`h-0.5 flex-1 mx-2 sm:mx-3 ${stage >= 2 ? 'bg-blue-600' : 'bg-slate-800'}`} />
-
-                <button
-                  type="button"
-                  onClick={() => setStage(2)}
-                  className="flex items-center gap-2 text-left group cursor-pointer"
-                >
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${stage >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                    2
-                  </div>
-                  <span className={`text-xs font-semibold ${stage === 2 ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
-                    Financial Details
-                  </span>
-                </button>
-
-                <div className={`h-0.5 flex-1 mx-2 sm:mx-3 ${stage >= 3 ? 'bg-blue-600' : 'bg-slate-800'}`} />
-
-                <button
-                  type="button"
-                  onClick={() => setStage(3)}
-                  className="flex items-center gap-2 text-left group cursor-pointer"
-                >
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${stage >= 3 ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                    3
-                  </div>
-                  <span className={`text-xs font-semibold ${stage === 3 ? 'text-blue-400' : 'text-slate-400 group-hover:text-slate-200'}`}>
-                    Readiness &amp; Contact
-                  </span>
-                </button>
-              </div>
+        {/* Content Body */}
+        <div className="w-full flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
+          {/* Save Success Toast Banner */}
+          {saveSuccessMessage && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 font-bold flex items-center gap-2.5 shadow-sm animate-in fade-in">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>{saveSuccessMessage} {isDataSaved ? '' : 'Returning to your dashboard...'}</span>
             </div>
+          )}
 
-            <form onSubmit={handleNextStep} className="p-4 sm:p-8 space-y-6">
+          {/* ========================================================================= */}
+          {/* STAGE 1: STEPS 1, 2, 3 FORM                                                */}
+          {/* ========================================================================= */}
+          {(stage === 1 || stage === 2 || stage === 3) && (
+            <form onSubmit={handleNextStep} className="w-full space-y-6 animate-in fade-in duration-300">
               {/* STEP 1: PROJECT DETAILS */}
               {stage === 1 && (
                 <div className="space-y-5 animate-in fade-in duration-300">
@@ -1306,14 +1353,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <label className="block text-xs font-bold text-gray-700 mb-1">
                         Project Name <span className="text-red-500">*</span>
                       </label>
-                      <input
+                      <Input
                         type="text"
                         name="projectName"
                         value={formData.projectName}
                         onChange={handleInputChange}
                         placeholder="Enter your project name (e.g. Bionex CNG, Solar Power Plant)"
                         required
-                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-xs font-medium text-gray-900"
                       />
                     </div>
 
@@ -1405,8 +1451,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         Total Project Cost (₹ Cr) <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">₹</span>
-                        <input
+                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400 z-10">₹</span>
+                        <Input
                           type="number"
                           step="0.1"
                           name="totalCostCr"
@@ -1414,7 +1460,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           onChange={handleInputChange}
                           placeholder="Enter total project cost in ₹ Cr"
                           required
-                          className="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-xs font-bold text-gray-900"
+                          className="pl-7 font-bold"
                         />
                       </div>
                     </div>
@@ -1424,8 +1470,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         How much money do you have for the project in your hand? (Promoter Equity ₹ Cr) <span className="text-red-500">*</span>
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">₹</span>
-                        <input
+                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400 z-10">₹</span>
+                        <Input
                           type="number"
                           step="0.1"
                           name="promoterContribCr"
@@ -1433,7 +1479,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           onChange={handleInputChange}
                           placeholder="Enter promoter equity in hand in ₹ Cr"
                           required
-                          className="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-xs font-bold text-gray-900"
+                          className="pl-7 font-bold"
                         />
                       </div>
                     </div>
@@ -1443,8 +1489,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         Funding Needed (₹ Cr)
                       </label>
                       <div className="relative">
-                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400">₹</span>
-                        <input
+                        <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400 z-10">₹</span>
+                        <Input
                           type="number"
                           step="0.1"
                           name="loanRequiredCr"
@@ -1452,7 +1498,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           onChange={handleInputChange}
                           placeholder="Automatically calculated"
                           readOnly
-                          className="w-full pl-7 pr-3 py-2.5 bg-blue-50/50 border border-blue-200 rounded-xl font-bold text-blue-900 text-xs outline-none"
+                          className="pl-7 bg-blue-50/50 border-blue-200 font-bold text-blue-900"
                         />
                       </div>
                     </div>
@@ -1604,8 +1650,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           Plant &amp; Machinery (₹ Cr)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
-                          <input
+                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
+                          <Input
                             type="number"
                             step="0.01"
                             value={financials.machineryCostCr}
@@ -1614,7 +1660,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                               setFinancials(prev => ({ ...prev, machineryCostCr: val }));
                             }}
                             placeholder="e.g. 6.50"
-                            className="w-full pl-6 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="pl-6 bg-white font-bold"
                           />
                         </div>
                       </div>
@@ -1624,8 +1670,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           Land &amp; Civil Works (₹ Cr)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
-                          <input
+                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
+                          <Input
                             type="number"
                             step="0.01"
                             value={financials.civilCostCr}
@@ -1634,7 +1680,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                               setFinancials(prev => ({ ...prev, civilCostCr: val }));
                             }}
                             placeholder="e.g. 2.50"
-                            className="w-full pl-6 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="pl-6 bg-white font-bold"
                           />
                         </div>
                       </div>
@@ -1644,8 +1690,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           Consultancy &amp; Pre-op (₹ Cr)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
-                          <input
+                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
+                          <Input
                             type="number"
                             step="0.01"
                             value={financials.consultancyCostCr}
@@ -1654,7 +1700,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                               setFinancials(prev => ({ ...prev, consultancyCostCr: val }));
                             }}
                             placeholder="e.g. 0.50"
-                            className="w-full pl-6 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="pl-6 bg-white font-bold"
                           />
                         </div>
                       </div>
@@ -1664,8 +1710,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           Other / Contingency (₹ Cr)
                         </label>
                         <div className="relative">
-                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">₹</span>
-                          <input
+                          <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
+                          <Input
                             type="number"
                             step="0.01"
                             value={financials.otherCostsCr}
@@ -1674,7 +1720,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                               setFinancials(prev => ({ ...prev, otherCostsCr: val }));
                             }}
                             placeholder="e.g. 0.50"
-                            className="w-full pl-6 pr-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 outline-none"
+                            className="pl-6 bg-white font-bold"
                           />
                         </div>
                       </div>
@@ -1854,7 +1900,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <span>Promoter &amp; Contact Details</span>
                       </h3>
                       
-                      <div className="flex items-center gap-2 min-w-[190px]">
+                      <div className="flex items-center gap-2 min-w-47.5">
                         <label className="text-[11px] font-bold text-gray-600 shrink-0">
                           Number of Promoters:
                         </label>
@@ -1884,20 +1930,19 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 mb-1">Full Name *</label>
-                          <input
+                          <Input
                             type="text"
                             name="fullName"
                             value={formData.fullName}
                             onChange={handleInputChange}
                             required
                             placeholder="e.g. Rajesh Malhotra"
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                           />
                         </div>
 
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 mb-1">Mobile Number *</label>
-                          <input
+                          <Input
                             type="tel"
                             name="mobile"
                             value={formData.mobile}
@@ -1909,7 +1954,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                             required
                             placeholder="Enter 10-digit mobile"
                             maxLength={10}
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                            error={mobileTouched && !mobileValidation.isValid}
                           />
                           {mobileTouched && !mobileValidation.isValid && (
                             <p className="text-[11px] text-red-600 mt-1">{mobileValidation.error}</p>
@@ -1918,14 +1963,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 mb-1">Email Address *</label>
-                          <input
+                          <Input
                             type="email"
                             name="email"
                             value={formData.email}
                             onChange={handleInputChange}
                             required
                             placeholder="promoter@company.com"
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                           />
                         </div>
                       </div>
@@ -1971,13 +2015,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                                 <label className="block text-[11px] font-bold text-gray-600 mb-1">
                                   Promoter Name *
                                 </label>
-                                <input
+                                <Input
                                   type="text"
                                   value={promoter.name}
                                   onChange={(e) => handleUpdateAdditionalPromoter(index, 'name', e.target.value)}
                                   required
                                   placeholder={`e.g. Co-Promoter ${index + 2}`}
-                                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
                                 />
                               </div>
 
@@ -2075,14 +2118,14 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           <span>Preferred Branch Name / City</span>
                           <span className="text-red-500 font-bold">*</span>
                         </label>
-                        <input
+                        <Input
                           type="text"
                           name="branchLocation"
                           value={formData.branchLocation}
                           onChange={handleInputChange}
                           required
                           placeholder="e.g. Industrial Finance Branch, Bengaluru"
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-blue-500"
+                          className="bg-white font-medium"
                         />
                       </div>
 
@@ -2090,13 +2133,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <label className="block text-[11px] font-bold text-gray-600 mb-1">
                           Branch IFSC Code (Optional)
                         </label>
-                        <input
+                        <Input
                           type="text"
                           name="bankIfscCode"
                           value={formData.bankIfscCode}
                           onChange={(e) => setFormData(prev => ({ ...prev, bankIfscCode: e.target.value.toUpperCase() }))}
                           placeholder="e.g. SBIN0004562"
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono uppercase outline-none focus:ring-2 focus:ring-blue-500"
+                          className="bg-white font-mono uppercase"
                         />
                       </div>
 
@@ -2104,13 +2147,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <label className="block text-[11px] font-bold text-gray-600 mb-1">
                           Application / Proposal Ref # (If initiated)
                         </label>
-                        <input
+                        <Input
                           type="text"
                           name="bankAppRefNumber"
                           value={formData.bankAppRefNumber}
                           onChange={handleInputChange}
                           placeholder="e.g. SBI-SME-2026-081"
-                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                          className="bg-white font-mono"
                         />
                       </div>
                     </div>
@@ -2158,14 +2201,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 </div>
               )}
             </form>
-          </div>
         )}
 
         {/* ========================================================================= */}
         {/* STAGE 1 RESULT: FEASIBILITY CHECK RESULT                                   */}
         {/* ========================================================================= */}
         {stage === 'feasibility_result' && (
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-xl p-6 sm:p-8 space-y-6 animate-in zoom-in-95 duration-400">
+          <div className="w-full space-y-6 animate-in zoom-in-95 duration-400">
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4">
               <div>
@@ -2289,6 +2331,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               initialData={riskProfileData}
               onSubmitSuccess={(data) => {
                 setRiskProfileData(data);
+                markStepComplete(4);
                 setStage('bankability_result');
                 window.scrollTo({ top: 120, behavior: 'smooth' });
               }}
@@ -2301,7 +2344,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         {/* STAGE 2 RESULT: BANKABILITY RATING RESULT                                  */}
         {/* ========================================================================= */}
         {stage === 'bankability_result' && (
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-xl p-6 sm:p-8 space-y-6 animate-in zoom-in-95 duration-400">
+          <div className="w-full space-y-6 animate-in zoom-in-95 duration-400">
             {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4">
               <div>
@@ -2476,7 +2519,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           };
 
           return (
-          <div className="bg-white rounded-3xl border border-gray-200 shadow-xl p-6 sm:p-8 space-y-8 animate-in slide-in-from-right-4 duration-500">
+          <div className="w-full space-y-8 animate-in slide-in-from-right-4 duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-xs font-bold mb-1">
@@ -2526,46 +2569,46 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Consultancy &amp; Pre-op (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.consultancyCostCr}
                       onChange={(e) => setFinancials({...financials, consultancyCostCr: e.target.value})}
                       placeholder="e.g. 2.50"
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Plant &amp; Machinery (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.machineryCostCr}
                       onChange={(e) => setFinancials({...financials, machineryCostCr: e.target.value})}
                       placeholder="e.g. 30.00"
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Land &amp; Civil Works (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.civilCostCr}
                       onChange={(e) => setFinancials({...financials, civilCostCr: e.target.value})}
                       placeholder="e.g. 15.00"
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Other Project Costs (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.otherCostsCr}
                       onChange={(e) => setFinancials({...financials, otherCostsCr: e.target.value})}
                       placeholder="e.g. 2.50"
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                   </div>
                 </div>
@@ -2589,37 +2632,37 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Project Term Debt / Bank Loan (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.termLoanCr !== '' ? financials.termLoanCr : (currentLoanFromPrev > 0 ? currentLoanFromPrev.toFixed(2) : '')}
                       onChange={(e) => setFinancials({...financials, termLoanCr: e.target.value})}
                       placeholder="Enter debt amount..."
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                     {totalFin > 0 && <div className="text-[10px] font-medium text-emerald-600 text-right">{debtPct}% Allocation</div>}
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Promoter Contribution / Equity (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.promoterContributionCr !== '' ? financials.promoterContributionCr : (currentContribFromPrev > 0 ? currentContribFromPrev.toFixed(2) : '')}
                       onChange={(e) => setFinancials({...financials, promoterContributionCr: e.target.value})}
                       placeholder="Enter promoter contribution..."
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                     {totalFin > 0 && <div className="text-[10px] font-medium text-emerald-600 text-right">{eqPct}% Allocation</div>}
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Other Sources / Grants (Cr)</label>
-                    <input
+                    <Input
                       type="number"
                       step="0.01"
                       value={financials.otherFinanceCr}
                       onChange={(e) => setFinancials({...financials, otherFinanceCr: e.target.value})}
                       placeholder="Optional (e.g. 0.00)"
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-emerald-500 outline-none transition-all font-semibold"
+                      className="text-xs font-semibold"
                     />
                   </div>
                 </div>
@@ -2715,9 +2758,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           const activeBankability = riskProfileData ? comprehensiveRisk.scoreOutOf10.toFixed(1) : results.bankabilityRating;
 
           return (
-            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-400">
-              {/* Header Card */}
-              <div className="bg-white rounded-3xl border border-gray-200 shadow-xl p-6 sm:p-8 space-y-6">
+            <div className="w-full space-y-6 animate-in fade-in zoom-in-95 duration-400">
+              {/* Header Section */}
+              <div className="w-full space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
                   <div>
                     {activeUser ? (
@@ -3078,146 +3121,159 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     </div>
                   </div>
 
-                  {/* Inline Quick Login / Sign Up Form */}
-                  <div className="bg-slate-950/70 p-5 sm:p-6 rounded-2xl border border-slate-800 space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        <span>Instant 1-Click Verification &amp; Project Linking</span>
+                  {/* Inline Quick Login / Sign Up Form - Styled to Reference */}
+                  <div className="bg-linear-to-b from-sky-50/70 via-white to-white p-6 sm:p-7 rounded-3xl border border-blue-100 shadow-xl shadow-blue-950/5 space-y-4 max-w-xl mx-auto">
+                    <div className="text-center space-y-1">
+                      <div className="w-11 h-11 rounded-2xl bg-white border border-blue-100 shadow-md shadow-blue-500/10 flex items-center justify-center mx-auto text-blue-600 mb-2">
+                        <ShieldCheck className="w-5 h-5 text-blue-600" />
                       </div>
-
-                      {/* Mode Toggle Tabs */}
-                      <div className="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700 text-xs font-bold">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInlineAuthMode('login');
-                            setInlineAuthError('');
-                            setInlineAuthSuccess('');
-                          }}
-                          className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                            inlineAuthMode === 'login' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          Sign In
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInlineAuthMode('signup');
-                            setInlineAuthError('');
-                            setInlineAuthSuccess('');
-                          }}
-                          className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                            inlineAuthMode === 'signup' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          Create Account
-                        </button>
-                      </div>
+                      <h3 className="text-lg font-extrabold text-slate-900 font-manrope tracking-tight">
+                        {inlineAuthMode === 'signup' ? 'Create your account' : 'Sign in to Inisio'}
+                      </h3>
+                      <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                        {inlineAuthMode === 'signup' ? 'Instant 1-Click Verification & Project Linking' : 'Access your greenfield assessment from any device'}
+                      </p>
                     </div>
 
-                    <form onSubmit={handleInlineAuthSubmit} className="space-y-3 pt-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {/* Mode Toggle Tabs */}
+                    <div className="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/60 max-w-xs mx-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInlineAuthMode('login');
+                          setInlineAuthError('');
+                          setInlineAuthSuccess('');
+                        }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          inlineAuthMode === 'login' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Sign In
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInlineAuthMode('signup');
+                          setInlineAuthError('');
+                          setInlineAuthSuccess('');
+                        }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          inlineAuthMode === 'signup' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Create Account
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleInlineAuthSubmit} className="space-y-3 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {inlineAuthMode === 'signup' && (
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                              Full Name <span className="text-rose-400">*</span>
+                          <div className="space-y-1">
+                            <label className="block text-xs font-semibold text-slate-700">
+                              Full Name <span className="text-rose-500">*</span>
                             </label>
-                            <input
-                              type="text"
-                              required
-                              value={inlineName || formData.fullName}
-                              onChange={(e) => setInlineName(e.target.value)}
-                              placeholder="e.g. Ramesh Sharma"
-                              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                            <div className="relative">
+                              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="text"
+                                required
+                                value={inlineName || formData.fullName}
+                                onChange={(e) => setInlineName(e.target.value)}
+                                placeholder="e.g. Ramesh Sharma"
+                                className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              />
+                            </div>
                           </div>
                         )}
 
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                            Email Address <span className="text-rose-400">*</span>
+                        <div className={`space-y-1 ${inlineAuthMode !== 'signup' ? 'sm:col-span-2' : ''}`}>
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Email Address <span className="text-rose-500">*</span>
                           </label>
-                          <input
-                            type="email"
-                            required
-                            value={inlineEmail || formData.email}
-                            onChange={(e) => setInlineEmail(e.target.value)}
-                            placeholder="e.g. ramesh@enterprise.in"
-                            className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                          <div className="relative">
+                            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="email"
+                              required
+                              value={inlineEmail || formData.email}
+                              onChange={(e) => setInlineEmail(e.target.value)}
+                              placeholder="e.g. ramesh@enterprise.in"
+                              className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            />
+                          </div>
                         </div>
 
                         {inlineAuthMode === 'signup' && (
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                          <div className="space-y-1">
+                            <label className="block text-xs font-semibold text-slate-700">
                               Mobile Number
                             </label>
-                            <input
-                              type="tel"
-                              value={inlinePhone || formData.mobile}
-                              onChange={(e) => setInlinePhone(e.target.value)}
-                              placeholder="10-digit mobile"
-                              className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                            <div className="relative">
+                              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="tel"
+                                value={inlinePhone || formData.mobile}
+                                onChange={(e) => setInlinePhone(e.target.value)}
+                                placeholder="10-digit mobile"
+                                className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              />
+                            </div>
                           </div>
                         )}
 
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                            Password <span className="text-rose-400">*</span>
+                        <div className={`space-y-1 ${inlineAuthMode !== 'signup' ? 'sm:col-span-2' : ''}`}>
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Password <span className="text-rose-500">*</span>
                           </label>
                           <div className="relative">
+                            <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <input
                               type={showInlinePassword ? 'text' : 'password'}
                               required
                               value={inlinePassword}
                               onChange={(e) => setInlinePassword(e.target.value)}
                               placeholder="Enter password (min 6 chars)"
-                              className="w-full px-3.5 py-2.5 pr-9 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full pl-10 pr-10 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
                             <button
                               type="button"
                               onClick={() => setShowInlinePassword(!showInlinePassword)}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer"
+                              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                             >
                               {showInlinePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                           </div>
                         </div>
-
-                        <div className="flex items-end">
-                          <button
-                            type="submit"
-                            disabled={inlineAuthLoading}
-                            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black text-xs rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            {inlineAuthLoading ? (
-                              <span>Processing...</span>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span>{inlineAuthMode === 'signup' ? 'Register & Unlock Teaser' : 'Sign In & Unlock Teaser'}</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
                       </div>
 
                       {inlineAuthError && (
-                        <div className="p-2.5 bg-rose-950/80 border border-rose-800 text-rose-200 rounded-xl text-xs font-semibold flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <div className="p-2.5 bg-rose-50 border border-rose-200/80 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                           <span>{inlineAuthError}</span>
                         </div>
                       )}
 
                       {inlineAuthSuccess && (
-                        <div className="p-2.5 bg-emerald-950/80 border border-emerald-800 text-emerald-200 rounded-xl text-xs font-semibold flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200/80 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span>{inlineAuthSuccess}</span>
                         </div>
                       )}
+
+                      <button
+                        type="submit"
+                        disabled={inlineAuthLoading}
+                        className="w-full py-2.5 px-4 bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-850 active:scale-[0.99] disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm hover:shadow-md hover:shadow-slate-900/15 flex items-center justify-center gap-2 cursor-pointer mt-2"
+                      >
+                        {inlineAuthLoading ? (
+                          <span>Processing...</span>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>{inlineAuthMode === 'signup' ? 'Register & Unlock Teaser' : 'Sign In & Unlock Teaser'}</span>
+                          </>
+                        )}
+                      </button>
                     </form>
                   </div>
                 </div>
@@ -3496,7 +3552,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             </div>
           );
         })()}
-      </div>
+        </div>
+      </main>
 
       {/* Membership Plans Modal */}
       <MembershipPlansModal

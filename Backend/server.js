@@ -4,8 +4,9 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import connectDB from './config/db.js';
+import connectDB, { isDBConnected } from './config/db.js';
 import apiRouter from './routes/index.js';
+import visitorRoutes from './routes/visitorRoutes.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import logger from './utils/logger.js';
 import config from './config/env.js';
@@ -31,10 +32,16 @@ connectDB().catch(() => {});
 const corsOrigin = config.CORS_ORIGIN || process.env.CORS_ORIGIN || '*';
 
 const corsOptions = {
-  origin: corsOrigin === '*'
-    ? '*'
-    : corsOrigin.split(',').map((o) => o.trim().replace(/\/$/, '')),
-  credentials: corsOrigin !== '*',
+  origin: (origin, callback) => {
+    // Allow non-browser requests or wildcard
+    if (!origin || corsOrigin === '*') return callback(null, true);
+    const origins = corsOrigin.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+    if (origins.includes(origin) || origins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   exposedHeaders: ['Content-Disposition'],
@@ -91,6 +98,8 @@ app.get('/', (req, res) => {
 
 // Mount API Routes
 app.use('/api', apiRouter);
+app.use('/api/visitors', visitorRoutes);
+app.use('/visitors', visitorRoutes);
 
 // Centralized error handling
 app.use(notFound);

@@ -4,7 +4,7 @@ import { AuthUser } from '../types';
 import api from '../utils/apiClient';
 
 interface InternalPortalLoginProps {
-  portalType: 'admin' | 'ca' | 'prosync' | 'dpr';
+  portalType: 'admin' | 'ca' | 'prosync' | 'dpr' | 'ca-admin';
   onLoginSuccess: (user: AuthUser) => void;
   onNavigateHome: () => void;
 }
@@ -39,6 +39,11 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
       title: 'DPR Consultant Desk',
       subtitle: 'Technical project report drafting, engineering schedules, and techno-economic validation.',
       roleTag: 'Consultant Network'
+    },
+    'ca-admin': {
+      title: 'CA Network Admin Portal',
+      subtitle: 'Restricted administrative desk for Chartered Accountant onboarding, visiting card processing, and regional consultant coordination.',
+      roleTag: 'CA Operations Admin'
     }
   };
 

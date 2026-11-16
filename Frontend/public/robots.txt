@@ -1,9 +1,27 @@
 # robots.txt for Inisio Capital (https://inisio.vercel.app)
 User-agent: *
 Allow: /
+Allow: /assessment
+Allow: /how-it-works
+Allow: /about
+Allow: /industries
+Allow: /blogs
+Allow: /blogs/*
+Allow: /contact
+Allow: /faq
+
+# Restrict private API and internal dashboards
 Disallow: /api/
 Disallow: /user-dashboard
 Disallow: /dashboard
+Disallow: /promoter-portal
+Disallow: /admin
+Disallow: /admin-panel
+Disallow: /ca-admin
+Disallow: /ca-admin-dashboard
+Disallow: /ca-dashboard
+Disallow: /dpr-dashboard
+Disallow: /prosync-dashboard
 
 # Sitemaps
 Sitemap: https://inisio.vercel.app/sitemap.xml

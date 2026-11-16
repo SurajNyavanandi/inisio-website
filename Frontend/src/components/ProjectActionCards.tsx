@@ -10,18 +10,18 @@ export const ProjectActionCards: React.FC<ProjectActionCardsProps> = ({
   onNavigateToContact
 }) => {
   return (
-    <section className="py-6 sm:py-10 bg-gradient-to-b from-white via-slate-50/40 to-white">
+    <section className="py-6 sm:py-10 bg-linear-to-b from-white via-slate-50/40 to-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 sm:gap-12 lg:gap-14 max-w-4xl mx-auto items-center">
           
           {/* Card 1: Check Your Project Image */}
           <div
             onClick={onNavigateToAbout}
-            className="group cursor-pointer rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 bg-white border border-slate-200/80 max-w-[420px] mx-auto w-full"
+            className="group cursor-pointer rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 bg-white border border-slate-200/80 max-w-105 mx-auto w-full"
           >
             <img
               src="https://res.cloudinary.com/aessymvl/image/upload/v1786723928/WhatsApp_Image_2026-08-14_at_9.41.08_PM_qb41zh.jpg"
-              alt="About Inisio Greenfield Advisory"
+              alt="Inisio Greenfield Project Advisory and Bank Debt Syndication Desk"
               loading="lazy"
               width={420}
               height={260}
@@ -33,11 +33,11 @@ export const ProjectActionCards: React.FC<ProjectActionCardsProps> = ({
           {/* Card 2: Get Your Project Assessment Image */}
           <div
             onClick={onNavigateToContact}
-            className="group cursor-pointer rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 bg-white border border-slate-200/80 max-w-[420px] mx-auto w-full"
+            className="group cursor-pointer rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 bg-white border border-slate-200/80 max-w-105 mx-auto w-full"
           >
             <img
               src="https://res.cloudinary.com/aessymvl/image/upload/v1786723927/WhatsApp_Image_2026-08-14_at_9.41.14_PM_m1cokg.jpg"
-              alt="Work With Us - Inisio Project Syndicate"
+              alt="Partner With Inisio - Institutional Project Finance Syndicate Desk"
               loading="lazy"
               width={420}
               height={260}

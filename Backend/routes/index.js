@@ -15,6 +15,8 @@ import testimonialRoutes from './testimonialRoutes.js';
 import statRoutes from './statRoutes.js';
 import blogRoutes from './blogRoutes.js';
 import faqRoutes from './faqRoutes.js';
+import caAdminRoutes from './caAdminRoutes.js';
+import visitorRoutes from './visitorRoutes.js';
 
 import { isDBConnected } from '../config/db.js';
 import config from '../config/env.js';
@@ -62,5 +64,7 @@ router.use('/testimonials', testimonialRoutes);
 router.use('/stats', statRoutes);
 router.use('/blogs', blogRoutes);
 router.use('/faqs', faqRoutes);
+router.use('/ca-admin', caAdminRoutes);
+router.use('/visitors', visitorRoutes);
 
 export default router;

@@ -1,3 +1,5 @@
+import { resolveApiUrl } from './apiClient';
+
 /**
  * Inisio Visitor Tracking Store (Phase 1)
  *
@@ -213,7 +215,7 @@ export function recordPageView(page: string, email?: string): void {
 
     // Optional asynchronous background sync to backend if API is available
     if (typeof fetch !== 'undefined') {
-      fetch('/api/visitors/track', {
+      fetch(resolveApiUrl('/visitors/track'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId, path: page, userEmail: email }),

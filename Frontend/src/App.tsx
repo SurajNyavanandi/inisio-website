@@ -31,6 +31,7 @@ const CADashboard = lazy(() => import('./components/CADashboard').then(m => ({ d
 const AdminDashboardView = lazy(() => import('./components/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
 const ProsyncDashboard = lazy(() => import('./components/ProsyncDashboard').then(m => ({ default: m.ProsyncDashboard })));
 const DPRConsultantDashboard = lazy(() => import('./components/DPRConsultantDashboard').then(m => ({ default: m.DPRConsultantDashboard })));
+const CAAdminDashboard = lazy(() => import('./components/CAAdminDashboard').then(m => ({ default: m.CAAdminDashboard })));
 const ProjectAssessmentPage = lazy(() => import('./components/ProjectAssessmentPage').then(m => ({ default: m.ProjectAssessmentPage })));
 const LatestBlogs = lazy(() => import('./components/LatestBlogs').then(m => ({ default: m.LatestBlogs })));
 const BlogsPage = lazy(() => import('./components/BlogsPage').then(m => ({ default: m.BlogsPage })));
@@ -39,6 +40,7 @@ const BlogsPage = lazy(() => import('./components/BlogsPage').then(m => ({ defau
 const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
 const MembershipPlansModal = lazy(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
 const ConsultationModal = lazy(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
+const CaActivationModal = lazy(() => import('./components/CaActivationModal').then(m => ({ default: m.CaActivationModal })));
 const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
 
 export default function App() {
@@ -56,6 +58,9 @@ export default function App() {
 
     if (path === '/user-dashboard' || path === '/dashboard' || path === '/promoter-portal') {
       return 'user-dashboard';
+    }
+    if (path === '/ca-admin-dashboard' || path === '/ca-admin') {
+      return 'ca-admin-dashboard';
     }
     if (path === '/blogs' || path.startsWith('/blogs/') || path === '/blog' || path.startsWith('/blog/')) {
       return 'blogs';
@@ -98,6 +103,8 @@ export default function App() {
   const [editingProjectForAssessment, setEditingProjectForAssessment] = useState<any>(null);
 
   const [authPrefill, setAuthPrefill] = useState<{ email?: string; name?: string; phone?: string; otp?: string }>({});
+  const [activationToken, setActivationToken] = useState<string>('');
+  const [activationModalOpen, setActivationModalOpen] = useState(false);
 
   // Dynamically verify active user token and session with the backend API
   useEffect(() => {
@@ -172,6 +179,15 @@ export default function App() {
         const email = searchParams.get('email') || searchParams.get('to');
         const otp = searchParams.get('otp') || searchParams.get('token') || searchParams.get('code');
 
+        if (action === 'activate-ca' || searchParams.has('activateCa')) {
+          const claimToken = searchParams.get('token') || searchParams.get('claimToken') || '';
+          if (claimToken) {
+            setActivationToken(claimToken);
+            setActivationModalOpen(true);
+            return;
+          }
+        }
+
         if (action === 'reset-password' || searchParams.has('resetPassword') || searchParams.has('resetToken')) {
           setAuthInitialMode('reset-password');
           setAuthPrefill({
@@ -191,6 +207,8 @@ export default function App() {
 
       if (path === '/user-dashboard' || path === '/dashboard' || path === '/promoter-portal') {
         setActiveTab('user-dashboard');
+      } else if (path === '/ca-admin-dashboard' || path === '/ca-admin') {
+        setActiveTab('ca-admin-dashboard');
       } else if (path === '/blogs' || path.startsWith('/blogs/') || path === '/blog' || path.startsWith('/blog/')) {
         setActiveTab('blogs');
         if (path.startsWith('/blogs/')) {
@@ -233,6 +251,14 @@ export default function App() {
         // Prevent browser's default Save action
         e.preventDefault();
         setIsAdminPanelOpen((prev) => !prev);
+      }
+
+      // Dedicated keyboard shortcut Ctrl+Shift+C or Cmd+Shift+C to open CA Admin Dashboard
+      if (isModifierActive && isShift && (key === 'c' || code === 'KeyC')) {
+        e.preventDefault();
+        setActiveTab('ca-admin-dashboard');
+        window.history.pushState({}, '', '/ca-admin');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -379,6 +405,7 @@ export default function App() {
 
   const getDashboardTabForRole = (role?: string) => {
     if (!role) return 'user-dashboard';
+    if (role === 'ca_admin') return 'ca-admin-dashboard';
     if (role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3') return 'admin-dashboard';
     if (role === 'ca') return 'ca-dashboard';
     if (role === 'prosync_admin' || role === 'prosync') return 'prosync-dashboard';
@@ -398,6 +425,8 @@ export default function App() {
         return role === 'user';
       case 'admin-dashboard':
         return isAdmin;
+      case 'ca-admin-dashboard':
+        return role === 'ca_admin' || isAdmin;
       case 'ca-dashboard':
         return role === 'ca';
       case 'prosync-dashboard':
@@ -409,19 +438,28 @@ export default function App() {
     }
   };
 
-  const isNonAdminDashboard =
-    (activeTab === 'user-dashboard' ||
-      activeTab === 'ca-dashboard' ||
-      activeTab === 'dpr-dashboard' ||
-      activeTab === 'prosync-dashboard') &&
-    Boolean(currentUser) &&
-    isRoleAuthorizedForDashboard(currentUser?.role, activeTab);
+  // When a user is logged in with any role, or on dashboard/sub-screen views,
+  // open in full-screen with no site header or footer. Logged-out users see public pages with header/footer.
+  const isUserLoggedIn = Boolean(currentUser);
+  const isDashboardView =
+    activeTab === 'user-dashboard' ||
+    activeTab === 'ca-dashboard' ||
+    activeTab === 'dpr-dashboard' ||
+    activeTab === 'prosync-dashboard' ||
+    activeTab === 'ca-admin-dashboard' ||
+    activeTab === 'admin-dashboard' ||
+    activeTab === 'assessment';
+
+  const isFullScreenMode = isUserLoggedIn || isDashboardView;
 
   return (
-    <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isNonAdminDashboard ? 'h-screen overflow-hidden' : 'justify-between overflow-x-hidden'}`}>
-      <div className={`w-full min-w-0 ${isNonAdminDashboard ? 'h-full flex flex-col' : ''}`}>
-        {/* Navbar */}
-        {!isNonAdminDashboard && (
+    <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isFullScreenMode ? 'h-screen overflow-hidden' : 'justify-between overflow-x-hidden'}`}>
+      {/* Dynamic SEO Meta, Titles & Structured Data */}
+      <SEOHead activeTab={activeTab} activeBlogSlug={activeBlogSlug} />
+
+      <div className={`w-full min-w-0 ${isFullScreenMode ? 'h-full flex flex-col' : ''}`}>
+        {/* Navbar (Hidden in full-screen mode when logged in or viewing dashboards) */}
+        {!isFullScreenMode && (
           <Navbar
             activeTab={activeTab}
             onSelectTab={handleSelectTab}
@@ -436,7 +474,7 @@ export default function App() {
         )}
 
         {/* View Switcher */}
-        <main className={isNonAdminDashboard ? "w-full h-full overflow-hidden p-0 m-0" : "transition-all duration-300 pt-16 sm:pt-20"}>
+        <main className={isFullScreenMode ? "w-full h-full overflow-hidden p-0 m-0" : "transition-all duration-300 pt-16 sm:pt-20"}>
           {activeTab === 'home' && (
             <div className="animate-in fade-in duration-300 pt-0 font-sans space-y-0">
               <div id="hero">
@@ -571,6 +609,19 @@ export default function App() {
                 </div>
               </Suspense>
             )
+          )}
+
+          {/* CA Admin Operations Dashboard (Completely separate panel with dedicated CA_ADMIN login check) */}
+          {activeTab === 'ca-admin-dashboard' && (
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <CAAdminDashboard
+                  user={currentUser}
+                  onLogout={handleLogout}
+                  onNavigateHome={() => handleSelectTab('home')}
+                />
+              </div>
+            </Suspense>
           )}
 
           {/* DPR Consultant Dashboard (Only for role="dpr_consultant" or authorized admins) */}
@@ -749,9 +800,9 @@ export default function App() {
         </main>
       </div>
 
-      {!isNonAdminDashboard && (
+      {!isFullScreenMode && (
         <div>
-          {/* Footer */}
+          {/* Footer (Hidden in full-screen mode when logged in or viewing dashboards) */}
           <Footer
             onSelectTab={handleSelectTab}
             onOpenAssessment={() => handleOpenAssessment()}
@@ -798,6 +849,21 @@ export default function App() {
         </Suspense>
       )}
 
+      {/* CA Profile Claim Activation Modal */}
+      {activationModalOpen && (
+        <Suspense fallback={null}>
+          <CaActivationModal
+            token={activationToken}
+            isOpen={activationModalOpen}
+            onClose={() => setActivationModalOpen(false)}
+            onActivationSuccess={(activatedUser) => {
+              handleLoginSuccess(activatedUser);
+              setActiveTab('ca-dashboard');
+            }}
+          />
+        </Suspense>
+      )}
+
       {/* Admin Panel (Opened via Ctrl+Shift+S or /admin) */}
       {isAdminPanelOpen && (
         <Suspense fallback={null}>
@@ -814,7 +880,7 @@ export default function App() {
       )}
 
       {/* Floating Call & WhatsApp Buttons */}
-      {!isNonAdminDashboard && <FloatingContactButtons />}
+      {!isFullScreenMode && <FloatingContactButtons />}
     </div>
   );
 }

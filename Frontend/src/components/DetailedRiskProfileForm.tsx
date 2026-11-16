@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
 import { UISelect } from './ui/Select';
+import { Input } from './ui/Input';
+import { Checkbox } from './ui/Checkbox';
 
 export interface DetailedRiskProfileData {
   educationalBackground?: string;
@@ -95,13 +97,13 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
           <label className="text-xs font-semibold text-slate-700 block">
             Lead Promoter CIBIL Score (or Commercial CMR) *
           </label>
-          <input
+          <Input
             type="number"
             min="300"
             max="900"
             value={formData.cibilScore}
             onChange={(e) => setFormData({ ...formData, cibilScore: Number(e.target.value) })}
-            className="w-full px-3.5 py-2.5 text-xs bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:outline-none"
+            className="bg-white border-slate-300"
           />
         </div>
 
@@ -122,6 +124,17 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
             triggerClassName="bg-white border-slate-300 text-xs"
           />
         </div>
+      </div>
+
+      <div className="flex items-center gap-2.5 pt-1">
+        <Checkbox
+          id="isNewToCredit"
+          checked={!!formData.isNewToCredit}
+          onCheckedChange={(checked) => setFormData({ ...formData, isNewToCredit: !!checked })}
+        />
+        <label htmlFor="isNewToCredit" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">
+          First-time commercial borrower / New to commercial credit (NTC)
+        </label>
       </div>
 
       <div className="pt-2">

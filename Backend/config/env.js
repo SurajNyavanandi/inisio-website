@@ -63,6 +63,7 @@ const databaseUri = process.env.MONGO_URI || process.env.MONGODB_URI || process.
 const jwtSecret = (process.env.JWT_SECRET || 'inisio_dev_fallback_secret_must_override_in_prod').trim();
 const adminEmail1 = (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAIL_1 || 'admin@example.com').trim().toLowerCase();
 const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL_2 || 'superadmin@example.com').trim().toLowerCase();
+const caAdminEmail = (process.env.CA_ADMIN || process.env.CA_ADMIN_EMAIL || 'ca.admin@example.com').trim().toLowerCase();
 
 export const config = {
   // Flat properties (Phase 1 standard)
@@ -81,6 +82,8 @@ export const config = {
   ADMIN_EMAIL: adminEmail1,
   SUPERADMIN_EMAIL: superAdminEmail,
   SUPER_ADMIN_EMAIL: superAdminEmail,
+  CA_ADMIN: caAdminEmail,
+  CA_ADMIN_EMAIL: caAdminEmail,
   ALLOW_MEMORY_FALLBACK: process.env.ALLOW_MEMORY_FALLBACK === 'true' || !isProduction,
   allowMemoryFallback: process.env.ALLOW_MEMORY_FALLBACK === 'true' || !isProduction,
   APP_URL: (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5174').replace(/\/$/, ''),
@@ -110,6 +113,7 @@ export const config = {
   admin: {
     email1: adminEmail1,
     email2: superAdminEmail,
+    caAdmin: caAdminEmail,
     extraEmails: (process.env.ADMIN_EMAILS || '')
       .split(',')
       .map((e) => e.trim().toLowerCase())

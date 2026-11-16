@@ -1,13 +1,30 @@
 {
-  "name": "inisio-web",
+  "name": "inisio-website",
   "version": "1.0.0",
   "private": true,
   "description": "Inisio - Greenfield Project Consultancy & Bank Funding Platform",
+  "workspaces": [
+    "Frontend",
+    "Backend"
+  ],
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "overrides": {
+    "body-parser": "^2.4.0",
+    "ip-address": "^10.7.6",
+    "minimatch": "^11.0.8"
+  },
   "scripts": {
-    "dev:backend": "npm run dev --prefix Backend",
-    "dev:frontend": "npm run dev --prefix Frontend",
-    "start:backend": "npm run start --prefix Backend",
-    "build": "npm run build --prefix Frontend",
-    "test:api": "node Backend/test-all-endpoints.js"
+    "dev": "node Scripts/dev.js",
+    "dev:all": "node Scripts/dev.js",
+    "dev:backend": "npm run dev --workspace=Backend",
+    "dev:frontend": "npm run dev --workspace=Frontend",
+    "build": "npm run build --workspace=Frontend",
+    "build:frontend": "npm run build --workspace=Frontend",
+    "start": "npm run start --workspace=Backend",
+    "lint": "npm run lint --workspace=Frontend",
+    "preview": "npm run preview --workspace=Frontend"
   }
 }

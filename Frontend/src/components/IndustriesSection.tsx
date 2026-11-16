@@ -44,7 +44,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
 export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
   onSelectIndustryForAssessment,
   onOpenAssessment,
-  selectedIndustryName
+  selectedIndustryName,
+  isStandalone = false
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [industriesList, setIndustriesList] = useState<any[]>([]);
@@ -107,9 +108,15 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
               <span>Sector-Specific Underwriting Criteria</span>
             </p>
-            <h2 className="font-manrope text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              Greenfield Project Sectors &amp; Bankability Benchmarks
-            </h2>
+            {isStandalone ? (
+              <h1 className="font-manrope text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                Greenfield Project Sectors &amp; Bankability Benchmarks
+              </h1>
+            ) : (
+              <h2 className="font-manrope text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                Greenfield Project Sectors &amp; Bankability Benchmarks
+              </h2>
+            )}
             <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
               Every industrial domain has distinct debt-service norms, promoter contribution thresholds, and state subsidy schemes. Select your sector to evaluate bank loan feasibility.
             </p>

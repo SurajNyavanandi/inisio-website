@@ -2,6 +2,7 @@ export type UserRole =
   | 'user'
   | 'promoter'
   | 'ca'
+  | 'ca_admin'
   | 'dpr_consultant'
   | 'prosync'
   | 'prosync_admin'

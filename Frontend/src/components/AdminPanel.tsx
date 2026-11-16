@@ -127,167 +127,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [currencyUnit, setCurrencyUnit] = useState<CurrencyUnit>('Cr');
 
   // Selected Project for details view
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('proj_1');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-  // 1. Projects State
+  // 1. Projects State (starts empty, no dummy projects)
   const [projects, setProjects] = useState<ProjectEntity[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEY_PROJECTS);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: 'proj_1',
-        name: 'Apex Green Hydrogen & Solar Park',
-        industry: 'Renewable Energy',
-        location: 'Gujarat, India',
-        promoterCount: 2,
-        promoters: [
-          {
-            id: 'prom_1',
-            name: 'Rajesh Varma',
-            experience: '18 Years',
-            qualification: 'B.Tech (Chemical), MBA Finance',
-            shareholdingPct: 60,
-            role: 'Managing Director'
-          },
-          {
-            id: 'prom_2',
-            name: 'Ananya Sharma',
-            experience: '12 Years',
-            qualification: 'M.S. Energy Systems',
-            shareholdingPct: 40,
-            role: 'Technical Director'
-          }
-        ],
-        costComponents: [
-          { id: 'cost_1', category: 'Land & Site Infrastructure', amountCr: 8.5 },
-          { id: 'cost_2', category: 'Electrolyzers & Solar Arrays', amountCr: 32.0 },
-          { id: 'cost_3', category: 'Civil & Structural Works', amountCr: 6.2 },
-          { id: 'cost_4', category: 'Working Capital Margin', amountCr: 3.3 }
-        ],
-        meansOfFinance: {
-          equityCr: 15.0,
-          debtCr: 30.0,
-          subsidyCr: 5.0
-        },
-        checklistUploaded: true,
-        checklistFileName: 'indicative_bank_checklist_v1.pdf',
-        documents: {
-          companyKyc: 'Apex_Company_Certificate_KYC.pdf',
-          promoterKyc: 'Promoters_KYC_Dossier.pdf',
-          dpr: 'Apex_Techno_Economic_DPR_Draft.pdf'
-        },
-        isFunded: false
-      },
-      {
-        id: 'proj_2',
-        name: 'Medix Speciality Pharma Formulation Plant',
-        industry: 'Pharmaceuticals',
-        location: 'Hyderabad, India',
-        promoterCount: 3,
-        promoters: [
-          {
-            id: 'prom_3',
-            name: 'Dr. Suresh Reddy',
-            experience: '22 Years',
-            qualification: 'Ph.D. Pharmaceutics',
-            shareholdingPct: 50,
-            role: 'Chief Promoter'
-          },
-          {
-            id: 'prom_4',
-            name: 'Priyanka Rao',
-            experience: '14 Years',
-            qualification: 'C.A., M.Com',
-            shareholdingPct: 30,
-            role: 'CFO & Partner'
-          },
-          {
-            id: 'prom_5',
-            name: 'Vikram Joshi',
-            experience: '10 Years',
-            qualification: 'B.Pharmacy, GMP Specialist',
-            shareholdingPct: 20,
-            role: 'Operations Head'
-          }
-        ],
-        costComponents: [
-          { id: 'cost_5', category: 'Cleanroom & HVAC Systems', amountCr: 12.0 },
-          { id: 'cost_6', category: 'Formulation Machinery (USFDA)', amountCr: 18.5 },
-          { id: 'cost_7', category: 'Civil Building Construction', amountCr: 9.0 }
-        ],
-        meansOfFinance: {
-          equityCr: 11.5,
-          debtCr: 25.0,
-          subsidyCr: 3.0
-        },
-        checklistUploaded: false,
-        documents: {
-          companyKyc: 'Medix_Pharma_Incorporation.pdf'
-        },
-        isFunded: true
+      if (saved) {
+        const parsed: ProjectEntity[] = JSON.parse(saved);
+        // Exclude legacy dummy demo projects
+        return parsed.filter(p => p.id !== 'proj_1' && p.id !== 'proj_2' && !p.name?.includes('Apex Green Hydrogen'));
       }
-    ];
+    } catch {}
+    return [];
   });
 
-  // 2. DPR Requests State
+  // 2. DPR Requests State (starts empty, no dummy requests)
   const [dprRequests, setDprRequests] = useState<DprRequest[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEY_DPR);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: 'dpr_1',
-        projectName: 'Apex Green Hydrogen & Solar Park',
-        promoterName: 'Rajesh Varma',
-        email: 'rajesh@apexgreen.in',
-        phone: '+91 98765 43210',
-        date: '2026-11-14',
-        assignedConsultant: 'DPR Consultant 1'
-      },
-      {
-        id: 'dpr_2',
-        projectName: 'Zenith Logistics & Cold Chain Hub',
-        promoterName: 'Amit Saxena',
-        email: 'amit@zenithlogistics.com',
-        phone: '+91 98220 11223',
-        date: '2026-11-15',
-        assignedConsultant: undefined
+      if (saved) {
+        const parsed: DprRequest[] = JSON.parse(saved);
+        return parsed.filter(d => d.id !== 'dpr_1' && d.id !== 'dpr_2' && !d.projectName?.includes('Apex Green Hydrogen'));
       }
-    ];
+    } catch {}
+    return [];
   });
 
-  // 3. Consultations State
+  // 3. Consultations State (starts empty, no dummy consultations)
   const [consultations, setConsultations] = useState<ConsultationItem[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem(STORAGE_KEY_CONSULTATIONS);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: 'cons_1',
-        clientName: 'Sanjay Deshmukh',
-        email: 'sanjay@deshmukhsteel.com',
-        phone: '+91 94231 55667',
-        projectCategory: 'Steel Manufacturing (₹80 Cr)',
-        date: '2026-11-14',
-        assignedTo: 'Prosync'
-      },
-      {
-        id: 'cons_2',
-        clientName: 'Kavita Nair',
-        email: 'kavita@greengrid.org',
-        phone: '+91 99887 66554',
-        projectCategory: 'Biomass Energy & Agro (₹25 Cr)',
-        date: '2026-11-15',
-        assignedTo: undefined
+      if (saved) {
+        const parsed: ConsultationItem[] = JSON.parse(saved);
+        return parsed.filter(c => c.id !== 'cons_1' && c.id !== 'cons_2');
       }
-    ];
+    } catch {}
+    return [];
   });
 
   // 4. Visitors State
@@ -344,6 +223,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     const res = validateAdminEmail(emailInput);
     if (!res.allowed || !res.role) {
       setAuthError('Access Denied');
+      return;
+    }
+
+    if (res.role === 'ca_admin') {
+      try {
+        localStorage.setItem(
+          'inisio_ca_admin_session',
+          JSON.stringify({ email: emailInput.trim().toLowerCase(), token: 'ca_admin_active_session' })
+        );
+      } catch {}
+      onClose();
+      if (typeof window !== 'undefined') {
+        window.history.pushState({}, '', '/ca-admin');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
       return;
     }
 
@@ -728,18 +622,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 {/* Brand Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
                       I
                     </div>
                     <div>
-                      <div className="text-sm font-extrabold text-white font-manrope">Admin Panel</div>
-                      <div className="text-[10px] text-slate-400">Phase 1</div>
+                      <div className="text-sm font-extrabold text-white font-manrope">Inisio</div>
+                      <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Admin Panel</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Role Indicator */}
-                <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60 flex items-center justify-between">
                   <span
                     className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
                       activeRole === 'superadmin'
@@ -749,6 +643,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   >
                     {activeRole === 'superadmin' ? 'Super Admin' : 'Admin'}
                   </span>
+                  <span className="text-[11px] text-slate-400 font-medium">Phase 1</span>
                 </div>
 
                 {/* Left Sidebar Navigation */}
@@ -756,65 +651,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   <button
                     type="button"
                     onClick={() => setActiveTab('overview')}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === 'overview'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                     }`}
                   >
-                    <LayoutDashboard className="w-4 h-4" />
+                    <LayoutDashboard className="w-4 h-4 shrink-0" />
                     <span>Overview</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab('projects')}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === 'projects'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                     }`}
                   >
-                    <Building2 className="w-4 h-4" />
+                    <Building2 className="w-4 h-4 shrink-0" />
                     <span>Projects</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab('dpr')}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === 'dpr'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                     }`}
                   >
-                    <FileText className="w-4 h-4" />
+                    <FileText className="w-4 h-4 shrink-0" />
                     <span>DPR Requests</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab('consultations')}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === 'consultations'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                     }`}
                   >
-                    <PhoneCall className="w-4 h-4" />
+                    <PhoneCall className="w-4 h-4 shrink-0" />
                     <span>Consultations</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setActiveTab('visitors')}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === 'visitors'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                     }`}
                   >
-                    <Globe className="w-4 h-4" />
+                    <Globe className="w-4 h-4 shrink-0" />
                     <span>Visitors</span>
                   </button>
                 </nav>
@@ -939,7 +834,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
-                            {projects.map((proj) => {
+                            {projects.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="py-8 text-center text-xs text-slate-500 font-medium">
+                                  No projects yet
+                                </td>
+                              </tr>
+                            ) : (
+                              projects.map((proj) => {
                               const capex = proj.costComponents.reduce((acc, c) => acc + (c.amountCr || 0), 0);
                               return (
                                 <tr key={proj.id} className="hover:bg-slate-50/50">
@@ -969,7 +871,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                   </td>
                                 </tr>
                               );
-                            })}
+                            }))}
                           </tbody>
                         </table>
                       </div>
@@ -1052,6 +954,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </div>
                     </div>
 
+                    {projects.length === 0 || !currentProject ? (
+                      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
+                        <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <h3 className="text-sm font-bold text-slate-800">No projects yet</h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {activeRole === 'superadmin' ? 'Click "New Project" above to create a project entity.' : 'No projects have been registered yet.'}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
                     {/* Probability Meter (Starts at 25%, rises to 100% when marked as funded) */}
                     <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
                       <div className="flex items-center justify-between">
@@ -1454,6 +1366,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         })}
                       </div>
                     </div>
+                    </>
+                    )}
                   </div>
                 )}
 
@@ -1477,7 +1391,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {dprRequests.map((req) => (
+                          {dprRequests.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="py-8 text-center text-xs text-slate-500 font-medium">
+                                No DPR requests yet
+                              </td>
+                            </tr>
+                          ) : (
+                            dprRequests.map((req) => (
                             <tr key={req.id} className="hover:bg-slate-50/50">
                               <td className="py-3 px-5 font-semibold text-slate-900">
                                 {req.projectName}
@@ -1510,7 +1431,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 )}
                               </td>
                             </tr>
-                          ))}
+                          )))}
                         </tbody>
                       </table>
                     </div>
@@ -1538,7 +1459,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {consultations.map((c) => (
+                          {consultations.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-xs text-slate-500 font-medium">
+                                No consultations yet
+                              </td>
+                            </tr>
+                          ) : (
+                            consultations.map((c) => (
                             <tr key={c.id} className="hover:bg-slate-50/50">
                               <td className="py-3 px-5 font-semibold text-slate-900">{c.clientName}</td>
                               <td className="py-3 px-5 text-slate-600">
@@ -1565,7 +1493,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 )}
                               </td>
                             </tr>
-                          ))}
+                          )))}
                         </tbody>
                       </table>
                     </div>

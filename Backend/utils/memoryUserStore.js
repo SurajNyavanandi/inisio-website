@@ -12,6 +12,16 @@ export const getAdminEmail2 = () => {
   return (process.env.SUPER_ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL_2 || 'superadmin@example.com').toLowerCase().trim();
 };
 
+export const getCaAdminEmail = () => {
+  return (process.env.CA_ADMIN || process.env.CA_ADMIN_EMAIL || 'ca.admin@example.com').toLowerCase().trim();
+};
+
+export const isCaAdminEmail = (email) => {
+  if (!email) return false;
+  const clean = String(email).toLowerCase().trim();
+  return clean === getCaAdminEmail() || clean === 'ca.admin@example.com' || clean === 'caadmin@example.com';
+};
+
 export const getAuthorizedAdminEmails = () => {
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
@@ -47,6 +57,21 @@ export const getMemoryUsers = () => {
 
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
+  const caAdmin = getCaAdminEmail();
+
+  if (caAdmin && !memoryUsers.some((u) => u.email.toLowerCase() === caAdmin)) {
+    memoryUsers.unshift({
+      _id: 'user_ca_admin_dynamic',
+      name: 'CA Operations Admin',
+      email: caAdmin,
+      password: '',
+      role: 'ca_admin',
+      company: 'Inisio CA Network Administration',
+      phone: process.env.CA_ADMIN_PHONE || '+91 98765 43210',
+      isVerified: true,
+      createdAt: new Date(),
+    });
+  }
 
   if (admin2 && !memoryUsers.some((u) => u.email.toLowerCase() === admin2)) {
     memoryUsers.unshift({
@@ -137,6 +162,8 @@ export const deleteMemoryUser = (id) => {
 export default {
   getAdminEmail1,
   getAdminEmail2,
+  getCaAdminEmail,
+  isCaAdminEmail,
   getAuthorizedAdminEmails,
   isAuthorizedAdminEmail,
   AUTHORIZED_ADMIN_EMAILS,

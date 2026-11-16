@@ -150,27 +150,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
       {/* Fixed Left Sidebar (Drawer on mobile, fixed column on desktop) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200/90 flex flex-col justify-between p-5 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shrink-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 border-r border-slate-800 flex flex-col justify-between p-5 transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 shrink-0 ${
           isMobileDrawerOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         <div className="space-y-6">
           {/* Header & Role Badge */}
-          <div className="space-y-2 pb-4 border-b border-slate-100">
+          <div className="space-y-2 pb-4 border-b border-slate-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs font-bold">
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-sm font-extrabold text-slate-900 font-manrope leading-tight">Inisio</div>
-                  <span className="text-[10px] font-bold text-blue-700 tracking-wider uppercase">Promoter Portal</span>
+                  <div className="text-sm font-extrabold text-white font-manrope leading-tight">Inisio</div>
+                  <span className="text-[10px] font-bold text-blue-400 tracking-wider uppercase">Promoter Portal</span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsMobileDrawerOpen(false)}
-                className="lg:hidden p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                className="lg:hidden p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
                 aria-label="Close navigation"
               >
                 <X className="w-4 h-4" />
@@ -178,10 +178,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
             
             <div className="pt-2 flex items-center justify-between">
-              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30">
                 Promoter Desk
               </span>
-              <span className="text-[11px] text-slate-500 font-medium truncate max-w-27.5">
+              <span className="text-[11px] text-slate-400 font-medium truncate max-w-27.5">
                 {user?.company || user?.name || user?.email?.split('@')[0]}
               </span>
             </div>
@@ -200,7 +200,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:text-blue-600 hover:bg-blue-50/70'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -210,7 +210,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   {item.count !== undefined && (
                     <span
                       className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        isActive ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'
+                        isActive ? 'bg-blue-700 text-white' : 'bg-slate-800 text-slate-400 border border-slate-700'
                       }`}
                     >
                       {item.count}
@@ -229,7 +229,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 onOpenAssessment();
                 setIsMobileDrawerOpen(false);
               }}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Appraise Project</span>
@@ -238,7 +238,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="pt-4 border-t border-slate-100 space-y-3">
+        <div className="pt-4 border-t border-slate-800 space-y-3">
           <div className="flex items-center gap-2 text-[11px] text-slate-400">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span>Real-time Pipeline Sync</span>
@@ -249,7 +249,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <button
                 type="button"
                 onClick={onNavigateHome}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
                 <Home className="w-3.5 h-3.5" />
                 <span>Website</span>
@@ -260,7 +260,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <button
                 type="button"
                 onClick={onLogout}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Sign Out</span>
@@ -462,8 +462,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden space-y-4">
               <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-bold text-slate-900 font-manrope">My Greenfield Projects</h2>
-                  <p className="text-xs text-slate-500">Live appraisal tracking, DSCR evaluation, and credit readiness.</p>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={handleGoBack}
+                      title="Go Back"
+                      className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-2xs transition-colors cursor-pointer group shrink-0"
+                    >
+                      <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+                    </button>
+                    <h2 className="text-xl font-bold text-slate-900 font-manrope">My Greenfield Projects</h2>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Live appraisal tracking, DSCR evaluation, and credit readiness.</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="relative">
@@ -576,9 +586,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <Calculator className="w-4 h-4" />
                   <span>Credit Feasibility Engine</span>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 font-manrope">
-                  Initiate Greenfield Project Appraisal
-                </h2>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleGoBack}
+                    title="Go Back"
+                    className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-2xs transition-colors cursor-pointer group shrink-0"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+                  </button>
+                  <h2 className="text-2xl font-bold text-slate-900 font-manrope">
+                    Initiate Greenfield Project Appraisal
+                  </h2>
+                </div>
                 <p className="text-sm text-slate-500">
                   Evaluate debt service coverage ratio (DSCR), loan eligibility, promoter equity structuring, and generate lender-ready teasers.
                 </p>
@@ -636,9 +656,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <Calendar className="w-4 h-4" />
                   <span>Empaneled CA &amp; Debt Syndication Advisory</span>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 font-manrope">
-                  Chartered Accountant Advisory Desk
-                </h2>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleGoBack}
+                    title="Go Back"
+                    className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-2xs transition-colors cursor-pointer group shrink-0"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+                  </button>
+                  <h2 className="text-2xl font-bold text-slate-900 font-manrope">
+                    Chartered Accountant Advisory Desk
+                  </h2>
+                </div>
                 <p className="text-sm text-slate-500">
                   Schedule direct one-on-one consultation with senior credit appraisers and chartered accountants to review your CMA data and debt structure.
                 </p>
@@ -687,9 +717,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <Crown className="w-4 h-4" />
                   <span>Bankability &amp; Syndication Membership</span>
                 </div>
-                <h2 className="text-2xl font-bold text-slate-900 font-manrope">
-                  Promoter Membership &amp; Advisory Tiers
-                </h2>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleGoBack}
+                    title="Go Back"
+                    className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 shadow-2xs transition-colors cursor-pointer group shrink-0"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+                  </button>
+                  <h2 className="text-2xl font-bold text-slate-900 font-manrope">
+                    Promoter Membership &amp; Advisory Tiers
+                  </h2>
+                </div>
                 <p className="text-sm text-slate-500">
                   Unlock priority debt syndication, unlimited financial model evaluations, and direct lender consortium representation.
                 </p>
