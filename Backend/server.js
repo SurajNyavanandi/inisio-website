@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 import connectDB, { isDBConnected } from './config/db.js';
 import apiRouter from './routes/index.js';
 import visitorRoutes from './routes/visitorRoutes.js';
@@ -23,6 +24,7 @@ const backendEnvPath = fs.existsSync(path.resolve(__dirname, '.env'))
 dotenv.config({ path: backendEnvPath });
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = config.PORT;
 
 // Connect to MongoDB Atlas
@@ -71,7 +73,7 @@ app.get('/health', (req, res) => {
     });
   }
 
-  if (config.ALLOW_MEMORY_FALLBACK && !config.isProd) {
+  if (config.ALLOW_MEMORY_FALLBACK) {
     return res.status(200).json({
       status: 'degraded',
       database: 'memory_fallback',
@@ -86,20 +88,57 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root service metadata route
-app.get('/', (req, res) => {
-  res.json({
-    service: 'Inisio Greenfield Advisory & Debt Syndication API',
-    status: 'active',
-    health: '/health',
-    version: '1.0.0',
-  });
-});
-
 // Mount API Routes
 app.use('/api', apiRouter);
 app.use('/api/visitors', visitorRoutes);
 app.use('/visitors', visitorRoutes);
+
+// Serve built Frontend SPA from Frontend/dist
+const frontendDistPath = path.resolve(__dirname, '../Frontend/dist');
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
+
+if (fs.existsSync(frontendDistPath)) {
+  app.use(
+    express.static(frontendDistPath, {
+      setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === 'index.html') {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    })
+  );
+  app.get('*', (req, res, next) => {
+    if (
+      req.path.startsWith('/api') ||
+      req.path === '/health' ||
+      req.path.startsWith('/visitors') ||
+      req.path.startsWith('/assets/') ||
+      /\.[a-z0-9]+$/i.test(req.path)
+    ) {
+      return next();
+    }
+    if (fs.existsSync(frontendIndexPath)) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.sendFile(frontendIndexPath);
+    }
+    return next();
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({
+      service: 'Inisio Greenfield Advisory & Debt Syndication API',
+      status: 'active',
+      health: '/health',
+      version: '1.0.0',
+    });
+  });
+}
 
 // Centralized error handling
 app.use(notFound);

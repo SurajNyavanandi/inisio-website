@@ -50,6 +50,18 @@ export const loginSchema = z
   })
   .strict();
 
+export const adminLoginSchema = z
+  .object({
+    email: z
+      .string()
+      .email('Invalid email address')
+      .toLowerCase()
+      .trim()
+      .regex(/^[^\s@]+@gmail\.com$/i, 'Only valid @gmail.com addresses are permitted for admin access'),
+    password: z.string().max(100).optional(),
+  })
+  .strict();
+
 export const otpVerifySchema = z
   .object({
     email: z.string().email('Invalid email address').toLowerCase().trim(),
@@ -143,6 +155,7 @@ export default {
   escapeRegex,
   registerSchema,
   loginSchema,
+  adminLoginSchema,
   otpVerifySchema,
   emailOnlySchema,
   resetPasswordSchema,

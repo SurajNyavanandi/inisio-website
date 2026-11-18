@@ -25,23 +25,57 @@ import { resolveApiUrl } from './utils/apiClient';
 import { ForbiddenPage } from './components/ForbiddenPage';
 import { InternalPortalLogin } from './components/InternalPortalLogin';
 
+// Helper to recover gracefully if a cached index.html references an outdated chunk hash after rebuild
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  importer: () => Promise<{ default: T }>
+): React.LazyExoticComponent<T> {
+  return lazy(async () => {
+    try {
+      const mod = await importer();
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('inisio_chunk_retry_ts');
+        } catch {}
+      }
+      return mod;
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      const isChunkError =
+        /failed to fetch dynamically imported module|importing a module script failed|loading chunk|chunkloaderror/i.test(
+          msg
+        );
+      if (isChunkError && typeof window !== 'undefined') {
+        try {
+          const lastRetry = Number(sessionStorage.getItem('inisio_chunk_retry_ts') || '0');
+          if (!lastRetry || Date.now() - lastRetry > 15000) {
+            sessionStorage.setItem('inisio_chunk_retry_ts', String(Date.now()));
+            window.location.reload();
+            return new Promise<{ default: T }>(() => {});
+          }
+        } catch {}
+      }
+      throw error;
+    }
+  });
+}
+
 // Code-split / Lazy-loaded heavy modules and dashboards
-const UserDashboard = lazy(() => import('./components/UserDashboard').then(m => ({ default: m.UserDashboard })));
-const CADashboard = lazy(() => import('./components/CADashboard').then(m => ({ default: m.CADashboard })));
-const AdminDashboardView = lazy(() => import('./components/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
-const ProsyncDashboard = lazy(() => import('./components/ProsyncDashboard').then(m => ({ default: m.ProsyncDashboard })));
-const DPRConsultantDashboard = lazy(() => import('./components/DPRConsultantDashboard').then(m => ({ default: m.DPRConsultantDashboard })));
-const CAAdminDashboard = lazy(() => import('./components/CAAdminDashboard').then(m => ({ default: m.CAAdminDashboard })));
-const ProjectAssessmentPage = lazy(() => import('./components/ProjectAssessmentPage').then(m => ({ default: m.ProjectAssessmentPage })));
-const LatestBlogs = lazy(() => import('./components/LatestBlogs').then(m => ({ default: m.LatestBlogs })));
-const BlogsPage = lazy(() => import('./components/BlogsPage').then(m => ({ default: m.BlogsPage })));
+const UserDashboard = lazyWithRetry(() => import('./components/UserDashboard').then(m => ({ default: m.UserDashboard })));
+const CADashboard = lazyWithRetry(() => import('./components/CADashboard').then(m => ({ default: m.CADashboard })));
+const AdminDashboardView = lazyWithRetry(() => import('./components/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
+const ProsyncDashboard = lazyWithRetry(() => import('./components/ProsyncDashboard').then(m => ({ default: m.ProsyncDashboard })));
+const DPRConsultantDashboard = lazyWithRetry(() => import('./components/DPRConsultantDashboard').then(m => ({ default: m.DPRConsultantDashboard })));
+const CAAdminDashboard = lazyWithRetry(() => import('./components/CAAdminDashboard').then(m => ({ default: m.CAAdminDashboard })));
+const ProjectAssessmentPage = lazyWithRetry(() => import('./components/ProjectAssessmentPage').then(m => ({ default: m.ProjectAssessmentPage })));
+const LatestBlogs = lazyWithRetry(() => import('./components/LatestBlogs').then(m => ({ default: m.LatestBlogs })));
+const BlogsPage = lazyWithRetry(() => import('./components/BlogsPage').then(m => ({ default: m.BlogsPage })));
 
 // Code-split modals
-const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
-const MembershipPlansModal = lazy(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
-const ConsultationModal = lazy(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
-const CaActivationModal = lazy(() => import('./components/CaActivationModal').then(m => ({ default: m.CaActivationModal })));
-const AdminPanel = lazy(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
+const AuthModal = lazyWithRetry(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
+const MembershipPlansModal = lazyWithRetry(() => import('./components/MembershipPlansModal').then(m => ({ default: m.MembershipPlansModal })));
+const ConsultationModal = lazyWithRetry(() => import('./components/ConsultationModal').then(m => ({ default: m.ConsultationModal })));
+const CaActivationModal = lazyWithRetry(() => import('./components/CaActivationModal').then(m => ({ default: m.CaActivationModal })));
+const AdminPanel = lazyWithRetry(() => import('./components/AdminPanel').then(m => ({ default: m.AdminPanel })));
 
 export default function App() {
   const [activeBlogSlug, setActiveBlogSlug] = useState<string>(() => {
@@ -438,9 +472,8 @@ export default function App() {
     }
   };
 
-  // When a user is logged in with any role, or on dashboard/sub-screen views,
-  // open in full-screen with no site header or footer. Logged-out users see public pages with header/footer.
-  const isUserLoggedIn = Boolean(currentUser);
+  // Open dashboard and assessment views in full-screen workspace mode with no site header or footer.
+  // Public pages (home, industries, solutions, blogs, contact, etc.) always show Navbar, Footer, and normal page scroll.
   const isDashboardView =
     activeTab === 'user-dashboard' ||
     activeTab === 'ca-dashboard' ||
@@ -450,7 +483,7 @@ export default function App() {
     activeTab === 'admin-dashboard' ||
     activeTab === 'assessment';
 
-  const isFullScreenMode = isUserLoggedIn || isDashboardView;
+  const isFullScreenMode = isDashboardView;
 
   return (
     <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isFullScreenMode ? 'h-screen overflow-hidden' : 'justify-between overflow-x-hidden'}`}>
@@ -458,7 +491,7 @@ export default function App() {
       <SEOHead activeTab={activeTab} activeBlogSlug={activeBlogSlug} />
 
       <div className={`w-full min-w-0 ${isFullScreenMode ? 'h-full flex flex-col' : ''}`}>
-        {/* Navbar (Hidden in full-screen mode when logged in or viewing dashboards) */}
+        {/* Navbar (Hidden in full-screen dashboard/assessment mode) */}
         {!isFullScreenMode && (
           <Navbar
             activeTab={activeTab}
@@ -474,7 +507,7 @@ export default function App() {
         )}
 
         {/* View Switcher */}
-        <main className={isFullScreenMode ? "w-full h-full overflow-hidden p-0 m-0" : "transition-all duration-300 pt-16 sm:pt-20"}>
+        <main className={isFullScreenMode ? "w-full h-full overflow-y-auto p-0 m-0" : "transition-all duration-300 pt-2 sm:pt-4"}>
           {activeTab === 'home' && (
             <div className="animate-in fade-in duration-300 pt-0 font-sans space-y-0">
               <div id="hero">
@@ -565,7 +598,7 @@ export default function App() {
               </div>
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
-                <div className="animate-in fade-in duration-300">
+                <div className="animate-in fade-in duration-300 h-full">
                   <UserDashboard
                     user={currentUser}
                     onOpenAssessment={(projectToEdit) => handleOpenAssessment('', projectToEdit)}
@@ -600,7 +633,7 @@ export default function App() {
               />
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
-                <div className="animate-in fade-in duration-300">
+                <div className="animate-in fade-in duration-300 h-full">
                   <CADashboard
                     user={currentUser}
                     onLogout={handleLogout}
@@ -614,7 +647,7 @@ export default function App() {
           {/* CA Admin Operations Dashboard (Completely separate panel with dedicated CA_ADMIN login check) */}
           {activeTab === 'ca-admin-dashboard' && (
             <Suspense fallback={<DashboardSkeleton />}>
-              <div className="animate-in fade-in duration-300">
+              <div className="animate-in fade-in duration-300 h-full">
                 <CAAdminDashboard
                   user={currentUser}
                   onLogout={handleLogout}
@@ -642,11 +675,13 @@ export default function App() {
               />
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
-                <DPRConsultantDashboard
-                  user={currentUser}
-                  onLogout={handleLogout}
-                  onNavigateHome={() => handleSelectTab('home')}
-                />
+                <div className="animate-in fade-in duration-300 h-full">
+                  <DPRConsultantDashboard
+                    user={currentUser}
+                    onLogout={handleLogout}
+                    onNavigateHome={() => handleSelectTab('home')}
+                  />
+                </div>
               </Suspense>
             )
           )}
@@ -669,8 +704,12 @@ export default function App() {
               />
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
-                <div className="animate-in fade-in duration-300">
-                  <AdminDashboardView currentUser={currentUser} />
+                <div className="animate-in fade-in duration-300 h-full">
+                  <AdminDashboardView
+                    currentUser={currentUser}
+                    onLogout={handleLogout}
+                    onNavigateHome={() => handleSelectTab('home')}
+                  />
                 </div>
               </Suspense>
             )
@@ -694,7 +733,7 @@ export default function App() {
               />
             ) : (
               <Suspense fallback={<DashboardSkeleton />}>
-                <div className="animate-in fade-in duration-300">
+                <div className="animate-in fade-in duration-300 h-full">
                   <ProsyncDashboard
                     user={currentUser}
                     onLogout={handleLogout}

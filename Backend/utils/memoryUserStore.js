@@ -64,7 +64,7 @@ export const getMemoryUsers = () => {
       _id: 'user_ca_admin_dynamic',
       name: 'CA Operations Admin',
       email: caAdmin,
-      password: '',
+      password: bcrypt.hashSync(caAdmin, 10),
       role: 'ca_admin',
       company: 'Inisio CA Network Administration',
       phone: process.env.CA_ADMIN_PHONE || '+91 98765 43210',
@@ -78,7 +78,7 @@ export const getMemoryUsers = () => {
       _id: 'user_superadmin_dynamic',
       name: 'Executive Super Admin',
       email: admin2,
-      password: '',
+      password: bcrypt.hashSync(admin2, 10),
       role: 'superadmin',
       company: 'Inisio Executive Board',
       phone: process.env.SUPERADMIN_PHONE || '',
@@ -92,7 +92,7 @@ export const getMemoryUsers = () => {
       _id: 'user_admin_dynamic',
       name: 'Inisio Operations Admin',
       email: admin1,
-      password: '',
+      password: bcrypt.hashSync(admin1, 10),
       role: 'admin',
       company: 'Inisio HQ Operations',
       phone: process.env.ADMIN_PHONE || '',
@@ -107,13 +107,13 @@ export const getMemoryUsers = () => {
 export const findMemoryUserByEmail = (email) => {
   if (!email) return null;
   const clean = String(email).toLowerCase().trim();
-  return memoryUsers.find((u) => (u.email || '').toLowerCase().trim() === clean) || null;
+  return getMemoryUsers().find((u) => (u.email || '').toLowerCase().trim() === clean) || null;
 };
 
 export const findMemoryUserById = (id) => {
   if (!id) return null;
   const strId = String(id);
-  return memoryUsers.find((u) => String(u._id || u.id) === strId) || null;
+  return getMemoryUsers().find((u) => String(u._id || u.id) === strId) || null;
 };
 
 export const addMemoryUser = (user) => {

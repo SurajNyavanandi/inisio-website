@@ -202,7 +202,7 @@ export const Hero: React.FC<HeroProps> = ({
   ];
 
   return (
-    <div id="home" className="bg-white text-slate-900 pt-16 sm:pt-18 pb-8 font-inter">
+    <div id="home" className="bg-white text-slate-900 pt-4 sm:pt-6 pb-8 font-inter">
       
       {/* HERO SLIDER SECTION */}
       <section 

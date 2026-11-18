@@ -15,7 +15,7 @@ import {
   getEmailTemplates,
   updateEmailTemplate,
 } from '../controllers/caAdminController.js';
-import { optionalAuth } from '../middleware/authMiddleware.js';
+import { authenticateUser, authorizeRoles, restrictSuperAdminViewer, optionalAuth } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -26,23 +26,25 @@ router.post('/auth', authenticateCaAdmin);
 router.get('/verify-claim', verifyClaim);
 router.post('/activate-profile', activateProfile);
 
-// CA Admin Operational Endpoints
-router.get('/metrics', optionalAuth, getCaAdminMetrics);
-router.get('/leads', optionalAuth, getCaAdminLeads);
+// CA Admin Operational Endpoints (Authenticated)
+const requireCaAdmin = [authenticateUser, authorizeRoles('ca_admin', 'admin', 'superadmin')];
+
+router.get('/metrics', ...requireCaAdmin, getCaAdminMetrics);
+router.get('/leads', ...requireCaAdmin, getCaAdminLeads);
 router.get('/consultants/nearest', optionalAuth, getNearestConsultants);
 
 // Business Card Registration Endpoints (Steps 1 to 4)
-router.post('/cards/scan', optionalAuth, scanCardOcr);
-router.post('/cards/check-duplicate', optionalAuth, checkDuplicate);
-router.post('/profiles', optionalAuth, createProfile);
-router.get('/profiles', optionalAuth, getProfiles);
-router.post('/profiles/:id/claim-invitation', optionalAuth, sendClaimInvitation);
+router.post('/cards/scan', ...requireCaAdmin, restrictSuperAdminViewer, scanCardOcr);
+router.post('/cards/check-duplicate', ...requireCaAdmin, checkDuplicate);
+router.post('/profiles', ...requireCaAdmin, restrictSuperAdminViewer, createProfile);
+router.get('/profiles', ...requireCaAdmin, getProfiles);
+router.post('/profiles/:id/claim-invitation', ...requireCaAdmin, restrictSuperAdminViewer, sendClaimInvitation);
 
 // Reporting (Source Tag Aggregation)
-router.get('/reports', optionalAuth, getReports);
+router.get('/reports', ...requireCaAdmin, getReports);
 
 // Editable Email Templates
-router.get('/templates', optionalAuth, getEmailTemplates);
-router.put('/templates/:type', optionalAuth, updateEmailTemplate);
+router.get('/templates', ...requireCaAdmin, getEmailTemplates);
+router.put('/templates/:type', ...requireCaAdmin, restrictSuperAdminViewer, updateEmailTemplate);
 
 export default router;

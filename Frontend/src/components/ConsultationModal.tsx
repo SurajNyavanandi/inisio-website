@@ -40,13 +40,22 @@ export const ConsultationModal: React.FC<ConsultationModalProps> = ({ isOpen, on
         fullName: formData.name,
         email: formData.email,
         phone: formData.phone,
+        industry: formData.projectScope,
         status: 'Consultation Requested',
         notes: `Preferred Slot: ${formData.date} ${formData.timeSlot} | Scope: ${formData.projectScope}`
       });
-      await api.post('/consultations', formData).catch(() => {});
+      await api.post('/consultations', {
+        fullName: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        preferredDate: formData.date,
+        preferredSlot: formData.timeSlot,
+        industry: formData.projectScope,
+        notes: `Scope: ${formData.projectScope}`,
+      });
       setSubmitted(true);
-    } catch (err) {
-      setSubmitted(true);
+    } catch (err: any) {
+      setPhoneError(err?.message || 'Unable to schedule consultation right now. Please try again.');
     } finally {
       setLoading(false);
     }

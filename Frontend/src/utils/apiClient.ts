@@ -196,6 +196,7 @@ export const api = {
       const qs = query.toString();
       return request<any[]>(`/leads${qs ? `?${qs}` : ''}`);
     },
+    getById: (id: string) => request<any>(`/leads/${id}`),
     create: (leadData: any) =>
       request<any>('/leads', {
         method: 'POST',
@@ -285,10 +286,16 @@ export const api = {
       const query = new URLSearchParams(params || {}).toString();
       return request<any[]>(`/projects${query ? `?${query}` : ''}`);
     },
+    getById: (id: string) => request<any>(`/projects/${id}`),
     create: (projectData: any) =>
       request<any>('/projects', {
         method: 'POST',
         body: JSON.stringify(projectData),
+      }),
+    update: (id: string, updates: any) =>
+      request<any>(`/projects/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
       }),
     updateAudit: (id: string, auditData: { status: string; caReviewNotes?: string; assignedCA?: string }) =>
       request<any>(`/projects/${id}/audit`, {

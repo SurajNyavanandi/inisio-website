@@ -1,5 +1,4 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import {
   register,
   login,
@@ -17,6 +16,7 @@ import {
   validateSchema,
   registerSchema,
   loginSchema,
+  adminLoginSchema,
   otpVerifySchema,
   emailOnlySchema,
   resetPasswordSchema,
@@ -30,7 +30,7 @@ const router = express.Router();
 // Public authentication routes (Rate limited + Schema validated)
 router.post('/register', authLimiter, validateSchema(registerSchema), validateIndianPhone('phone'), register);
 router.post('/login', authLimiter, validateSchema(loginSchema), login);
-router.post('/admin-login', authLimiter, validateSchema(loginSchema), adminLogin);
+router.post('/admin-login', authLimiter, validateSchema(adminLoginSchema), adminLogin);
 
 // OTP routes (Strict rate limiting)
 router.post('/verify-email', otpLimiter, validateSchema(otpVerifySchema), verifyEmail);

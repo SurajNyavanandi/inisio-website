@@ -5,7 +5,8 @@ export const getProjects = async (req, res, next) => {
   try {
     const role = req.user ? req.user.role : 'user';
     const userId = req.user ? req.user._id : null;
-    const projects = await projectService.getProjects(req.query, role, userId);
+    const userEmail = req.user ? req.user.email : null;
+    const projects = await projectService.getProjects(req.query, role, userId, userEmail);
     return sendSuccess(res, projects, 'Projects retrieved successfully');
   } catch (error) {
     next(error);
@@ -24,8 +25,18 @@ export const getProjectById = async (req, res, next) => {
 export const createProject = async (req, res, next) => {
   try {
     const userId = req.user ? req.user._id : null;
-    const project = await projectService.createProject(req.body, userId);
+    const role = req.user ? req.user.role : 'user';
+    const project = await projectService.createProject(req.body, userId, role);
     return sendSuccess(res, project, 'Project created successfully', 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateProject = async (req, res, next) => {
+  try {
+    const project = await projectService.updateProject(req.params.id, req.body, req.user);
+    return sendSuccess(res, project, 'Project updated successfully');
   } catch (error) {
     next(error);
   }
@@ -40,7 +51,7 @@ export const updateProjectAudit = async (req, res, next) => {
       effectiveStatus,
       caReviewNotes,
       assignedCA,
-      { dscr: dscr !== undefined ? Number(dscr) : undefined, debtEquityRatio, ...req.body }
+      { ...req.body, ...(dscr !== undefined ? { dscr: Number(dscr) } : {}), ...(debtEquityRatio !== undefined ? { debtEquityRatio } : {}) }
     );
     return sendSuccess(res, project, 'Project audit status updated');
   } catch (error) {
@@ -61,6 +72,7 @@ export default {
   getProjects,
   getProjectById,
   createProject,
+  updateProject,
   updateProjectAudit,
   deleteProject,
 };

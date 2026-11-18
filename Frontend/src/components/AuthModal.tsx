@@ -479,7 +479,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         setMode('signup');
                         setError('');
                       }}
-                      className="px-3 py-1.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <span>Create Account with {email || 'this email'}</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -496,7 +496,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         setMode('forgot-password');
                         setError('');
                       }}
-                      className="px-3 py-1.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <span>Reset Forgotten Password →</span>
                     </button>
@@ -512,7 +512,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         setMode('login');
                         setError('');
                       }}
-                      className="px-3 py-1.5 bg-gradient-to-r from-slate-900 to-slate-800 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <span>Sign In with this Email</span>
                       <ArrowRight className="w-3.5 h-3.5" />
@@ -599,7 +599,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading || otpCode.length < 6}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-850 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm hover:shadow-md hover:shadow-slate-900/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm shadow-blue-600/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -733,7 +733,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading || otpCode.length < 6 || newPassword.length < 6}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-850 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm hover:shadow-md hover:shadow-slate-900/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm shadow-blue-600/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -794,7 +794,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading || !email.trim()}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-850 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm hover:shadow-md hover:shadow-slate-900/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm shadow-blue-600/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">
@@ -995,7 +995,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-2.5 px-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-850 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm hover:shadow-md hover:shadow-slate-900/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-xs rounded-xl shadow-sm shadow-blue-600/15 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
                 >
                   {loading ? (
                     <span className="flex items-center gap-2">

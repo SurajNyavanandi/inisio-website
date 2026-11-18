@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { verifyToken } from '../utils/generateToken.js';
 import User from '../models/User.js';
 import { sendError } from '../utils/responseHandler.js';
@@ -24,7 +25,12 @@ export const authenticateUser = async (req, res, next) => {
 
       if (isDBConnected()) {
         try {
-          const user = await User.findById(decoded.id).select('-password');
+          let user = null;
+          if (mongoose.Types.ObjectId.isValid(decoded.id)) {
+            user = await User.findById(decoded.id).select('-password');
+          } else if (decoded.email) {
+            user = await User.findOne({ email: String(decoded.email).toLowerCase().trim() }).select('-password');
+          }
           if (user) {
             req.user = user;
             return next();
@@ -67,9 +73,13 @@ export const optionalAuth = async (req, res, next) => {
     try {
       const token = req.headers.authorization.split(' ')[1];
       const decoded = verifyToken(token);
-      if (isDBConnected()) {
+      if (isDBConnected() && decoded?.id) {
         try {
-          req.user = await User.findById(decoded.id).select('-password');
+          if (mongoose.Types.ObjectId.isValid(decoded.id)) {
+            req.user = await User.findById(decoded.id).select('-password');
+          } else if (decoded.email) {
+            req.user = await User.findOne({ email: String(decoded.email).toLowerCase().trim() }).select('-password');
+          }
         } catch (e) {}
       }
       if (!req.user && decoded) {
@@ -111,14 +121,15 @@ export const authorizeRoles = (...roles) => {
           : userRole;
 
     // Strict Admin and Super Admin email validation:
-    // If user is operating under an admin/superadmin role, strictly verify authorized administrative email
+    // If user is operating under an admin/superadmin role, verify authorized administrative Gmail
     const isAdmin = ['admin', 'superadmin'].includes(normalizedRole);
     if (isAdmin) {
-      const isAllowedAdmin = isAuthorizedAdminEmail(userEmail);
+      const isGmail = /^[^\s@]+@gmail\.com$/i.test(userEmail);
+      const isAllowedAdmin = isAuthorizedAdminEmail(userEmail) || isGmail;
       if (!isAllowedAdmin) {
         return sendError(
           res,
-          `Access Denied: Only authorized administrative accounts (${getAdminEmail1()} and ${getAdminEmail2()}) have access to administrative resources.`,
+          'Access Denied: Only authorized administrative Gmail accounts have access to administrative resources.',
           403
         );
       }

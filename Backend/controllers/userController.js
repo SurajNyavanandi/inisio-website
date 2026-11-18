@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
@@ -10,6 +11,8 @@ import {
   updateMemoryUser,
   deleteMemoryUser as removeMemoryUser,
 } from '../utils/memoryUserStore.js';
+import { getMemoryLeads } from '../services/leadService.js';
+import { getMemoryProjects } from '../services/projectService.js';
 
 export const getAllUsers = async (req, res, next) => {
   try {
@@ -77,8 +80,23 @@ export const getAllUsers = async (req, res, next) => {
       }
     }
 
+    const memLeads = getMemoryLeads();
+    const memProjects = getMemoryProjects();
     const safeUsers = getMemoryUsers()
-      .map(({ password, ...u }) => u)
+      .map(({ password, ...u }) => {
+        const uid = String(u._id);
+        const uemail = (u.email || '').toLowerCase();
+        const leadCount = memLeads.filter(
+          (l) => String(l.userId || '') === uid || (uemail && (l.email || '').toLowerCase() === uemail)
+        ).length;
+        const projCount = memProjects.filter(
+          (p) => String(p.userId || '') === uid || (uemail && (p.email || '').toLowerCase() === uemail)
+        ).length;
+        return {
+          ...u,
+          projectsCount: Math.max(leadCount, projCount),
+        };
+      })
       .slice(skip, skip + limit);
     return sendSuccess(res, safeUsers, 'Users retrieved successfully');
   } catch (error) {
@@ -88,7 +106,7 @@ export const getAllUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
   try {
-    if (isDBConnected()) {
+    if (isDBConnected() && mongoose.Types.ObjectId.isValid(req.params.id)) {
       try {
         const user = await User.findById(req.params.id).select('-password').lean();
         if (user) {
@@ -136,7 +154,7 @@ export const updateUserRole = async (req, res, next) => {
       return sendError(res, 'Role is required', 400);
     }
 
-    if (isDBConnected()) {
+    if (isDBConnected() && mongoose.Types.ObjectId.isValid(req.params.id)) {
       try {
         const user = await User.findByIdAndUpdate(
           req.params.id,
@@ -167,7 +185,7 @@ export const updateUserStatus = async (req, res, next) => {
       return sendError(res, 'Status is required', 400);
     }
 
-    if (isDBConnected()) {
+    if (isDBConnected() && mongoose.Types.ObjectId.isValid(req.params.id)) {
       try {
         const user = await User.findByIdAndUpdate(
           req.params.id,
@@ -181,7 +199,11 @@ export const updateUserStatus = async (req, res, next) => {
     }
 
     const updated = updateMemoryUser(req.params.id, { status });
-    return sendSuccess(res, { id: req.params.id, status }, `User status updated to ${status}`);
+    if (!updated) {
+      return sendError(res, 'User not found', 404);
+    }
+    const { password, ...safeUser } = updated;
+    return sendSuccess(res, safeUser, `User status updated to ${status}`);
   } catch (error) {
     next(error);
   }
@@ -189,7 +211,7 @@ export const updateUserStatus = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    if (isDBConnected()) {
+    if (isDBConnected() && mongoose.Types.ObjectId.isValid(req.params.id)) {
       try {
         const user = await User.findByIdAndDelete(req.params.id);
         if (user) {
@@ -197,7 +219,10 @@ export const deleteUser = async (req, res, next) => {
         }
       } catch (err) {}
     }
-    removeMemoryUser(req.params.id);
+    const deleted = removeMemoryUser(req.params.id);
+    if (!deleted) {
+      return sendError(res, 'User not found', 404);
+    }
     return sendSuccess(res, null, 'User deleted successfully');
   } catch (error) {
     next(error);

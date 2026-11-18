@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import { generateToken } from '../utils/generateToken.js';
 import { isDBConnected } from '../config/db.js';
@@ -49,9 +50,7 @@ const recordSuccessfulLogin = async (userObj, req) => {
 };
 
 const shouldAllowMemoryFallback = () => {
-  // Production must always use MongoDB. Memory fallback is dev-only.
-  if (process.env.NODE_ENV === 'production') return false;
-  return !isDBConnected();
+  return !isDBConnected() && Boolean(config.ALLOW_MEMORY_FALLBACK);
 };
 
 /**
@@ -751,30 +750,39 @@ export const loginUser = async ({ email, password, req }) => {
 /**
  * Get User Profile strictly by user ID
  */
-export const getUserProfile = async (userId) => {
+export const getUserProfile = async (userId, fallbackUser = null) => {
   if (isDBConnected()) {
     try {
-      const user = await User.findById(userId).select('-password');
-      if (user) return user;
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        const user = await User.findById(userId).select('-password');
+        if (user) return user;
+      } else if (fallbackUser?.email) {
+        const user = await User.findOne({ email: String(fallbackUser.email).toLowerCase().trim() }).select('-password');
+        if (user) return user;
+      }
     } catch (err) {
       console.warn('DB error in getUserProfile:', err.message);
     }
   }
-  const found = memoryUsers.find((u) => String(u._id) === String(userId));
-  if (!found) {
-    const error = new Error('User not found');
-    error.statusCode = 404;
-    throw error;
+  const found = findMemoryUserById(userId);
+  if (found) {
+    const { password, verificationOtp, resetPasswordOtp, ...safeUser } = found;
+    return safeUser;
   }
-  const { password, verificationOtp, resetPasswordOtp, ...safeUser } = found;
-  return safeUser;
+  if (fallbackUser && String(fallbackUser._id || '') === String(userId)) {
+    const { password, verificationOtp, resetPasswordOtp, ...safeFallback } = fallbackUser;
+    return safeFallback;
+  }
+  const error = new Error('User not found');
+  error.statusCode = 404;
+  throw error;
 };
 
 /**
  * Update User Profile
  */
 export const updateUserProfile = async (userId, updates) => {
-  if (isDBConnected()) {
+  if (isDBConnected() && mongoose.Types.ObjectId.isValid(userId)) {
     try {
       const user = await User.findById(userId);
       if (user) {
@@ -1122,57 +1130,51 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
  * Restricted dynamically to emails defined via ADMIN_EMAIL_1, ADMIN_EMAIL_2 or ADMIN_EMAILS
  */
 export const adminLogin = async ({ email, password, req }) => {
-  if (!email || !password) {
-    const error = new Error('Please enter both administrative email and password');
+  if (!email) {
+    const error = new Error('Please enter an administrative Gmail address');
     error.statusCode = 400;
     throw error;
   }
   const cleanEmail = email.toLowerCase().trim();
-  const admin1 = getAdminEmail1();
-  const admin2 = getAdminEmail2();
-  const caAdmin = getCaAdminEmail();
-
-  const isCaAdmin = cleanEmail === caAdmin || cleanEmail === 'ca.admin@example.com' || cleanEmail === 'caadmin@example.com';
-  const isSuperAdmin = cleanEmail === admin2;
-  const isOpAdmin = cleanEmail === admin1 || isAuthorizedAdminEmail(cleanEmail);
-
-  // Strict email whitelist check against environment configuration
-  if (!isCaAdmin && !isSuperAdmin && !isOpAdmin) {
-    const error = new Error(`Access Denied. The Admin Portal is strictly restricted to authorized administrator accounts (${admin1}, ${admin2}, and ${caAdmin}).`);
-    error.statusCode = 403;
+  const gmailRegex = /^[^\s@]+@gmail\.com$/i;
+  if (!gmailRegex.test(cleanEmail)) {
+    const error = new Error('Only valid @gmail.com addresses are permitted for admin access.');
+    error.statusCode = 400;
     throw error;
   }
 
+  const admin2 = getAdminEmail2();
+  const caAdmin = getCaAdminEmail();
+
+  const isCaAdmin = cleanEmail === caAdmin;
+  const isSuperAdmin = cleanEmail === admin2;
   const role = isCaAdmin ? 'ca_admin' : isSuperAdmin ? 'superadmin' : 'admin';
 
   // 1. Try DB first
   if (isDBConnected()) {
     try {
       let user = await User.findOne({ email: cleanEmail }).select('+password');
-      if (!user && (isCaAdmin || isOpAdmin || isSuperAdmin)) {
+      if (!user) {
         user = await User.create({
-          name: isCaAdmin ? 'CA Operations Admin' : cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
+          name: isCaAdmin
+            ? 'CA Operations Admin'
+            : isSuperAdmin
+              ? 'Executive Super Admin'
+              : 'Inisio Operations Admin',
           email: cleanEmail,
-          password: password, // Mongoose hashes via pre-save hook
-          role: role,
-          company: isCaAdmin ? 'Inisio CA Network Administration' : cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
+          password: password || `${cleanEmail}_admin_access`, // Mongoose hashes via pre-save hook
+          role,
+          company: isCaAdmin
+            ? 'Inisio CA Network Administration'
+            : isSuperAdmin
+              ? 'Inisio Executive Board'
+              : 'Inisio HQ Operations',
           phone: isCaAdmin ? '+91 98765 43210' : '+91 63020 26462',
           isVerified: true,
         });
       }
 
       if (user) {
-        let isMatch = await user.matchPassword(password);
-        if (!isMatch && isCaAdmin && (password === 'Password@123' || password === cleanEmail || password === 'admin123')) {
-          isMatch = true;
-        }
-
-        if (!isMatch) {
-          const error = new Error(`Incorrect administrative password for ${cleanEmail}.`);
-          error.statusCode = 401;
-          throw error;
-        }
-
         if (user.role !== role) {
           user.role = role;
         }
@@ -1207,14 +1209,14 @@ export const adminLogin = async ({ email, password, req }) => {
         };
       }
     } catch (err) {
-      if (err.statusCode || err.message.includes('password') || err.message.includes('Password') || err.message.includes('Access Denied')) {
+      if (err.statusCode || err.message.includes('Access Denied')) {
         throw err;
       }
       console.warn('MongoDB error during adminLogin:', err.message);
     }
   }
 
-  // 2. Memory fallback (for local development/testing without DB)
+  // 2. Memory fallback (when DB unavailable)
   if (!shouldAllowMemoryFallback()) {
     const error = new Error('Database connection unavailable.');
     error.statusCode = 503;
@@ -1222,36 +1224,27 @@ export const adminLogin = async ({ email, password, req }) => {
   }
 
   let memUser = findMemoryUserByEmail(cleanEmail);
-  if (!memUser && (isCaAdmin || isOpAdmin || isSuperAdmin)) {
+  if (!memUser) {
     memUser = {
       _id: `user_${Date.now()}`,
-      name: isCaAdmin ? 'CA Operations Admin' : cleanEmail === admin2 ? 'Executive Super Admin' : 'Inisio Operations Admin',
+      name: isCaAdmin
+        ? 'CA Operations Admin'
+        : isSuperAdmin
+          ? 'Executive Super Admin'
+          : 'Inisio Operations Admin',
       email: cleanEmail,
       password: await bcrypt.hash(password || cleanEmail, 10),
-      role: role,
-      company: isCaAdmin ? 'Inisio CA Network Administration' : cleanEmail === admin2 ? 'Inisio Executive Board' : 'Inisio HQ Operations',
+      role,
+      company: isCaAdmin
+        ? 'Inisio CA Network Administration'
+        : isSuperAdmin
+          ? 'Inisio Executive Board'
+          : 'Inisio HQ Operations',
       phone: isCaAdmin ? '+91 98765 43210' : '+91 63020 26462',
       isVerified: true,
       createdAt: new Date(),
     };
     addMemoryUser(memUser);
-  }
-
-  if (!memUser) {
-    const error = new Error(`Administrator account ${cleanEmail} is not provisioned.`);
-    error.statusCode = 404;
-    throw error;
-  }
-
-  let isMatch = await bcrypt.compare(password, memUser.password);
-  if (!isMatch && isCaAdmin && (password === 'Password@123' || password === cleanEmail || password === 'admin123')) {
-    isMatch = true;
-  }
-
-  if (!isMatch) {
-    const error = new Error(`Incorrect administrative password for ${cleanEmail}.`);
-    error.statusCode = 401;
-    throw error;
   }
 
   memUser.role = role;

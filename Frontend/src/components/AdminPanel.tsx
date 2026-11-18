@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LayoutDashboard,
   Building2,
@@ -8,19 +8,40 @@ import {
   Plus,
   Trash2,
   X,
-  LogOut,
   Upload,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw,
+  AlertCircle,
+  Edit3,
+  Loader2,
+  ShieldCheck,
+  Users
 } from 'lucide-react';
 import {
   AdminRole,
+  isValidGmail,
   validateAdminEmail
 } from '../config/adminAccess';
 import {
   getVisitorRecords,
   VisitorSessionRecord
 } from '../utils/visitorStore';
+import { api, getAuthToken } from '../utils/apiClient';
+import {
+  fetchLeadsFromDatabaseStrict,
+  LeadRecord
+} from '../utils/leadStore';
 import { UISelect } from './ui/Select';
+import { DashboardLayout, DashboardNavItem } from './dashboard/DashboardLayout';
+import {
+  DASHBOARD_TABLE,
+  DashboardCard,
+  DashboardCardHeader,
+  DashboardEmptyState,
+  DashboardKpiCard,
+  DashboardLoadingState,
+  DashboardStatusBadge,
+} from './dashboard/DashboardPrimitives';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -46,9 +67,14 @@ export interface CostComponent {
 
 export interface ProjectEntity {
   id: string;
+  recordType?: 'lead' | 'project';
   name: string;
+  promoterName?: string;
+  email?: string;
+  mobile?: string;
   industry: string;
   location: string;
+  status?: string;
   promoterCount: number;
   promoters: PromoterItem[];
   costComponents: CostComponent[];
@@ -67,6 +93,8 @@ export interface ProjectEntity {
     otherDocs?: string;
   };
   isFunded: boolean;
+  dprAssignedTo?: string;
+  consultationAssignedTo?: string;
 }
 
 export interface DprRequest {
@@ -76,6 +104,7 @@ export interface DprRequest {
   email: string;
   phone: string;
   date: string;
+  status?: string;
   assignedConsultant?: string;
 }
 
@@ -86,19 +115,119 @@ export interface ConsultationItem {
   phone: string;
   projectCategory: string;
   date: string;
+  status?: string;
   assignedTo?: string;
 }
 
 const STORAGE_KEY_ADMIN_SESSION = 'inisio_active_admin_session';
-const STORAGE_KEY_PROJECTS = 'inisio_phase1_projects';
-const STORAGE_KEY_DPR = 'inisio_phase1_dpr_requests';
-const STORAGE_KEY_CONSULTATIONS = 'inisio_phase1_consultations';
+
+function mapLeadRecordToProjectEntity(l: LeadRecord): ProjectEntity {
+  const id = String(l.id || l._id);
+  const rawPromoters = Array.isArray(l.promotersList) ? l.promotersList : [];
+  const promoters: PromoterItem[] =
+    rawPromoters.length > 0
+      ? rawPromoters.map((p: any, idx: number) => ({
+          id: String(p.id || `prom_${id}_${idx}`),
+          name: p.name || l.fullName || 'Promoter',
+          experience: p.experience || p.experienceYears || '5 Years',
+          qualification: p.qualification || 'Executive Signatory',
+          shareholdingPct: Number(p.shareholdingPct ?? 100),
+          role: p.role || 'Promoter',
+        }))
+      : [
+          {
+            id: `prom_${id}_0`,
+            name: l.fullName || 'Lead Promoter',
+            experience: '10 Years',
+            qualification: 'Executive Signatory',
+            shareholdingPct: 100,
+            role: 'Promoter',
+          },
+        ];
+
+  const totalCost = Number(l.projectCost || l.totalCostCr) || 0;
+  const rawCosts =
+    Array.isArray(l.costComponents) && l.costComponents.length > 0
+      ? l.costComponents
+      : Array.isArray(l.customCostComponents) && l.customCostComponents.length > 0
+      ? l.customCostComponents
+      : [];
+
+  const costComponents: CostComponent[] =
+    rawCosts.length > 0
+      ? rawCosts.map((c: any, idx: number) => ({
+          id: String(c.id || `cost_${id}_${idx}`),
+          category: c.category || c.name || 'Infrastructure & Site Development',
+          amountCr: Number(c.amountCr ?? c.amount ?? 0),
+        }))
+      : [
+          {
+            id: `cost_${id}_0`,
+            category: 'Total Project Outlay',
+            amountCr: totalCost,
+          },
+        ];
+
+  const mof = l.meansOfFinance && typeof l.meansOfFinance === 'object' ? l.meansOfFinance : {};
+  const debtCr = Number(mof.debtCr ?? mof.termLoanCr ?? l.proposedLoan ?? l.loanRequiredCr ?? 0);
+  const equityCr = Number(mof.equityCr ?? mof.promoterContribCr ?? l.promoterContribCr ?? Math.max(0, totalCost - debtCr));
+  const subsidyCr = Number(mof.subsidyCr ?? 0);
+
+  const docs: ProjectEntity['documents'] = {
+    ...(l.documents && typeof l.documents === 'object' ? l.documents : {}),
+  };
+  if (l.dprFile && !docs.dpr) docs.dpr = l.dprFile;
+  if (l.cmaFile && !docs.financialModel) docs.financialModel = l.cmaFile;
+
+  const isFunded = Boolean(
+    l.isFunded ||
+      l.status === 'Funded' ||
+      l.status === 'Bank Sanction Approved'
+  );
+
+  return {
+    id,
+    recordType: l.recordType,
+    name: l.projectName || (l.fullName ? `${l.fullName} Project` : 'Greenfield Project'),
+    promoterName: l.fullName || '',
+    email: l.email || '',
+    mobile: l.phone || l.mobile || '',
+    industry: l.industry || 'General Infrastructure',
+    location: l.location || 'India',
+    status: l.status || 'Active Lead',
+    promoterCount: promoters.length,
+    promoters,
+    costComponents,
+    meansOfFinance: {
+      equityCr,
+      debtCr,
+      subsidyCr,
+    },
+    checklistUploaded: Boolean(l.checklistUploaded),
+    checklistFileName: l.checklistFileName || '',
+    documents: docs,
+    isFunded,
+    dprAssignedTo: l.dprAssignedTo,
+    consultationAssignedTo: l.consultationAssignedTo,
+  };
+}
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
-  // Session State (email-based, no passwords)
+  // Session State (synced with backend JWT token & role)
   const [activeRole, setActiveRole] = useState<AdminRole | null>(() => {
     if (typeof window === 'undefined') return null;
     try {
+      const token = getAuthToken();
+      if (!token) return null;
+
+      const activeUserRaw = localStorage.getItem('inisio_active_user');
+      if (activeUserRaw) {
+        const parsedUser = JSON.parse(activeUserRaw);
+        if (parsedUser?.role === 'admin' || parsedUser?.role === 'superadmin') {
+          return parsedUser.role;
+        }
+      }
+
       const saved = localStorage.getItem(STORAGE_KEY_ADMIN_SESSION);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -110,18 +239,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     return null;
   });
 
-  // Minimal Email Access Form (no helper text, no placeholder instructions, no labels, no passwords)
+  // Backend RBAC: 'admin' has full CRUD; 'superadmin' is View-Only
+  const canEdit = activeRole === 'admin';
+  const isViewOnly = activeRole === 'superadmin';
+
+  // Login Form State (Email-only Gmail access for admin desk)
   const [emailInput, setEmailInput] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
   // Active Navigation: Overview, Projects, DPR Requests, Consultations, Visitors
   const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'dpr' | 'consultations' | 'visitors'>('overview');
 
-  // New Project Modal State (Super Admin CRUD)
+  // Data Loading / Error State
+  const [dataLoading, setDataLoading] = useState(false);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [dataError, setDataError] = useState('');
+
+  // New Project Modal State (Admin CRUD)
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [newProjName, setNewProjName] = useState('');
+  const [newProjPromoter, setNewProjPromoter] = useState('');
   const [newProjIndustry, setNewProjIndustry] = useState('');
   const [newProjLocation, setNewProjLocation] = useState('');
+  const [newProjEmail, setNewProjEmail] = useState('');
+  const [newProjMobile, setNewProjMobile] = useState('');
+  const [newProjCapex, setNewProjCapex] = useState('10');
+  const [newProjLoan, setNewProjLoan] = useState('7');
+  const [creatingProject, setCreatingProject] = useState(false);
+
+  // Edit Project Metadata Modal State (Admin CRUD)
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editProjData, setEditProjData] = useState({
+    name: '',
+    promoterName: '',
+    industry: '',
+    location: '',
+  });
 
   // Currency Display Unit
   const [currencyUnit, setCurrencyUnit] = useState<CurrencyUnit>('Cr');
@@ -129,183 +283,372 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   // Selected Project for details view
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
-  // 1. Projects State (starts empty, no dummy projects)
-  const [projects, setProjects] = useState<ProjectEntity[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PROJECTS);
-      if (saved) {
-        const parsed: ProjectEntity[] = JSON.parse(saved);
-        // Exclude legacy dummy demo projects
-        return parsed.filter(p => p.id !== 'proj_1' && p.id !== 'proj_2' && !p.name?.includes('Apex Green Hydrogen'));
-      }
-    } catch {}
-    return [];
-  });
-
-  // 2. DPR Requests State (starts empty, no dummy requests)
-  const [dprRequests, setDprRequests] = useState<DprRequest[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DPR);
-      if (saved) {
-        const parsed: DprRequest[] = JSON.parse(saved);
-        return parsed.filter(d => d.id !== 'dpr_1' && d.id !== 'dpr_2' && !d.projectName?.includes('Apex Green Hydrogen'));
-      }
-    } catch {}
-    return [];
-  });
-
-  // 3. Consultations State (starts empty, no dummy consultations)
-  const [consultations, setConsultations] = useState<ConsultationItem[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_CONSULTATIONS);
-      if (saved) {
-        const parsed: ConsultationItem[] = JSON.parse(saved);
-        return parsed.filter(c => c.id !== 'cons_1' && c.id !== 'cons_2');
-      }
-    } catch {}
-    return [];
-  });
-
-  // 4. Visitors State
+  // Live Backend Collections State
+  const [projects, setProjects] = useState<ProjectEntity[]>([]);
+  const [dprRequests, setDprRequests] = useState<DprRequest[]>([]);
+  const [consultations, setConsultations] = useState<ConsultationItem[]>([]);
   const [visitors, setVisitors] = useState<VisitorSessionRecord[]>([]);
 
-  // Sync to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-      } catch {}
-    }
-  }, [projects]);
+  const loadAllAdminData = useCallback(async () => {
+    if (!activeRole) return;
+    setDataLoading(true);
+    setDataError('');
+    try {
+      const [leadsList, consultationsRes, visitorsRes] = await Promise.all([
+        fetchLeadsFromDatabaseStrict(),
+        api.consultations.getAll().catch(() => []),
+        api.get('/visitors').catch(() => []),
+      ]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY_DPR, JSON.stringify(dprRequests));
-      } catch {}
-    }
-  }, [dprRequests]);
+      const mappedProjects = leadsList.map(mapLeadRecordToProjectEntity);
+      setProjects(mappedProjects);
+      setSelectedProjectId((prev) => {
+        if (prev && mappedProjects.some((p) => p.id === prev)) return prev;
+        return mappedProjects[0]?.id || '';
+      });
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY_CONSULTATIONS, JSON.stringify(consultations));
-      } catch {}
-    }
-  }, [consultations]);
+      // Populate DPR Requests (prioritizing DPR Requested / assigned items, plus active pipeline projects)
+      const sortedForDpr = [...leadsList].sort((a, b) => {
+        const aDpr = a.status === 'DPR Requested' || Boolean(a.dprAssignedTo) || (a.notes || '').toLowerCase().includes('dpr') ? 1 : 0;
+        const bDpr = b.status === 'DPR Requested' || Boolean(b.dprAssignedTo) || (b.notes || '').toLowerCase().includes('dpr') ? 1 : 0;
+        return bDpr - aDpr;
+      });
+      setDprRequests(
+        sortedForDpr.map((l) => ({
+          id: String(l.id || l._id),
+          projectName: l.projectName || 'Greenfield Project',
+          promoterName: l.fullName || 'Lead Promoter',
+          email: l.email || 'N/A',
+          phone: l.phone || l.mobile || 'N/A',
+          date: l.createdAt ? new Date(l.createdAt).toLocaleDateString() : 'Recent',
+          status: l.status,
+          assignedConsultant: l.dprAssignedTo || '',
+        }))
+      );
 
-  // Load visitors
-  const loadVisitors = () => {
-    setVisitors(getVisitorRecords());
-  };
+      // Populate Consultations
+      const consArray = Array.isArray(consultationsRes) ? consultationsRes : (consultationsRes as any)?.data || [];
+      setConsultations(
+        consArray.map((c: any) => ({
+          id: String(c._id || c.id),
+          clientName: c.fullName || c.name || 'Client',
+          email: c.email || 'N/A',
+          phone: c.phone || 'N/A',
+          projectCategory: c.industry || c.preferredSlot || 'Greenfield Debt Advisory',
+          date: c.preferredDate || (c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'Recent'),
+          status: c.status,
+          assignedTo:
+            c.assignedTo ||
+            (typeof c.feedback === 'string' && c.feedback.toLowerCase().includes('prosync') ? 'Prosync' : undefined),
+        }))
+      );
+
+      // Combine backend visitors with client visitor log
+      const serverVisitors = Array.isArray(visitorsRes) ? visitorsRes : (visitorsRes as any)?.data || [];
+      const localVisitors = getVisitorRecords();
+      const mergedMap = new Map<string, VisitorSessionRecord>();
+      for (const v of serverVisitors) {
+        const vid = String(v.id || v._id || `${v.sessionId}_${v.timestamp}`);
+        mergedMap.set(vid, {
+          id: vid,
+          sessionId: v.sessionId || 'sess_live',
+          path: v.path || '/',
+          userEmail: v.userEmail || undefined,
+          timestamp: v.timestamp || new Date().toISOString(),
+          device: v.device || (v.userAgent ? 'Web Client' : 'Desktop'),
+          browser: v.browser || (v.userAgent ? 'Browser' : 'Browser'),
+          location: v.location || v.ip || 'India',
+          ip: v.ip,
+        });
+      }
+      for (const lv of localVisitors) {
+        if (!mergedMap.has(lv.id)) {
+          mergedMap.set(lv.id, lv);
+        }
+      }
+      const mergedVisitors = Array.from(mergedMap.values()).sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      setVisitors(mergedVisitors);
+    } catch (err: any) {
+      setDataError(err?.message || 'Unable to load records from database. Please verify your session.');
+    } finally {
+      setDataLoading(false);
+    }
+  }, [activeRole]);
 
   useEffect(() => {
     if (isOpen) {
-      loadVisitors();
+      if (activeRole) {
+        loadAllAdminData();
+      } else {
+        setVisitors(getVisitorRecords());
+      }
       const handleEsc = (e: KeyboardEvent) => {
         if (e.key === 'Escape' || e.key === 'Esc') {
           onClose();
         }
       };
+      const handleLeadAdded = () => {
+        if (activeRole) loadAllAdminData();
+      };
       window.addEventListener('keydown', handleEsc);
-      return () => window.removeEventListener('keydown', handleEsc);
+      window.addEventListener('inisio_lead_added', handleLeadAdded);
+      return () => {
+        window.removeEventListener('keydown', handleEsc);
+        window.removeEventListener('inisio_lead_added', handleLeadAdded);
+      };
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, activeRole, loadAllAdminData]);
 
-  // Minimal Email Access Handler (Matches ADMIN_EMAIL or SUPER_ADMIN_EMAIL, otherwise denies)
-  const handleAccessSubmit = (e: React.FormEvent) => {
+  // Backend-Authenticated Email-Only Gmail Admin Login
+  const handleAccessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
-    const res = validateAdminEmail(emailInput);
-    if (!res.allowed || !res.role) {
-      setAuthError('Access Denied');
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!isValidGmail(cleanEmail)) {
+      setAuthError('Please enter a valid @gmail.com address for admin access.');
       return;
     }
 
-    if (res.role === 'ca_admin') {
-      try {
+    setAuthLoading(true);
+    const detected = validateAdminEmail(cleanEmail);
+
+    try {
+      if (detected.role === 'ca_admin') {
+        const res = await api.post('/ca-admin/auth', { email: cleanEmail });
+        if (res && res.token) {
+          localStorage.setItem(
+            'inisio_ca_admin_session',
+            JSON.stringify({ email: res.email || cleanEmail, token: res.token })
+          );
+          localStorage.setItem('inisio_auth_token', res.token);
+          onClose();
+          if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', '/ca-admin');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
+          return;
+        }
+      }
+
+      const authData = await api.post('/auth/admin-login', {
+        email: cleanEmail,
+      });
+
+      if (!authData || !authData.token) {
+        setAuthError('Authentication failed: Server did not issue an access token.');
+        return;
+      }
+
+      const backendRole = authData.role;
+      if (backendRole === 'ca_admin') {
         localStorage.setItem(
           'inisio_ca_admin_session',
-          JSON.stringify({ email: emailInput.trim().toLowerCase(), token: 'ca_admin_active_session' })
+          JSON.stringify({ email: authData.email || cleanEmail, token: authData.token })
         );
-      } catch {}
-      onClose();
-      if (typeof window !== 'undefined') {
-        window.history.pushState({}, '', '/ca-admin');
-        window.dispatchEvent(new PopStateEvent('popstate'));
+        localStorage.setItem('inisio_auth_token', authData.token);
+        onClose();
+        if (typeof window !== 'undefined') {
+          window.history.pushState({}, '', '/ca-admin');
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+        return;
       }
-      return;
-    }
 
-    setActiveRole(res.role);
-    try {
+      if (backendRole !== 'admin' && backendRole !== 'superadmin') {
+        setAuthError('Access Denied: Administrative privileges required.');
+        return;
+      }
+
+      localStorage.setItem('inisio_auth_token', authData.token);
+      localStorage.setItem(
+        'inisio_active_user',
+        JSON.stringify({
+          id: authData._id || authData.id,
+          email: authData.email,
+          role: backendRole,
+          name: authData.name,
+          token: authData.token,
+        })
+      );
       localStorage.setItem(
         STORAGE_KEY_ADMIN_SESSION,
-        JSON.stringify({ email: emailInput.trim().toLowerCase(), role: res.role })
+        JSON.stringify({ email: authData.email, role: backendRole })
       );
-    } catch {}
-    setEmailInput('');
+
+      setActiveRole(backendRole as AdminRole);
+      setEmailInput('');
+    } catch (err: any) {
+      setAuthError(err?.message || 'Access Denied');
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  // Super Admin CRUD: Project Creation
-  const handleCreateProject = (e: React.FormEvent) => {
+  // Helper to persist edits to a project/lead back to backend API
+  const persistProjectEntity = async (updatedProj: ProjectEntity) => {
+    if (!canEdit) return;
+    setSavingId(updatedProj.id);
+    setDataError('');
+    try {
+      const capexSum = updatedProj.costComponents.reduce((acc, c) => acc + (Number(c.amountCr) || 0), 0);
+      await api.leads.update(updatedProj.id, {
+        projectName: updatedProj.name,
+        fullName: updatedProj.promoterName,
+        industry: updatedProj.industry,
+        location: updatedProj.location,
+        promotersList: updatedProj.promoters,
+        costComponents: updatedProj.costComponents,
+        meansOfFinance: updatedProj.meansOfFinance,
+        totalCostCr: String(capexSum),
+        loanRequiredCr: String(updatedProj.meansOfFinance.debtCr || 0),
+        promoterContribCr: String(updatedProj.meansOfFinance.equityCr || 0),
+        checklistUploaded: updatedProj.checklistUploaded,
+        checklistFileName: updatedProj.checklistFileName || '',
+        documents: updatedProj.documents,
+        isFunded: updatedProj.isFunded,
+        successProbability: updatedProj.isFunded ? 100 : 25,
+        status: updatedProj.isFunded
+          ? 'Funded'
+          : updatedProj.status === 'Funded'
+          ? 'Pending Audit'
+          : updatedProj.status || 'Active Lead',
+      });
+      setProjects((prev) => prev.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+      window.dispatchEvent(new CustomEvent('inisio_lead_added'));
+    } catch (err: any) {
+      setDataError(err?.message || 'Failed to save project changes to database.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  // Admin CRUD: Project Creation (persisted to backend DB)
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeRole !== 'superadmin' || !newProjName.trim()) return;
+    if (!canEdit || !newProjName.trim() || !newProjPromoter.trim()) return;
 
-    const newProj: ProjectEntity = {
-      id: `proj_${Date.now()}`,
-      name: newProjName.trim(),
-      industry: newProjIndustry.trim() || 'General Infrastructure',
-      location: newProjLocation.trim() || 'India',
-      promoterCount: 1,
-      promoters: [
-        {
-          id: `prom_${Date.now()}`,
-          name: 'Lead Promoter',
-          experience: '10 Years',
-          qualification: 'Executive Signatory',
-          shareholdingPct: 100,
-          role: 'Promoter'
-        }
-      ],
-      costComponents: [
-        { id: `cost_${Date.now()}`, category: 'Infrastructure & Site Development', amountCr: 10.0 }
-      ],
-      meansOfFinance: {
-        equityCr: 3.0,
-        debtCr: 7.0,
-        subsidyCr: 0
-      },
-      checklistUploaded: false,
-      documents: {},
-      isFunded: false
-    };
+    setCreatingProject(true);
+    setDataError('');
+    try {
+      const capexNum = Number(newProjCapex) || 10;
+      const loanNum = Number(newProjLoan) || 7;
+      const equityNum = Math.max(0, Number((capexNum - loanNum).toFixed(2)));
+      const nowTs = Date.now();
 
-    setProjects((prev) => [newProj, ...prev]);
-    setSelectedProjectId(newProj.id);
-    setNewProjName('');
-    setNewProjIndustry('');
-    setNewProjLocation('');
-    setShowNewProjectModal(false);
+      const created = await api.projects.create({
+        promoterName: newProjPromoter.trim(),
+        projectName: newProjName.trim(),
+        industry: newProjIndustry.trim() || 'General Infrastructure',
+        location: newProjLocation.trim() || 'India',
+        email: newProjEmail.trim(),
+        mobile: newProjMobile.trim(),
+        capexCr: capexNum,
+        loanCr: loanNum,
+        equityCr: equityNum,
+        promotersList: [
+          {
+            id: `prom_${nowTs}`,
+            name: newProjPromoter.trim(),
+            experience: '10 Years',
+            qualification: 'Executive Signatory',
+            shareholdingPct: 100,
+            role: 'Promoter',
+          },
+        ],
+        costComponents: [
+          {
+            id: `cost_${nowTs}`,
+            category: 'Infrastructure & Site Development',
+            amountCr: capexNum,
+          },
+        ],
+        meansOfFinance: {
+          equityCr: equityNum,
+          debtCr: loanNum,
+          subsidyCr: 0,
+        },
+      });
+
+      const createdId = String(created?._id || created?.id || '');
+      setNewProjName('');
+      setNewProjPromoter('');
+      setNewProjIndustry('');
+      setNewProjLocation('');
+      setNewProjEmail('');
+      setNewProjMobile('');
+      setNewProjCapex('10');
+      setNewProjLoan('7');
+      setShowNewProjectModal(false);
+
+      await loadAllAdminData();
+      if (createdId) {
+        setSelectedProjectId(createdId);
+      }
+      window.dispatchEvent(new CustomEvent('inisio_lead_added'));
+    } catch (err: any) {
+      setDataError(err?.message || 'Failed to create project in database.');
+    } finally {
+      setCreatingProject(false);
+    }
   };
 
-  // Super Admin CRUD: Project Deletion
-  const handleDeleteProject = (projId: string) => {
-    if (activeRole !== 'superadmin') return;
-    if (projects.length <= 1) return;
-    const remaining = projects.filter((p) => p.id !== projId);
-    setProjects(remaining);
-    setSelectedProjectId(remaining[0].id);
+  // Admin CRUD: Edit Project Details
+  const handleOpenEditProject = () => {
+    if (!canEdit || !currentProject) return;
+    setEditProjData({
+      name: currentProject.name,
+      promoterName: currentProject.promoterName || '',
+      industry: currentProject.industry,
+      location: currentProject.location,
+    });
+    setShowEditProjectModal(true);
+  };
+
+  const handleSaveProjectDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canEdit || !currentProject) return;
+    const updated: ProjectEntity = {
+      ...currentProject,
+      name: editProjData.name.trim() || currentProject.name,
+      promoterName: editProjData.promoterName.trim() || currentProject.promoterName,
+      industry: editProjData.industry.trim() || currentProject.industry,
+      location: editProjData.location.trim() || currentProject.location,
+    };
+    await persistProjectEntity(updated);
+    setShowEditProjectModal(false);
+  };
+
+  // Admin CRUD: Project Deletion
+  const handleDeleteProject = async (projId: string) => {
+    if (!canEdit || !projId) return;
+    setSavingId(projId);
+    setDataError('');
+    try {
+      await api.leads.delete(projId);
+      const remaining = projects.filter((p) => p.id !== projId);
+      setProjects(remaining);
+      setDprRequests((prev) => prev.filter((d) => d.id !== projId));
+      setSelectedProjectId(remaining[0]?.id || '');
+      window.dispatchEvent(new CustomEvent('inisio_lead_added'));
+    } catch (err: any) {
+      setDataError(err?.message || 'Failed to delete project from database.');
+    } finally {
+      setSavingId(null);
+    }
   };
 
   const handleSignOut = () => {
     setActiveRole(null);
+    setProjects([]);
+    setDprRequests([]);
+    setConsultations([]);
     try {
       localStorage.removeItem(STORAGE_KEY_ADMIN_SESSION);
+      localStorage.removeItem('inisio_auth_token');
+      localStorage.removeItem('inisio_active_user');
     } catch {}
   };
 
@@ -344,7 +687,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     );
   }, [currentProject]);
 
-  // Feature 2: Promoters CRUD (Super Admin adds multiple promoters)
+  // Feature 2: Promoters CRUD
   const [newPromoterName, setNewPromoterName] = useState('');
   const [newPromoterExp, setNewPromoterExp] = useState('');
   const [newPromoterQual, setNewPromoterQual] = useState('');
@@ -352,33 +695,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [newPromoterRole, setNewPromoterRole] = useState('Co-Promoter');
   const [showAddPromoterForm, setShowAddPromoterForm] = useState(false);
 
-  const handleAddPromoter = (e: React.FormEvent) => {
+  const handleAddPromoter = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    if (!newPromoterName) return;
+    if (!canEdit || !currentProject || !newPromoterName.trim()) return;
 
     const newProm: PromoterItem = {
       id: `prom_${Date.now()}`,
-      name: newPromoterName,
+      name: newPromoterName.trim(),
       experience: newPromoterExp || '5 Years',
       qualification: newPromoterQual || 'Graduate',
       shareholdingPct: Number(newPromoterShare) || 10,
       role: newPromoterRole || 'Partner'
     };
 
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          const updatedList = [...proj.promoters, newProm];
-          return {
-            ...proj,
-            promoters: updatedList,
-            promoterCount: updatedList.length
-          };
-        }
-        return proj;
-      })
-    );
+    const updatedList = [...currentProject.promoters, newProm];
+    await persistProjectEntity({
+      ...currentProject,
+      promoters: updatedList,
+      promoterCount: updatedList.length,
+    });
 
     setNewPromoterName('');
     setNewPromoterExp('');
@@ -386,21 +721,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setShowAddPromoterForm(false);
   };
 
-  const handleDeletePromoter = (promoterId: string) => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          const updatedList = proj.promoters.filter((p) => p.id !== promoterId);
-          return {
-            ...proj,
-            promoters: updatedList,
-            promoterCount: updatedList.length
-          };
-        }
-        return proj;
-      })
-    );
+  const handleDeletePromoter = async (promoterId: string) => {
+    if (!canEdit || !currentProject) return;
+    const updatedList = currentProject.promoters.filter((p) => p.id !== promoterId);
+    await persistProjectEntity({
+      ...currentProject,
+      promoters: updatedList,
+      promoterCount: updatedList.length,
+    });
   };
 
   // Feature 3: Project Cost and Means of finance CRUD
@@ -408,1184 +736,1141 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const [newCostAmount, setNewCostAmount] = useState('5.0');
   const [showAddCostForm, setShowAddCostForm] = useState(false);
 
-  const handleAddCostComponent = (e: React.FormEvent) => {
+  const handleAddCostComponent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    if (!newCostCat) return;
+    if (!canEdit || !currentProject || !newCostCat.trim()) return;
 
     const newComp: CostComponent = {
       id: `cost_${Date.now()}`,
-      category: newCostCat,
+      category: newCostCat.trim(),
       amountCr: Number(newCostAmount) || 1.0
     };
 
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          return {
-            ...proj,
-            costComponents: [...proj.costComponents, newComp]
-          };
-        }
-        return proj;
-      })
-    );
+    await persistProjectEntity({
+      ...currentProject,
+      costComponents: [...currentProject.costComponents, newComp],
+    });
 
     setNewCostCat('');
     setNewCostAmount('5.0');
     setShowAddCostForm(false);
   };
 
-  const handleDeleteCostComponent = (costId: string) => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          return {
-            ...proj,
-            costComponents: proj.costComponents.filter((c) => c.id !== costId)
-          };
-        }
-        return proj;
-      })
-    );
+  const handleDeleteCostComponent = async (costId: string) => {
+    if (!canEdit || !currentProject) return;
+    await persistProjectEntity({
+      ...currentProject,
+      costComponents: currentProject.costComponents.filter((c) => c.id !== costId),
+    });
   };
 
-  const handleUpdateFinance = (field: 'equityCr' | 'debtCr' | 'subsidyCr', val: number) => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          return {
-            ...proj,
-            meansOfFinance: {
-              ...proj.meansOfFinance,
-              [field]: val
-            }
-          };
-        }
-        return proj;
-      })
-    );
+  const handleUpdateFinance = async (field: 'equityCr' | 'debtCr' | 'subsidyCr', val: number) => {
+    if (!canEdit || !currentProject) return;
+    await persistProjectEntity({
+      ...currentProject,
+      meansOfFinance: {
+        ...currentProject.meansOfFinance,
+        [field]: val
+      }
+    });
   };
 
-  // Feature 4: Checklist Upload (No download allowed)
-  const handleUploadChecklist = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
+  // Feature 4: Checklist Upload
+  const handleUploadChecklist = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!canEdit || !currentProject) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          return {
-            ...proj,
-            checklistUploaded: true,
-            checklistFileName: file.name
-          };
-        }
-        return proj;
-      })
-    );
+    await persistProjectEntity({
+      ...currentProject,
+      checklistUploaded: true,
+      checklistFileName: file.name,
+    });
   };
 
   // Feature 5: Documents (Optional Uploads)
-  const handleUploadDocument = (
+  const handleUploadDocument = async (
     key: 'companyKyc' | 'promoterKyc' | 'dpr' | 'financialModel' | 'otherDocs',
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
+    if (!canEdit || !currentProject) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          return {
-            ...proj,
-            documents: {
-              ...proj.documents,
-              [key]: file.name
-            }
-          };
-        }
-        return proj;
-      })
-    );
+    await persistProjectEntity({
+      ...currentProject,
+      documents: {
+        ...currentProject.documents,
+        [key]: file.name,
+      },
+    });
   };
 
-  const handleRemoveDocument = (
+  const handleRemoveDocument = async (
     key: 'companyKyc' | 'promoterKyc' | 'dpr' | 'financialModel' | 'otherDocs'
   ) => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          const updatedDocs = { ...proj.documents };
-          delete updatedDocs[key];
-          return {
-            ...proj,
-            documents: updatedDocs
-          };
-        }
-        return proj;
-      })
-    );
+    if (!canEdit || !currentProject) return;
+    const updatedDocs = { ...currentProject.documents };
+    delete updatedDocs[key];
+    await persistProjectEntity({
+      ...currentProject,
+      documents: updatedDocs,
+    });
   };
 
-  // Feature 6: Probability Meter (Starts at 25%, rises to 100% when marked as funded)
+  // Feature 6: Probability Meter
   const currentProbability = currentProject?.isFunded ? 100 : 25;
 
-  const handleToggleFunded = () => {
-    if (activeRole !== 'superadmin' || !currentProject) return;
-    setProjects((prev) =>
-      prev.map((proj) => {
-        if (proj.id === currentProject.id) {
-          return {
-            ...proj,
-            isFunded: !proj.isFunded
-          };
-        }
-        return proj;
-      })
-    );
+  const handleToggleFunded = async () => {
+    if (!canEdit || !currentProject) return;
+    const nextFunded = !currentProject.isFunded;
+    await persistProjectEntity({
+      ...currentProject,
+      isFunded: nextFunded,
+      status: nextFunded ? 'Funded' : 'Pending Audit',
+    });
   };
 
-  // Feature 7: DPR Requests (Super Admin assigns to DPR Consultant 1, 2, 3...)
-  const handleAssignDprConsultant = (dprId: string, consultant: string) => {
-    if (activeRole !== 'superadmin') return;
-    setDprRequests((prev) =>
-      prev.map((req) => (req.id === dprId ? { ...req, assignedConsultant: consultant } : req))
-    );
+  // Feature 7: DPR Requests Assignment
+  const handleAssignDprConsultant = async (dprId: string, consultant: string) => {
+    if (!canEdit) return;
+    setDataError('');
+    try {
+      await api.leads.assign(dprId, { dprAssignedTo: consultant });
+      setDprRequests((prev) =>
+        prev.map((req) => (req.id === dprId ? { ...req, assignedConsultant: consultant } : req))
+      );
+    } catch (err: any) {
+      setDataError(err?.message || 'Failed to assign DPR consultant.');
+    }
   };
 
-  // Feature 8: Consultations (Super Admin assigns to Prosync)
-  const handleAssignConsultationToProsync = (consId: string) => {
-    if (activeRole !== 'superadmin') return;
-    setConsultations((prev) =>
-      prev.map((c) => (c.id === consId ? { ...c, assignedTo: 'Prosync' } : c))
-    );
+  // Feature 8: Consultations Assignment to Prosync
+  const handleAssignConsultationToProsync = async (consId: string) => {
+    if (!canEdit) return;
+    setDataError('');
+    try {
+      await api.consultations.updateStatus(consId, 'scheduled', 'Assigned to Prosync');
+      setConsultations((prev) =>
+        prev.map((c) => (c.id === consId ? { ...c, status: 'scheduled', assignedTo: 'Prosync' } : c))
+      );
+    } catch (err: any) {
+      setDataError(err?.message || 'Failed to assign consultation to Prosync.');
+    }
   };
 
   if (!isOpen) return null;
 
+  const adminNavItems: DashboardNavItem[] = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'projects', label: 'Projects', icon: Building2, count: projects.length },
+    { id: 'dpr', label: 'DPR Requests', icon: FileText, count: dprRequests.length },
+    { id: 'consultations', label: 'Consultations', icon: PhoneCall, count: consultations.length },
+    { id: 'visitors', label: 'Visitors', icon: Globe, count: visitors.length },
+  ];
+
+  const pageTitleMap: Record<typeof activeTab, string> = {
+    overview: 'Dashboard Overview',
+    projects: 'Projects & Entity Management',
+    dpr: 'DPR Requests',
+    consultations: 'Consultations',
+    visitors: 'Visitor Tracking',
+  };
+
   return (
     <div className="fixed inset-0 z-50 w-screen h-screen bg-slate-50 flex flex-col font-inter overflow-hidden animate-in fade-in duration-150">
-      <div className="relative w-full h-full bg-white flex flex-col overflow-hidden">
-        
-        {/* State 1: Minimal Email-Only Access Gate (No helper text, no placeholder instructions, no extra labels, no passwords) */}
-        {!activeRole ? (
-          <div className="flex-1 flex items-center justify-center p-6 bg-slate-100/70">
-            <div className="w-full max-w-sm bg-white rounded-2xl p-6 border border-slate-200 shadow-xl space-y-4">
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+      {/* State 1: Admin Login Gate */}
+      {!activeRole ? (
+        <div className="flex-1 flex items-center justify-center p-6 bg-slate-100">
+          <div className="w-full max-w-sm bg-white rounded-xl p-6 border border-slate-200 shadow-lg space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-slate-900 font-manrope">Admin Desk Access</div>
+                  <div className="text-[11px] text-slate-500">Executive Operations Panel</div>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                aria-label="Close admin login"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              <form onSubmit={handleAccessSubmit} className="space-y-3">
+            <form onSubmit={handleAccessSubmit} className="space-y-3">
+              <div className="space-y-1">
+                <label className="block text-[11px] font-semibold text-slate-600">
+                  Authorized Gmail Address
+                </label>
                 <input
                   type="email"
                   required
                   value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="Enter your email"
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900 placeholder:text-slate-400"
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    if (authError) setAuthError('');
+                  }}
+                  placeholder="yourname@gmail.com"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900 placeholder:text-slate-400"
                   autoFocus
                 />
+              </div>
 
-                {authError && (
-                  <div className="text-rose-600 text-xs font-semibold text-center">
-                    {authError}
+              {authError && (
+                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium text-center">
+                  {authError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+              >
+                {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Enter Desk</span>}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : (
+        /* State 2: Unified Dashboard Layout */
+        <DashboardLayout
+          portalName="Inisio"
+          portalSubtitle="Admin Panel"
+          portalIcon={ShieldCheck}
+          roleLabel={activeRole === 'superadmin' ? 'Super Admin' : 'Admin'}
+          roleModeLabel={canEdit ? 'Full CRUD' : 'View-Only'}
+          userName={activeRole === 'superadmin' ? 'Super Admin' : 'Executive Admin'}
+          navItems={adminNavItems}
+          activeTab={activeTab}
+          onSelectTab={(tabId) => setActiveTab(tabId as typeof activeTab)}
+          pageTitle={pageTitleMap[activeTab]}
+          pageBreadcrumb="Admin Operations"
+          onLogout={handleSignOut}
+          onCloseOverlay={onClose}
+          closeOverlayLabel="Close (Esc)"
+          headerActions={
+            <div className="flex items-center gap-2">
+              {isViewOnly && (
+                <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap shrink-0">
+                  View-Only
+                </span>
+              )}
+              {savingId && (
+                <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Saving</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={loadAllAdminData}
+                disabled={dataLoading}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${dataLoading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors shrink-0"
+                aria-label="Close admin panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          }
+        >
+          {dataError && (
+            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{dataError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={loadAllAdminData}
+                className="px-3 py-1.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 cursor-pointer shrink-0 whitespace-nowrap"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* 1. Dashboard Overview */}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <DashboardKpiCard
+                  label="Total Projects"
+                  value={projects.length}
+                  subtext="Active appraisals & projects"
+                  icon={Building2}
+                  tone="slate"
+                  onClick={() => setActiveTab('projects')}
+                />
+                <DashboardKpiCard
+                  label="Promoters"
+                  value={projects.reduce((acc, p) => acc + (p.promoters.length || 0), 0)}
+                  subtext="Mapped entity signatories"
+                  icon={Users}
+                  tone="indigo"
+                />
+                <DashboardKpiCard
+                  label="Consultations"
+                  value={consultations.length}
+                  subtext="Advisory requests"
+                  icon={PhoneCall}
+                  tone="blue"
+                  valueClassName="text-blue-600"
+                  onClick={() => setActiveTab('consultations')}
+                />
+                <DashboardKpiCard
+                  label="DPR Requests"
+                  value={dprRequests.length}
+                  subtext="Pipeline assignments"
+                  icon={FileText}
+                  tone="emerald"
+                  valueClassName="text-emerald-600"
+                  onClick={() => setActiveTab('dpr')}
+                />
+              </div>
+
+              <DashboardCard>
+                <DashboardCardHeader
+                  title="Active Project Pipelines"
+                  description="Select any project to inspect promoters, capital outlay, documents, and probability score."
+                  actions={
+                    canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('projects');
+                          setShowNewProjectModal(true);
+                        }}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>New Project</span>
+                      </button>
+                    ) : undefined
+                  }
+                />
+                {dataLoading && projects.length === 0 ? (
+                  <DashboardLoadingState label="Loading projects from database..." />
+                ) : projects.length === 0 ? (
+                  <DashboardEmptyState
+                    icon={Building2}
+                    title="No projects yet"
+                    description={
+                      canEdit
+                        ? 'Create a project entity to start tracking promoters, cost structure, and funding readiness.'
+                        : 'No projects have been registered in the system yet.'
+                    }
+                  />
+                ) : (
+                  <div className={DASHBOARD_TABLE.wrapper}>
+                    <table className={DASHBOARD_TABLE.table}>
+                      <thead className={DASHBOARD_TABLE.thead}>
+                        <tr>
+                          <th className={DASHBOARD_TABLE.th}>Project</th>
+                          <th className={DASHBOARD_TABLE.th}>Promoters</th>
+                          <th className={DASHBOARD_TABLE.th}>Capex</th>
+                          <th className={DASHBOARD_TABLE.th}>Probability</th>
+                          <th className={`${DASHBOARD_TABLE.th} text-right`}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className={DASHBOARD_TABLE.tbody}>
+                        {projects.map((proj) => {
+                          const capex = proj.costComponents.reduce((acc, c) => acc + (c.amountCr || 0), 0);
+                          return (
+                            <tr
+                              key={proj.id}
+                              onClick={() => {
+                                setSelectedProjectId(proj.id);
+                                setActiveTab('projects');
+                              }}
+                              className={`${DASHBOARD_TABLE.tr} cursor-pointer`}
+                            >
+                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>
+                                {proj.name}
+                                <div className="text-[11px] font-normal text-slate-500 mt-0.5">{proj.industry}</div>
+                              </td>
+                              <td className={`${DASHBOARD_TABLE.td} text-slate-700 tabular-nums`}>
+                                {proj.promoters.length} {proj.promoters.length === 1 ? 'Promoter' : 'Promoters'}
+                              </td>
+                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900 tabular-nums`}>
+                                ₹ {capex.toFixed(1)} Cr
+                              </td>
+                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-blue-600 tabular-nums`}>
+                                {proj.isFunded ? '100%' : '25%'}
+                              </td>
+                              <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                                <DashboardStatusBadge status={proj.isFunded ? 'Funded' : proj.status || 'In Appraisal'} />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
-                >
-                  Enter
-                </button>
-              </form>
+              </DashboardCard>
             </div>
-          </div>
-        ) : (
-          /* State 2: Modern Dashboard Layout (Left Sidebar + Right Content Panel) */
-          <div className="flex-1 flex overflow-hidden">
-            {/* Left Sidebar */}
-            <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-800">
-              <div className="p-5 space-y-5">
-                {/* Brand Header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                      I
-                    </div>
-                    <div>
-                      <div className="text-sm font-extrabold text-white font-manrope">Inisio</div>
-                      <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Admin Panel</div>
-                    </div>
-                  </div>
-                </div>
+          )}
 
-                {/* Role Indicator */}
-                <div className="p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/60 flex items-center justify-between">
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                      activeRole === 'superadmin'
-                        ? 'bg-blue-500/20 text-blue-300 border border-blue-400/30'
-                        : 'bg-slate-700 text-slate-300 border border-slate-600'
-                    }`}
-                  >
-                    {activeRole === 'superadmin' ? 'Super Admin' : 'Admin'}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-medium">Phase 1</span>
-                </div>
+          {/* 2. Projects */}
+          {activeTab === 'projects' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
+                <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+                  <UISelect
+                    value={currentProject?.id || selectedProjectId}
+                    onValueChange={setSelectedProjectId}
+                    options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                    placeholder={projects.length === 0 ? 'No projects' : 'Select project'}
+                    triggerClassName="h-9 px-3 py-1.5 text-xs font-semibold bg-slate-50 border-slate-200 min-w-[210px]"
+                  />
+                  {currentProject?.location && (
+                    <span className="text-xs text-slate-500 font-medium shrink-0">{currentProject.location}</span>
+                  )}
 
-                {/* Left Sidebar Navigation */}
-                <nav className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('overview')}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'overview'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <LayoutDashboard className="w-4 h-4 shrink-0" />
-                    <span>Overview</span>
-                  </button>
+                  {canEdit && currentProject && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleOpenEditProject}
+                        title="Edit project details"
+                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProject(currentProject.id)}
+                        title="Delete this project"
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('projects')}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'projects'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <Building2 className="w-4 h-4 shrink-0" />
-                    <span>Projects</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('dpr')}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'dpr'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <FileText className="w-4 h-4 shrink-0" />
-                    <span>DPR Requests</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('consultations')}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'consultations'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <PhoneCall className="w-4 h-4 shrink-0" />
-                    <span>Consultations</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('visitors')}
-                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      activeTab === 'visitors'
-                        ? 'bg-blue-600 text-white shadow-xs'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <Globe className="w-4 h-4 shrink-0" />
-                    <span>Visitors</span>
-                  </button>
-                </nav>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="p-4 border-t border-slate-800/80 space-y-1">
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                  <span>Close (Esc)</span>
-                </button>
-              </div>
-            </aside>
-
-            {/* Right Content Panel */}
-            <main className="flex-1 flex flex-col bg-slate-50/60 overflow-hidden">
-              {/* Header Bar */}
-              <header className="h-14 px-6 bg-white border-b border-slate-200/80 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                  <h1 className="text-sm font-extrabold text-slate-900 font-manrope capitalize">
-                    {activeTab === 'overview' && 'Dashboard Overview'}
-                    {activeTab === 'projects' && 'Projects & Entity Management'}
-                    {activeTab === 'dpr' && 'DPR Requests'}
-                    {activeTab === 'consultations' && 'Consultations'}
-                    {activeTab === 'visitors' && 'Visitor Tracking'}
-                  </h1>
-
-                  {activeRole === 'admin' && (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                      View-Only
-                    </span>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setShowNewProjectModal(true)}
+                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>New Project</span>
+                    </button>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-lg self-start sm:self-auto shrink-0">
                   <button
                     type="button"
-                    onClick={onClose}
-                    className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer"
+                    onClick={() => setCurrencyUnit('Cr')}
+                    className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                      currencyUnit === 'Cr'
+                        ? 'bg-white text-blue-600 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
                   >
-                    <X className="w-4 h-4" />
+                    INR Crores
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrencyUnit('Lakhs')}
+                    className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                      currencyUnit === 'Lakhs'
+                        ? 'bg-white text-blue-600 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    INR Lakhs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrencyUnit('Millions')}
+                    className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                      currencyUnit === 'Millions'
+                        ? 'bg-white text-blue-600 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    INR Millions
                   </button>
                 </div>
-              </header>
+              </div>
 
-              {/* View Switcher */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                
-                {/* 1. Dashboard Overview */}
-                {activeTab === 'overview' && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Projects Metric */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          Projects
+              {projects.length === 0 || !currentProject ? (
+                <DashboardCard>
+                  <DashboardEmptyState
+                    icon={Building2}
+                    title={dataLoading ? 'Loading projects...' : 'No projects yet'}
+                    description={
+                      canEdit
+                        ? 'Click "New Project" above to create a project entity.'
+                        : 'No projects have been registered yet.'
+                    }
+                  />
+                </DashboardCard>
+              ) : (
+                <>
+                  {/* Probability Meter */}
+                  <DashboardCard className="p-5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Probability of Success
                         </span>
-                        <p className="text-2xl font-black text-slate-900 font-manrope">
-                          {projects.length}
-                        </p>
                       </div>
-
-                      {/* Promoters Metric */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          Promoters
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-extrabold text-blue-600 tabular-nums">
+                          {currentProbability}%
                         </span>
-                        <p className="text-2xl font-black text-slate-900 font-manrope">
-                          {projects.reduce((acc, p) => acc + (p.promoters.length || 0), 0)}
-                        </p>
-                      </div>
 
-                      {/* Consultations Metric */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          Consultations
-                        </span>
-                        <p className="text-2xl font-black text-blue-600 font-manrope">
-                          {consultations.length}
-                        </p>
-                      </div>
-
-                      {/* DPR Requests Metric */}
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          DPR Requests
-                        </span>
-                        <p className="text-2xl font-black text-emerald-600 font-manrope">
-                          {dprRequests.length}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Quick Overview Table */}
-                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                      <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Active Project Pipelines
-                        </h3>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-100">
-                            <tr>
-                              <th className="py-2.5 px-5">Project</th>
-                              <th className="py-2.5 px-5">Promoters</th>
-                              <th className="py-2.5 px-5">Capex</th>
-                              <th className="py-2.5 px-5">Probability</th>
-                              <th className="py-2.5 px-5 text-right">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {projects.length === 0 ? (
-                              <tr>
-                                <td colSpan={5} className="py-8 text-center text-xs text-slate-500 font-medium">
-                                  No projects yet
-                                </td>
-                              </tr>
-                            ) : (
-                              projects.map((proj) => {
-                              const capex = proj.costComponents.reduce((acc, c) => acc + (c.amountCr || 0), 0);
-                              return (
-                                <tr key={proj.id} className="hover:bg-slate-50/50">
-                                  <td className="py-3 px-5 font-semibold text-slate-900">
-                                    {proj.name}
-                                    <div className="text-[11px] text-slate-400">{proj.industry}</div>
-                                  </td>
-                                  <td className="py-3 px-5 text-slate-700">
-                                    {proj.promoters.length} {proj.promoters.length === 1 ? 'Promoter' : 'Promoters'}
-                                  </td>
-                                  <td className="py-3 px-5 font-bold text-slate-900">
-                                    ₹ {capex.toFixed(1)} Cr
-                                  </td>
-                                  <td className="py-3 px-5 font-bold text-blue-600">
-                                    {proj.isFunded ? '100%' : '25%'}
-                                  </td>
-                                  <td className="py-3 px-5 text-right">
-                                    <span
-                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                        proj.isFunded
-                                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                          : 'bg-blue-50 text-blue-700 border border-blue-200'
-                                      }`}
-                                    >
-                                      {proj.isFunded ? 'Funded' : 'In Appraisal'}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            }))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. Projects (Promoters, Cost & Means of Finance, Checklist, Documents, Probability) */}
-                {activeTab === 'projects' && (
-                  <div className="space-y-6">
-                    {/* Project Selector, Super Admin CRUD Buttons, & Unit Switcher */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs">
-                      <div className="flex flex-wrap items-center gap-3 min-w-65">
-                        <UISelect
-                          value={selectedProjectId}
-                          onValueChange={setSelectedProjectId}
-                          options={projects.map((p) => ({ value: p.id, label: p.name }))}
-                          triggerClassName="h-9 px-3 py-1.5 text-xs font-bold bg-slate-50 border-slate-200"
-                        />
-                        <span className="text-xs text-slate-500 font-medium shrink-0">{currentProject?.location}</span>
-
-                        {activeRole === 'superadmin' && projects.length > 1 && (
+                        {canEdit ? (
                           <button
                             type="button"
-                            onClick={() => handleDeleteProject(selectedProjectId)}
-                            title="Delete this project"
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            onClick={handleToggleFunded}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                              currentProject?.isFunded
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                            }`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {currentProject?.isFunded ? 'Funded (100%)' : 'Mark as Funded'}
                           </button>
+                        ) : (
+                          <DashboardStatusBadge
+                            status={currentProject?.isFunded ? 'Funded' : currentProject?.status || 'In Appraisal'}
+                          />
                         )}
-
-                        {activeRole === 'superadmin' && (
-                          <button
-                            type="button"
-                            onClick={() => setShowNewProjectModal(true)}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            <span>New Project</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Display Unit Switcher (INR Crores, INR Lakhs, INR Millions) */}
-                      <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => setCurrencyUnit('Cr')}
-                          className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                            currencyUnit === 'Cr'
-                              ? 'bg-white text-blue-600 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          INR Crores
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCurrencyUnit('Lakhs')}
-                          className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                            currencyUnit === 'Lakhs'
-                              ? 'bg-white text-blue-600 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          INR Lakhs
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCurrencyUnit('Millions')}
-                          className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                            currencyUnit === 'Millions'
-                              ? 'bg-white text-blue-600 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                        >
-                          INR Millions
-                        </button>
                       </div>
                     </div>
 
-                    {projects.length === 0 || !currentProject ? (
-                      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200/90 shadow-2xs">
-                        <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                        <h3 className="text-sm font-bold text-slate-800">No projects yet</h3>
-                        <p className="text-xs text-slate-500 mt-1">
-                          {activeRole === 'superadmin' ? 'Click "New Project" above to create a project entity.' : 'No projects have been registered yet.'}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                    {/* Probability Meter (Starts at 25%, rises to 100% when marked as funded) */}
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Probability of Success
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-black text-blue-600">
-                            {currentProbability}%
-                          </span>
-
-                          {/* Super Admin funded marker */}
-                          {activeRole === 'superadmin' ? (
-                            <button
-                              type="button"
-                              onClick={handleToggleFunded}
-                              className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                                currentProject?.isFunded
-                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                  : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                              }`}
-                            >
-                              {currentProject?.isFunded ? 'Funded (100%)' : 'Mark as Funded'}
-                            </button>
-                          ) : (
-                            <span
-                              className={`px-2.5 py-1 text-xs font-bold rounded-lg ${
-                                currentProject?.isFunded
-                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                  : 'bg-slate-100 text-slate-700'
-                              }`}
-                            >
-                              {currentProject?.isFunded ? 'Funded' : 'In Appraisal'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-500 rounded-full ${
-                            currentProbability === 100 ? 'bg-emerald-500' : 'bg-blue-600'
-                          }`}
-                          style={{ width: `${currentProbability}%` }}
-                        />
-                      </div>
+                    <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          currentProbability === 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                        }`}
+                        style={{ width: `${currentProbability}%` }}
+                      />
                     </div>
+                  </DashboardCard>
 
-                    {/* Promoters (Add multiple promoters, view or manage) */}
-                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Promoters ({currentProject?.promoters.length || 0})
-                          </h3>
-                        </div>
-
-                        {activeRole === 'superadmin' && (
+                  {/* Promoters */}
+                  <DashboardCard>
+                    <DashboardCardHeader
+                      title={`Promoters (${currentProject?.promoters.length || 0})`}
+                      actions={
+                        canEdit ? (
                           <button
                             type="button"
                             onClick={() => setShowAddPromoterForm(!showAddPromoterForm)}
-                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             <span>Add Promoter</span>
                           </button>
-                        )}
-                      </div>
+                        ) : undefined
+                      }
+                    />
 
-                      {showAddPromoterForm && activeRole === 'superadmin' && (
-                        <form onSubmit={handleAddPromoter} className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs">
+                    {showAddPromoterForm && canEdit && (
+                      <form
+                        onSubmit={handleAddPromoter}
+                        className="m-5 p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs"
+                      >
+                        <input
+                          type="text"
+                          placeholder="Name"
+                          required
+                          value={newPromoterName}
+                          onChange={(e) => setNewPromoterName(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Experience"
+                          value={newPromoterExp}
+                          onChange={(e) => setNewPromoterExp(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Qualification"
+                          value={newPromoterQual}
+                          onChange={(e) => setNewPromoterQual(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Share %"
+                          value={newPromoterShare}
+                          onChange={(e) => setNewPromoterShare(e.target.value)}
+                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 tabular-nums"
+                        />
+                        <div className="flex gap-2">
                           <input
                             type="text"
-                            placeholder="Name"
-                            required
-                            value={newPromoterName}
-                            onChange={(e) => setNewPromoterName(e.target.value)}
-                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
+                            placeholder="Role"
+                            value={newPromoterRole}
+                            onChange={(e) => setNewPromoterRole(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                           />
-                          <input
-                            type="text"
-                            placeholder="Experience"
-                            value={newPromoterExp}
-                            onChange={(e) => setNewPromoterExp(e.target.value)}
-                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
-                          />
-                          <input
-                            type="text"
-                            placeholder="Qualification"
-                            value={newPromoterQual}
-                            onChange={(e) => setNewPromoterQual(e.target.value)}
-                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
-                          />
-                          <input
-                            type="number"
-                            placeholder="Share %"
-                            value={newPromoterShare}
-                            onChange={(e) => setNewPromoterShare(e.target.value)}
-                            className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
-                          />
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              placeholder="Role"
-                              value={newPromoterRole}
-                              onChange={(e) => setNewPromoterRole(e.target.value)}
-                              className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
-                            />
-                            <button
-                              type="submit"
-                              className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg cursor-pointer"
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </form>
-                      )}
-
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-100">
-                            <tr>
-                              <th className="py-2.5 px-4">Name</th>
-                              <th className="py-2.5 px-4">Experience</th>
-                              <th className="py-2.5 px-4">Qualification</th>
-                              <th className="py-2.5 px-4">Role</th>
-                              <th className="py-2.5 px-4">Share %</th>
-                              {activeRole === 'superadmin' && <th className="py-2.5 px-4 text-right">Actions</th>}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {currentProject?.promoters.map((p) => (
-                              <tr key={p.id} className="hover:bg-slate-50/50">
-                                <td className="py-2.5 px-4 font-semibold text-slate-900">{p.name}</td>
-                                <td className="py-2.5 px-4 text-slate-600">{p.experience}</td>
-                                <td className="py-2.5 px-4 text-slate-600">{p.qualification}</td>
-                                <td className="py-2.5 px-4 text-slate-700 font-medium">{p.role}</td>
-                                <td className="py-2.5 px-4 font-bold text-blue-600">{p.shareholdingPct}%</td>
-                                {activeRole === 'superadmin' && (
-                                  <td className="py-2.5 px-4 text-right">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeletePromoter(p.id)}
-                                      className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Project Cost and Means of Finance (with unit display) */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Project Cost Components */}
-                      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Project Cost ({formatCurrency(totalCostCr)})
-                          </h3>
-                          {activeRole === 'superadmin' && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAddCostForm(!showAddCostForm)}
-                              className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg flex items-center gap-1 cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Add Component</span>
-                            </button>
-                          )}
+                          <button
+                            type="submit"
+                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Save
+                          </button>
                         </div>
+                      </form>
+                    )}
 
-                        {showAddCostForm && activeRole === 'superadmin' && (
-                          <form onSubmit={handleAddCostComponent} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex gap-2 text-xs">
-                            <input
-                              type="text"
-                              placeholder="Component Name"
-                              required
-                              value={newCostCat}
-                              onChange={(e) => setNewCostCat(e.target.value)}
-                              className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
-                            />
-                            <input
-                              type="number"
-                              step="0.1"
-                              placeholder="Amount (₹ Cr)"
-                              required
-                              value={newCostAmount}
-                              onChange={(e) => setNewCostAmount(e.target.value)}
-                              className="w-24 px-3 py-1.5 bg-white border border-slate-200 rounded-lg"
-                            />
-                            <button
-                              type="submit"
-                              className="px-3 py-1.5 bg-blue-600 text-white font-bold rounded-lg cursor-pointer"
-                            >
-                              Add
-                            </button>
-                          </form>
-                        )}
-
-                        <div className="space-y-2">
-                          {currentProject?.costComponents.map((comp) => (
-                            <div
-                              key={comp.id}
-                              className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl text-xs"
-                            >
-                              <span className="font-medium text-slate-800">{comp.category}</span>
-                              <div className="flex items-center gap-3">
-                                <span className="font-bold text-slate-900">{formatCurrency(comp.amountCr)}</span>
-                                {activeRole === 'superadmin' && (
+                    <div className={DASHBOARD_TABLE.wrapper}>
+                      <table className={DASHBOARD_TABLE.table}>
+                        <thead className={DASHBOARD_TABLE.thead}>
+                          <tr>
+                            <th className={DASHBOARD_TABLE.th}>Name</th>
+                            <th className={DASHBOARD_TABLE.th}>Experience</th>
+                            <th className={DASHBOARD_TABLE.th}>Qualification</th>
+                            <th className={DASHBOARD_TABLE.th}>Role</th>
+                            <th className={DASHBOARD_TABLE.th}>Share %</th>
+                            {canEdit && <th className={`${DASHBOARD_TABLE.th} text-right`}>Actions</th>}
+                          </tr>
+                        </thead>
+                        <tbody className={DASHBOARD_TABLE.tbody}>
+                          {currentProject?.promoters.map((p) => (
+                            <tr key={p.id} className={DASHBOARD_TABLE.tr}>
+                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>{p.name}</td>
+                              <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>{p.experience}</td>
+                              <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>{p.qualification}</td>
+                              <td className={`${DASHBOARD_TABLE.td} text-slate-700 font-medium`}>{p.role}</td>
+                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-blue-600 tabular-nums`}>
+                                {p.shareholdingPct}%
+                              </td>
+                              {canEdit && (
+                                <td className={`${DASHBOARD_TABLE.td} text-right`}>
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteCostComponent(comp.id)}
-                                    className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                                    onClick={() => handleDeletePromoter(p.id)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
-                                )}
-                              </div>
-                            </div>
+                                </td>
+                              )}
+                            </tr>
                           ))}
-                        </div>
-                      </div>
-
-                      {/* Means of Finance */}
-                      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                            Means of Finance ({formatCurrency(totalMeansOfFinanceCr)})
-                          </h3>
-                        </div>
-
-                        <div className="space-y-3 text-xs">
-                          <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
-                            <span className="font-medium text-slate-700">Promoter Equity</span>
-                            {activeRole === 'superadmin' ? (
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={currentProject?.meansOfFinance.equityCr}
-                                onChange={(e) => handleUpdateFinance('equityCr', parseFloat(e.target.value) || 0)}
-                                className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-right font-bold"
-                              />
-                            ) : (
-                              <span className="font-bold text-slate-900">
-                                {formatCurrency(currentProject?.meansOfFinance.equityCr || 0)}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
-                            <span className="font-medium text-slate-700">Term Debt / Bank Loan</span>
-                            {activeRole === 'superadmin' ? (
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={currentProject?.meansOfFinance.debtCr}
-                                onChange={(e) => handleUpdateFinance('debtCr', parseFloat(e.target.value) || 0)}
-                                className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-right font-bold text-blue-600"
-                              />
-                            ) : (
-                              <span className="font-bold text-blue-600">
-                                {formatCurrency(currentProject?.meansOfFinance.debtCr || 0)}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
-                            <span className="font-medium text-slate-700">Subsidies / Grants</span>
-                            {activeRole === 'superadmin' ? (
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={currentProject?.meansOfFinance.subsidyCr}
-                                onChange={(e) => handleUpdateFinance('subsidyCr', parseFloat(e.target.value) || 0)}
-                                className="w-24 px-2 py-1 bg-white border border-slate-200 rounded-lg text-right font-bold text-emerald-600"
-                              />
-                            ) : (
-                              <span className="font-bold text-emerald-600">
-                                {formatCurrency(currentProject?.meansOfFinance.subsidyCr || 0)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                        </tbody>
+                      </table>
                     </div>
+                  </DashboardCard>
 
-                    {/* Checklist (Upload generic checklist, NO download allowed, disclaimer) */}
-                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Checklist
+                  {/* Project Cost and Means of Finance */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Project Cost Components */}
+                    <DashboardCard className="p-5 space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider tabular-nums">
+                          Project Cost ({formatCurrency(totalCostCr)})
                         </h3>
-                        {activeRole === 'superadmin' && (
-                          <label className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg cursor-pointer flex items-center gap-1.5">
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>Upload Checklist</span>
-                            <input
-                              type="file"
-                              onChange={handleUploadChecklist}
-                              className="hidden"
-                            />
-                          </label>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAddCostForm(!showAddCostForm)}
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Component</span>
+                          </button>
                         )}
                       </div>
 
-                      <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2
-                            className={`w-4 h-4 ${
-                              currentProject?.checklistUploaded ? 'text-emerald-500' : 'text-slate-300'
-                            }`}
+                      {showAddCostForm && canEdit && (
+                        <form
+                          onSubmit={handleAddCostComponent}
+                          className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap sm:flex-nowrap gap-2 text-xs"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Component Name"
+                            required
+                            value={newCostCat}
+                            onChange={(e) => setNewCostCat(e.target.value)}
+                            className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                           />
-                          <span className="font-medium text-slate-800">
-                            {currentProject?.checklistUploaded
-                              ? currentProject.checklistFileName || 'Generic Checklist Document'
-                              : 'No checklist uploaded'}
-                          </span>
-                        </div>
-                        {currentProject?.checklistUploaded && (
-                          <span className="text-[10px] text-slate-400 font-medium">Uploaded</span>
-                        )}
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="Amount (₹ Cr)"
+                            required
+                            value={newCostAmount}
+                            onChange={(e) => setNewCostAmount(e.target.value)}
+                            className="w-28 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 tabular-nums"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
+                          >
+                            Add
+                          </button>
+                        </form>
+                      )}
+
+                      <div className="space-y-2">
+                        {currentProject?.costComponents.map((comp) => (
+                          <div
+                            key={comp.id}
+                            className="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200/70 rounded-lg text-xs"
+                          >
+                            <span className="font-medium text-slate-800">{comp.category}</span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="font-semibold text-slate-900 tabular-nums">
+                                {formatCurrency(comp.amountCr)}
+                              </span>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteCostComponent(comp.id)}
+                                  className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    </DashboardCard>
 
-                      {/* Required Disclaimer */}
-                      <p className="text-[11px] text-slate-500 italic bg-amber-50/70 border border-amber-200/60 p-2.5 rounded-xl">
-                        This checklist is indicative, not exhaustive, and may differ from bank to bank.
-                      </p>
-                    </div>
-
-                    {/* Documents (Optional Uploads) */}
-                    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
-                      <div>
-                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Documents (Optional Uploads)
+                    {/* Means of Finance */}
+                    <DashboardCard className="p-5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider tabular-nums">
+                          Means of Finance ({formatCurrency(totalMeansOfFinanceCr)})
                         </h3>
                       </div>
 
                       <div className="space-y-2.5 text-xs">
-                        {(
-                          [
-                            { key: 'companyKyc', label: 'Company KYC' },
-                            { key: 'promoterKyc', label: 'Promoter KYC' },
-                            { key: 'dpr', label: 'DPR' },
-                            { key: 'financialModel', label: 'Financial model' },
-                            { key: 'otherDocs', label: 'Other documents' }
-                          ] as const
-                        ).map((doc) => {
-                          const uploadedFile = currentProject?.documents[doc.key];
-                          return (
-                            <div
-                              key={doc.key}
-                              className="p-3 bg-slate-50 rounded-xl flex items-center justify-between"
-                            >
-                              <div>
-                                <span className="font-medium text-slate-800">{doc.label}</span>
-                                {uploadedFile && (
-                                  <div className="text-[10px] text-slate-400">{uploadedFile}</div>
-                                )}
-                              </div>
+                        <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between gap-3">
+                          <span className="font-medium text-slate-700">Promoter Equity</span>
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={currentProject?.meansOfFinance.equityCr}
+                              onChange={(e) => handleUpdateFinance('equityCr', parseFloat(e.target.value) || 0)}
+                              className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-right font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            />
+                          ) : (
+                            <span className="font-semibold text-slate-900 tabular-nums">
+                              {formatCurrency(currentProject?.meansOfFinance.equityCr || 0)}
+                            </span>
+                          )}
+                        </div>
 
-                              <div className="flex items-center gap-2">
-                                {uploadedFile ? (
-                                  <>
-                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      Uploaded
-                                    </span>
-                                    {activeRole === 'superadmin' && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleRemoveDocument(doc.key)}
-                                        className="text-slate-400 hover:text-rose-600 cursor-pointer"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                  </>
-                                ) : (
-                                  activeRole === 'superadmin' && (
-                                    <label className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer text-[11px] font-semibold text-slate-700 flex items-center gap-1">
-                                      <Upload className="w-3 h-3" />
-                                      <span>Upload</span>
-                                      <input
-                                        type="file"
-                                        onChange={(e) => handleUploadDocument(doc.key, e)}
-                                        className="hidden"
-                                      />
-                                    </label>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between gap-3">
+                          <span className="font-medium text-slate-700">Term Debt / Bank Loan</span>
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={currentProject?.meansOfFinance.debtCr}
+                              onChange={(e) => handleUpdateFinance('debtCr', parseFloat(e.target.value) || 0)}
+                              className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-right font-semibold text-blue-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            />
+                          ) : (
+                            <span className="font-semibold text-blue-600 tabular-nums">
+                              {formatCurrency(currentProject?.meansOfFinance.debtCr || 0)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between gap-3">
+                          <span className="font-medium text-slate-700">Subsidies / Grants</span>
+                          {canEdit ? (
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={currentProject?.meansOfFinance.subsidyCr}
+                              onChange={(e) => handleUpdateFinance('subsidyCr', parseFloat(e.target.value) || 0)}
+                              className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-right font-semibold text-emerald-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            />
+                          ) : (
+                            <span className="font-semibold text-emerald-600 tabular-nums">
+                              {formatCurrency(currentProject?.meansOfFinance.subsidyCr || 0)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    </>
-                    )}
+                    </DashboardCard>
                   </div>
-                )}
 
-                {/* 3. DPR Requests (Super Admin can assign to DPR Consultant 1, 2, 3...) */}
-                {activeTab === 'dpr' && (
-                  <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  {/* Checklist */}
+                  <DashboardCard className="p-5 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
                       <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                        DPR Requests ({dprRequests.length})
+                        Checklist
+                      </h3>
+                      {canEdit && (
+                        <label className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Checklist</span>
+                          <input
+                            type="file"
+                            onChange={handleUploadChecklist}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2
+                          className={`w-4 h-4 shrink-0 ${
+                            currentProject?.checklistUploaded ? 'text-emerald-600' : 'text-slate-300'
+                          }`}
+                        />
+                        <span className="font-medium text-slate-800">
+                          {currentProject?.checklistUploaded
+                            ? currentProject.checklistFileName || 'Generic Checklist Document'
+                            : 'No checklist uploaded'}
+                        </span>
+                      </div>
+                      {currentProject?.checklistUploaded && (
+                        <DashboardStatusBadge status="Uploaded" />
+                      )}
+                    </div>
+
+                    <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/70 px-3 py-2 rounded-lg">
+                      This checklist is indicative, not exhaustive, and may differ from bank to bank.
+                    </p>
+                  </DashboardCard>
+
+                  {/* Documents */}
+                  <DashboardCard className="p-5 space-y-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Documents (Optional Uploads)
                       </h3>
                     </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-100">
-                          <tr>
-                            <th className="py-2.5 px-5">Project / Promoter</th>
-                            <th className="py-2.5 px-5">Contact</th>
-                            <th className="py-2.5 px-5">Date</th>
-                            <th className="py-2.5 px-5">Assigned Consultant</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {dprRequests.length === 0 ? (
-                            <tr>
-                              <td colSpan={4} className="py-8 text-center text-xs text-slate-500 font-medium">
-                                No DPR requests yet
-                              </td>
-                            </tr>
-                          ) : (
-                            dprRequests.map((req) => (
-                            <tr key={req.id} className="hover:bg-slate-50/50">
-                              <td className="py-3 px-5 font-semibold text-slate-900">
-                                {req.projectName}
-                                <div className="text-[11px] text-slate-400 font-normal">{req.promoterName}</div>
-                              </td>
-                              <td className="py-3 px-5 text-slate-600">
-                                <div>{req.email}</div>
-                                <div className="text-[11px] text-slate-400">{req.phone}</div>
-                              </td>
-                              <td className="py-3 px-5 text-slate-500">{req.date}</td>
-                              <td className="py-3 px-5">
-                                {activeRole === 'superadmin' ? (
-                                  <UISelect
-                                    value={req.assignedConsultant || ''}
-                                    onValueChange={(val) => handleAssignDprConsultant(req.id, val)}
-                                    placeholder="Unassigned"
-                                    options={[
-                                      { value: '', label: 'Unassigned' },
-                                      { value: 'DPR Consultant 1', label: 'DPR Consultant 1' },
-                                      { value: 'DPR Consultant 2', label: 'DPR Consultant 2' },
-                                      { value: 'DPR Consultant 3', label: 'DPR Consultant 3' },
-                                      { value: 'DPR Consultant 4', label: 'DPR Consultant 4' }
-                                    ]}
-                                    triggerClassName="h-8 px-2.5 py-1 text-xs bg-slate-50 border-slate-200"
-                                  />
-                                ) : (
-                                  <span className="font-semibold text-slate-800">
-                                    {req.assignedConsultant || 'Unassigned'}
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          )))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+                    <div className="space-y-2.5 text-xs">
+                      {(
+                        [
+                          { key: 'companyKyc', label: 'Company KYC' },
+                          { key: 'promoterKyc', label: 'Promoter KYC' },
+                          { key: 'dpr', label: 'DPR' },
+                          { key: 'financialModel', label: 'Financial model' },
+                          { key: 'otherDocs', label: 'Other documents' },
+                        ] as const
+                      ).map((doc) => {
+                        const uploadedFile = currentProject?.documents[doc.key];
+                        return (
+                          <div
+                            key={doc.key}
+                            className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0">
+                              <span className="font-medium text-slate-800">{doc.label}</span>
+                              {uploadedFile && (
+                                <div className="text-[11px] text-slate-500 truncate mt-0.5">{uploadedFile}</div>
+                              )}
+                            </div>
 
-                {/* 4. Consultations (Super Admin can assign to Prosync) */}
-                {activeTab === 'consultations' && (
-                  <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                        Consultations ({consultations.length})
-                      </h3>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {uploadedFile ? (
+                                <>
+                                  <DashboardStatusBadge status="Approved" />
+                                  {canEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveDocument(doc.key)}
+                                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                canEdit && (
+                                  <label className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
+                                    <Upload className="w-3 h-3" />
+                                    <span>Upload</span>
+                                    <input
+                                      type="file"
+                                      onChange={(e) => handleUploadDocument(doc.key, e)}
+                                      className="hidden"
+                                    />
+                                  </label>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
+                  </DashboardCard>
+                </>
+              )}
+            </div>
+          )}
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-100">
-                          <tr>
-                            <th className="py-2.5 px-5">Client Name</th>
-                            <th className="py-2.5 px-5">Contact</th>
-                            <th className="py-2.5 px-5">Category / Ticket</th>
-                            <th className="py-2.5 px-5">Date</th>
-                            <th className="py-2.5 px-5 text-right">Assignment</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {consultations.length === 0 ? (
-                            <tr>
-                              <td colSpan={5} className="py-8 text-center text-xs text-slate-500 font-medium">
-                                No consultations yet
-                              </td>
-                            </tr>
-                          ) : (
-                            consultations.map((c) => (
-                            <tr key={c.id} className="hover:bg-slate-50/50">
-                              <td className="py-3 px-5 font-semibold text-slate-900">{c.clientName}</td>
-                              <td className="py-3 px-5 text-slate-600">
-                                <div>{c.email}</div>
-                                <div className="text-[11px] text-slate-400">{c.phone}</div>
-                              </td>
-                              <td className="py-3 px-5 font-medium text-slate-800">{c.projectCategory}</td>
-                              <td className="py-3 px-5 text-slate-500">{c.date}</td>
-                              <td className="py-3 px-5 text-right">
-                                {c.assignedTo === 'Prosync' ? (
-                                  <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                    Assigned to Prosync
-                                  </span>
-                                ) : activeRole === 'superadmin' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAssignConsultationToProsync(c.id)}
-                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] rounded-lg cursor-pointer"
-                                  >
-                                    Assign to Prosync
-                                  </button>
-                                ) : (
-                                  <span className="text-slate-400 font-medium text-[11px]">Unassigned</span>
-                                )}
-                              </td>
-                            </tr>
-                          )))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+          {/* 3. DPR Requests */}
+          {activeTab === 'dpr' && (
+            <DashboardCard>
+              <DashboardCardHeader
+                title={`DPR & Pipeline Assignments (${dprRequests.length})`}
+                description="Assign project appraisals to DPR engineering consultants."
+              />
+              {dprRequests.length === 0 ? (
+                <DashboardEmptyState
+                  icon={FileText}
+                  title="No DPR requests yet"
+                  description="DPR preparation requests submitted by promoters will appear here."
+                />
+              ) : (
+                <div className={DASHBOARD_TABLE.wrapper}>
+                  <table className={DASHBOARD_TABLE.table}>
+                    <thead className={DASHBOARD_TABLE.thead}>
+                      <tr>
+                        <th className={DASHBOARD_TABLE.th}>Project / Promoter</th>
+                        <th className={DASHBOARD_TABLE.th}>Contact</th>
+                        <th className={DASHBOARD_TABLE.th}>Status</th>
+                        <th className={DASHBOARD_TABLE.th}>Date</th>
+                        <th className={DASHBOARD_TABLE.th}>Assigned Consultant</th>
+                      </tr>
+                    </thead>
+                    <tbody className={DASHBOARD_TABLE.tbody}>
+                      {dprRequests.map((req) => (
+                        <tr key={req.id} className={DASHBOARD_TABLE.tr}>
+                          <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>
+                            {req.projectName}
+                            <div className="text-[11px] text-slate-500 font-normal mt-0.5">{req.promoterName}</div>
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>
+                            <div>{req.email}</div>
+                            <div className="text-[11px] text-slate-400 tabular-nums">{req.phone}</div>
+                          </td>
+                          <td className={DASHBOARD_TABLE.td}>
+                            <DashboardStatusBadge status={req.status || 'Active Lead'} />
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                            {req.date}
+                          </td>
+                          <td className={DASHBOARD_TABLE.td}>
+                            {canEdit ? (
+                              <UISelect
+                                value={req.assignedConsultant || ''}
+                                onValueChange={(val) => handleAssignDprConsultant(req.id, val)}
+                                placeholder="Unassigned"
+                                options={[
+                                  { value: '', label: 'Unassigned' },
+                                  { value: 'DPR Consultant 1', label: 'DPR Consultant 1' },
+                                  { value: 'DPR Consultant 2', label: 'DPR Consultant 2' },
+                                  { value: 'DPR Consultant 3', label: 'DPR Consultant 3' },
+                                  { value: 'DPR Consultant 4', label: 'DPR Consultant 4' },
+                                ]}
+                                triggerClassName="h-8 px-2.5 py-1 text-xs bg-slate-50 border-slate-200"
+                              />
+                            ) : (
+                              <span className="font-semibold text-slate-800">
+                                {req.assignedConsultant || 'Unassigned'}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </DashboardCard>
+          )}
 
-                {/* 5. Visitors (Read-Only for both roles) */}
-                {activeTab === 'visitors' && (
-                  <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden space-y-4">
-                    <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                        Visitor Sessions ({visitors.length})
-                      </h3>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
-                        Read-Only
-                      </span>
-                    </div>
+          {/* 4. Consultations */}
+          {activeTab === 'consultations' && (
+            <DashboardCard>
+              <DashboardCardHeader
+                title={`Consultations (${consultations.length})`}
+                description="Review advisory consultations and route requests to Prosync Desk."
+              />
+              {consultations.length === 0 ? (
+                <DashboardEmptyState
+                  icon={PhoneCall}
+                  title="No consultations yet"
+                  description="Scheduled promoter consultations will appear here."
+                />
+              ) : (
+                <div className={DASHBOARD_TABLE.wrapper}>
+                  <table className={DASHBOARD_TABLE.table}>
+                    <thead className={DASHBOARD_TABLE.thead}>
+                      <tr>
+                        <th className={DASHBOARD_TABLE.th}>Client Name</th>
+                        <th className={DASHBOARD_TABLE.th}>Contact</th>
+                        <th className={DASHBOARD_TABLE.th}>Category / Slot</th>
+                        <th className={DASHBOARD_TABLE.th}>Date</th>
+                        <th className={`${DASHBOARD_TABLE.th} text-right`}>Assignment</th>
+                      </tr>
+                    </thead>
+                    <tbody className={DASHBOARD_TABLE.tbody}>
+                      {consultations.map((c) => (
+                        <tr key={c.id} className={DASHBOARD_TABLE.tr}>
+                          <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>{c.clientName}</td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>
+                            <div>{c.email}</div>
+                            <div className="text-[11px] text-slate-400 tabular-nums">{c.phone}</div>
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} font-medium text-slate-800`}>{c.projectCategory}</td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                            {c.date}
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                            {c.assignedTo === 'Prosync' ? (
+                              <DashboardStatusBadge status="Assigned to Prosync" />
+                            ) : canEdit ? (
+                              <button
+                                type="button"
+                                onClick={() => handleAssignConsultationToProsync(c.id)}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg cursor-pointer whitespace-nowrap"
+                              >
+                                Assign to Prosync
+                              </button>
+                            ) : (
+                              <span className="text-slate-500 font-medium text-xs">{c.status || 'Unassigned'}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </DashboardCard>
+          )}
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-100">
-                          <tr>
-                            <th className="py-2.5 px-4">Session ID</th>
-                            <th className="py-2.5 px-4">Page Visited</th>
-                            <th className="py-2.5 px-4">Timestamp</th>
-                            <th className="py-2.5 px-4">Device / OS</th>
-                            <th className="py-2.5 px-4">Browser</th>
-                            <th className="py-2.5 px-4">Location</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {visitors.map((v) => (
-                            <tr key={v.id} className="hover:bg-slate-50/50">
-                              <td className="py-2.5 px-4 font-mono text-[11px] text-slate-600">{v.sessionId}</td>
-                              <td className="py-2.5 px-4 font-medium text-slate-900">{v.path}</td>
-                              <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">
-                                {new Date(v.timestamp).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  second: '2-digit'
-                                })}
-                              </td>
-                              <td className="py-2.5 px-4 text-slate-700">{v.device}</td>
-                              <td className="py-2.5 px-4 text-slate-700">{v.browser}</td>
-                              <td className="py-2.5 px-4 text-slate-700">{v.location || 'Local / Inferred'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+          {/* 5. Visitors */}
+          {activeTab === 'visitors' && (
+            <DashboardCard>
+              <DashboardCardHeader
+                title={`Visitor Sessions (${visitors.length})`}
+                description="Recent web client telemetry recorded across application routes."
+                actions={
+                  <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                    Read-Only
+                  </span>
+                }
+              />
+              {visitors.length === 0 ? (
+                <DashboardEmptyState
+                  icon={Globe}
+                  title="No visitor sessions recorded"
+                  description="Client session visits will appear here once traffic is logged."
+                />
+              ) : (
+                <div className={DASHBOARD_TABLE.wrapper}>
+                  <table className={DASHBOARD_TABLE.table}>
+                    <thead className={DASHBOARD_TABLE.thead}>
+                      <tr>
+                        <th className={DASHBOARD_TABLE.th}>Session ID</th>
+                        <th className={DASHBOARD_TABLE.th}>Page Visited</th>
+                        <th className={DASHBOARD_TABLE.th}>Timestamp</th>
+                        <th className={DASHBOARD_TABLE.th}>Device / OS</th>
+                        <th className={DASHBOARD_TABLE.th}>Browser</th>
+                        <th className={DASHBOARD_TABLE.th}>Location</th>
+                      </tr>
+                    </thead>
+                    <tbody className={DASHBOARD_TABLE.tbody}>
+                      {visitors.map((v) => (
+                        <tr key={v.id} className={DASHBOARD_TABLE.tr}>
+                          <td className={`${DASHBOARD_TABLE.td} font-mono text-[11px] text-slate-600`}>
+                            {v.sessionId}
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} font-medium text-slate-900`}>{v.path}</td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                            {new Date(v.timestamp).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })}
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>{v.device}</td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>{v.browser}</td>
+                          <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>
+                            {v.location || 'Local / Inferred'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </DashboardCard>
+          )}
+        </DashboardLayout>
+      )}
 
+      {/* Modal: Admin New Project Creation */}
+      {showNewProjectModal && canEdit && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 font-manrope">Create New Project</h3>
+              <button
+                type="button"
+                onClick={() => setShowNewProjectModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateProject} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Project Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newProjName}
+                  onChange={(e) => setNewProjName(e.target.value)}
+                  placeholder="e.g. Solar Park Alpha"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                />
               </div>
-            </main>
-          </div>
-        )}
-
-        {/* Modal: Super Admin New Project Creation */}
-        {showNewProjectModal && activeRole === 'superadmin' && (
-          <div className="fixed inset-0 z-60 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900 font-manrope">Create New Project</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowNewProjectModal(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Promoter Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newProjPromoter}
+                  onChange={(e) => setNewProjPromoter(e.target.value)}
+                  placeholder="e.g. Rajesh Verma"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                />
               </div>
-              <form onSubmit={handleCreateProject} className="p-5 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Project Name</label>
+                  <label className="block text-slate-700 font-semibold mb-1">Industry *</label>
                   <input
                     type="text"
                     required
-                    value={newProjName}
-                    onChange={(e) => setNewProjName(e.target.value)}
-                    placeholder="e.g. Solar Park Alpha"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Industry</label>
-                  <input
-                    type="text"
                     value={newProjIndustry}
                     onChange={(e) => setNewProjIndustry(e.target.value)}
                     placeholder="e.g. Renewable Energy"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   />
                 </div>
                 <div>
@@ -1595,30 +1880,148 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     value={newProjLocation}
                     onChange={(e) => setNewProjLocation(e.target.value)}
                     placeholder="e.g. Gujarat, India"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   />
                 </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowNewProjectModal(false)}
-                    className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 cursor-pointer"
-                  >
-                    Create Project
-                  </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={newProjEmail}
+                    onChange={(e) => setNewProjEmail(e.target.value)}
+                    placeholder="promoter@company.in"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  />
                 </div>
-              </form>
-            </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Mobile</label>
+                  <input
+                    type="text"
+                    value={newProjMobile}
+                    onChange={(e) => setNewProjMobile(e.target.value)}
+                    placeholder="10-digit mobile"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Capex (₹ Cr) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={newProjCapex}
+                    onChange={(e) => setNewProjCapex(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 tabular-nums"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Term Loan (₹ Cr) *</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    value={newProjLoan}
+                    onChange={(e) => setNewProjLoan(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 tabular-nums"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewProjectModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingProject}
+                  className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                >
+                  {creatingProject ? 'Creating...' : 'Create Project'}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+      {/* Modal: Admin Edit Project Details */}
+      {showEditProjectModal && canEdit && currentProject && (
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 font-manrope">Edit Project Details</h3>
+              <button
+                type="button"
+                onClick={() => setShowEditProjectModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveProjectDetails} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Project Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editProjData.name}
+                  onChange={(e) => setEditProjData({ ...editProjData, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Lead Promoter</label>
+                <input
+                  type="text"
+                  value={editProjData.promoterName}
+                  onChange={(e) => setEditProjData({ ...editProjData, promoterName: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Industry</label>
+                <input
+                  type="text"
+                  value={editProjData.industry}
+                  onChange={(e) => setEditProjData({ ...editProjData, industry: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Location</label>
+                <input
+                  type="text"
+                  value={editProjData.location}
+                  onChange={(e) => setEditProjData({ ...editProjData, location: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditProjectModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 cursor-pointer whitespace-nowrap"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

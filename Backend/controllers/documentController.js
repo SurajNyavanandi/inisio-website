@@ -5,6 +5,7 @@ import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import { sendError, sendSuccess } from '../utils/responseHandler.js';
 import { storageRoot } from '../middleware/uploadMiddleware.js';
+import { isDBConnected } from '../config/db.js';
 
 const matchesAssignment = (assignment, user, team) => {
   const assigned = String(assignment || '').trim().toLowerCase();
@@ -24,6 +25,7 @@ const canAccess = (project, user) => {
 };
 
 const findProjectRecord = async (id) => {
+  if (!isDBConnected()) return null;
   const lead = await Lead.findById(id).catch(() => null);
   if (lead) return { type: 'lead', record: lead };
   const project = await Project.findById(id).catch(() => null);
@@ -32,6 +34,9 @@ const findProjectRecord = async (id) => {
 
 export const uploadDocument = async (req, res, next) => {
   try {
+    if (!isDBConnected()) {
+      return sendError(res, 'Document storage requires database connection', 503);
+    }
     const { leadId, category } = req.body;
     if (!leadId || !category || !req.file) return sendError(res, 'leadId, category, and a file are required', 400);
     const projectRecord = await findProjectRecord(leadId);
@@ -83,6 +88,9 @@ export const uploadDocument = async (req, res, next) => {
 
 export const listDocuments = async (req, res, next) => {
   try {
+    if (!isDBConnected()) {
+      return sendSuccess(res, [], 'Documents retrieved (offline fallback)');
+    }
     const projectRecord = await findProjectRecord(req.params.leadId);
     if (!projectRecord) return sendError(res, 'Project not found', 404);
     if (!canAccess(projectRecord.record, req.user)) return sendError(res, 'You are not authorized to view these documents', 403);
@@ -98,6 +106,9 @@ export const listDocuments = async (req, res, next) => {
 
 export const downloadDocument = async (req, res, next) => {
   try {
+    if (!isDBConnected()) {
+      return sendError(res, 'Document not found', 404);
+    }
     const document = await Document.findById(req.params.id);
     if (!document) return sendError(res, 'Document not found', 404);
     const projectRecord = document.projectId

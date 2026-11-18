@@ -3,6 +3,7 @@ import {
   getProjects,
   getProjectById,
   createProject,
+  updateProject,
   updateProjectAudit,
   deleteProject,
 } from '../controllers/projectController.js';
@@ -14,6 +15,7 @@ const router = express.Router();
 router.get('/', authenticateUser, getProjects);
 router.get('/:id', authenticateUser, getProjectById);
 router.post('/', optionalAuth, validateBody(['promoterName', 'projectName', 'industry', 'capexCr', 'loanCr']), createProject);
+router.put('/:id', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), updateProject);
 router.put('/:id/audit', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin', 'ca'), updateProjectAudit);
 router.delete('/:id', authenticateUser, restrictSuperAdminViewer, authorizeRoles('admin'), deleteProject);
 

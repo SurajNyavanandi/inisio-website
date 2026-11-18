@@ -31,6 +31,23 @@ export interface LeadRecord {
   assignedCA?: string;
   dprAssignedTo?: string;
   consultationAssignedTo?: string;
+  assignedBank?: string;
+  bankName?: string;
+  caReviewNotes?: string;
+  promotersList?: any[];
+  costComponents?: any[];
+  customCostComponents?: any[];
+  customFinanceComponents?: any[];
+  uploadedDocuments?: any[];
+  documentsUploaded?: boolean;
+  dprFile?: string;
+  cmaFile?: string;
+  checklistUploaded?: boolean;
+  checklistFileName?: string;
+  documents?: Record<string, string>;
+  isFunded?: boolean;
+  successProbability?: number;
+  recordType?: 'lead' | 'project';
   source?: string;
   submittedAt?: string;
   consultationStatus?: string;
@@ -51,14 +68,29 @@ export function normalizeLead(item: any): LeadRecord {
   }
 
   const id = String(item._id || item.id || `lead_${Date.now()}`);
-  const projectCost = item.totalCostCr !== undefined ? item.totalCostCr : item.projectCost || '0';
-  const proposedLoan = item.loanRequiredCr !== undefined ? item.loanRequiredCr : item.proposedLoan || '0';
-  const dscr = item.dscrEstimate !== undefined ? item.dscrEstimate : item.dscr || '1.45';
+  const projectCost =
+    item.totalCostCr !== undefined
+      ? item.totalCostCr
+      : item.capexCr !== undefined
+      ? item.capexCr
+      : item.projectCost || '0';
+  const proposedLoan =
+    item.loanRequiredCr !== undefined
+      ? item.loanRequiredCr
+      : item.loanCr !== undefined
+      ? item.loanCr
+      : item.proposedLoan || '0';
+  const dscr =
+    item.dscrEstimate !== undefined
+      ? item.dscrEstimate
+      : item.dscr !== undefined
+      ? item.dscr
+      : '1.45';
 
   return {
     id,
     _id: item._id || id,
-    fullName: item.fullName || item.name || '',
+    fullName: item.fullName || item.promoterName || item.name || '',
     email: item.email || '',
     phone: item.mobile || item.phone || '',
     mobile: item.mobile || item.phone || '',
@@ -69,7 +101,7 @@ export function normalizeLead(item: any): LeadRecord {
     totalCostCr: projectCost,
     proposedLoan,
     loanRequiredCr: proposedLoan,
-    promoterContribCr: item.promoterContribCr || '0',
+    promoterContribCr: item.promoterContribCr ?? item.equityCr ?? '0',
     dscr,
     dscrEstimate: dscr,
     bankabilityScore: item.feasibilityScore || item.bankabilityScore || '',
@@ -79,13 +111,34 @@ export function normalizeLead(item: any): LeadRecord {
     status: item.status || 'Active Lead',
     createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined,
-    notes: item.notes || '',
+    notes: item.notes || item.caReviewNotes || '',
     meansOfFinance: item.meansOfFinance,
     riskProfile: item.riskProfile,
     downloadedPDF: Boolean(item.downloadedPDF),
     assignedCA: item.assignedCA,
     dprAssignedTo: item.dprAssignedTo,
-    consultationAssignedTo: item.consultationAssignedTo
+    consultationAssignedTo: item.consultationAssignedTo,
+    assignedBank: item.assignedBank || item.bankName,
+    bankName: item.bankName || item.assignedBank,
+    caReviewNotes: item.caReviewNotes,
+    promotersList: Array.isArray(item.promotersList) ? item.promotersList : undefined,
+    costComponents: Array.isArray(item.costComponents) ? item.costComponents : undefined,
+    customCostComponents: Array.isArray(item.customCostComponents) ? item.customCostComponents : undefined,
+    customFinanceComponents: Array.isArray(item.customFinanceComponents) ? item.customFinanceComponents : undefined,
+    uploadedDocuments: Array.isArray(item.uploadedDocuments) ? item.uploadedDocuments : undefined,
+    documentsUploaded: Boolean(item.documentsUploaded),
+    dprFile: item.dprFile,
+    cmaFile: item.cmaFile,
+    checklistUploaded: Boolean(item.checklistUploaded),
+    checklistFileName: item.checklistFileName,
+    documents: item.documents && typeof item.documents === 'object' ? item.documents : undefined,
+    isFunded: Boolean(item.isFunded),
+    successProbability: typeof item.successProbability === 'number' ? item.successProbability : undefined,
+    recordType: item.recordType,
+    source: item.source,
+    submittedAt: item.submittedAt,
+    consultationStatus: item.consultationStatus,
+    assessmentCompleted: item.assessmentCompleted !== undefined ? Boolean(item.assessmentCompleted) : undefined,
   };
 }
 
@@ -106,24 +159,27 @@ export function getStoredLeads(emailFilter?: string): LeadRecord[] {
   }
 }
 
+export async function fetchLeadsFromDatabaseStrict(params?: { search?: string; filterSource?: string; email?: string }): Promise<LeadRecord[]> {
+  const res = await api.leads.getAll(params);
+  const dataList = Array.isArray(res) ? res : (res as any)?.data || [];
+  const normalized = dataList.map(normalizeLead);
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    } catch (e) {
+      console.warn('Could not cache leads in localStorage:', e);
+    }
+  }
+  return normalized;
+}
+
 export async function fetchLeadsFromDatabase(params?: { search?: string; filterSource?: string; email?: string }): Promise<LeadRecord[]> {
   try {
-    const res = await api.leads.getAll(params);
-    const dataList = Array.isArray(res) ? res : (res as any)?.data || [];
-    const normalized = dataList.map(normalizeLead);
-
-    // Keep client cache in sync with real database records
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-      } catch (e) {
-        console.warn('Could not cache leads in localStorage:', e);
-      }
-    }
-    return normalized;
+    return await fetchLeadsFromDatabaseStrict(params);
   } catch (err) {
     console.warn('Database fetch failed, falling back to local session store:', err);
-    return getStoredLeads();
+    return getStoredLeads(params?.email);
   }
 }
 
@@ -177,21 +233,35 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
   return norm;
 }
 
-export async function updateLeadRecord(id: string, updates: Partial<LeadRecord>, updaterName?: string): Promise<LeadRecord | null> {
+export async function updateLeadRecord(
+  id: string,
+  updates: Partial<LeadRecord>,
+  _updaterName?: string,
+  options?: { throwOnError?: boolean }
+): Promise<LeadRecord | null> {
+  let serverRecord: LeadRecord | null = null;
   try {
-    await api.leads.update(id, updates);
+    const res = await api.leads.update(id, updates);
+    if (res && (res._id || res.id)) {
+      serverRecord = normalizeLead(res);
+    }
   } catch (err) {
     console.warn('Database update failed:', err);
+    if (options?.throwOnError) {
+      throw err;
+    }
   }
 
   const currentLeads = getStoredLeads();
   const index = currentLeads.findIndex(l => l.id === id || l._id === id);
-  if (index === -1) return null;
+  const updatedLead = serverRecord || (index !== -1 ? normalizeLead({ ...currentLeads[index], ...updates }) : normalizeLead({ id, ...updates }));
 
-  const updatedLead = { ...currentLeads[index], ...updates };
-  currentLeads[index] = updatedLead;
+  const nextList = index !== -1
+    ? currentLeads.map((l, idx) => (idx === index ? updatedLead : l))
+    : [updatedLead, ...currentLeads];
+
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(currentLeads));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
   } catch (err) {
     console.warn('Failed to update lead in localStorage:', err);
   }
@@ -202,11 +272,14 @@ export async function updateLeadRecord(id: string, updates: Partial<LeadRecord>,
   return updatedLead;
 }
 
-export async function deleteLeadRecord(id: string): Promise<void> {
+export async function deleteLeadRecord(id: string, options?: { throwOnError?: boolean }): Promise<void> {
   try {
     await api.leads.delete(id);
   } catch (err) {
     console.warn('Database delete failed:', err);
+    if (options?.throwOnError) {
+      throw err;
+    }
   }
 
   const currentLeads = getStoredLeads();

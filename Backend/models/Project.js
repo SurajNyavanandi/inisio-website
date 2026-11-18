@@ -105,7 +105,35 @@ const projectSchema = new mongoose.Schema(
     },
     sanctionDate: {
       type: Date,
-    }
+    },
+    promotersList: {
+      type: Array,
+      default: [],
+    },
+    costComponents: {
+      type: Array,
+      default: [],
+    },
+    meansOfFinance: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    checklistUploaded: {
+      type: Boolean,
+      default: false,
+    },
+    checklistFileName: {
+      type: String,
+      default: '',
+    },
+    documents: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
+    isFunded: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

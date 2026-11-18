@@ -49,7 +49,7 @@ export const verifyEmail = async (req, res, next) => {
 
 export const getMe = async (req, res, next) => {
   try {
-    const user = await authService.getUserProfile(req.user._id);
+    const user = await authService.getUserProfile(req.user._id, req.user);
     return sendSuccess(res, user, 'User profile fetched successfully');
   } catch (error) {
     next(error);

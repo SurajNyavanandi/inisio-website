@@ -1,10 +1,12 @@
-import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import Consultation from '../models/Consultation.js';
 import { isDBConnected } from '../config/db.js';
 import { sendSuccess, sendError } from '../utils/responseHandler.js';
+import { generateToken } from '../utils/generateToken.js';
+import { getMemoryLeads } from '../services/leadService.js';
+import { getMemoryProjects } from '../services/projectService.js';
 import {
   mockOcrExtractFromCard,
   checkDuplicateCa,
@@ -24,37 +26,34 @@ import {
   activationConfirmationTemplate,
   updateActivationConfirmationTemplate,
 } from '../templates/activationConfirmationEmail.js';
-import { memoryUsers } from '../utils/memoryUserStore.js';
+import { getMemoryUsers } from '../utils/memoryUserStore.js';
 
 /**
- * Authenticate CA Admin via single email check matching CA_ADMIN environment variable.
- * Only CA_ADMIN is granted access. Any other email is strictly denied.
+ * Authenticate CA Admin via email-only Gmail check.
+ * Any valid @gmail.com address is granted CA Admin access for now.
  */
 export const authenticateCaAdmin = async (req, res, next) => {
   try {
     const { email } = req.body || {};
     const cleanEmail = (email || '').trim().toLowerCase();
-    const envCaAdmin = (process.env.CA_ADMIN || '').trim().toLowerCase();
-    const allowedCaAdmins = [
-      'ca.admin@example.com',
-      'caadmin@example.com',
-      ...(envCaAdmin ? [envCaAdmin] : []),
-    ];
+    const gmailRegex = /^[^\s@]+@gmail\.com$/i;
 
-    if (!cleanEmail || !allowedCaAdmins.includes(cleanEmail)) {
-      return res.status(403).json({
+    if (!cleanEmail || !gmailRegex.test(cleanEmail)) {
+      return res.status(400).json({
         success: false,
-        message: 'Access Denied: Only authorized CA_ADMIN is permitted.',
+        message: 'Only valid @gmail.com addresses are permitted for CA Admin access.',
       });
     }
 
-    const token = jwt.sign(
-      { email: cleanEmail, role: 'ca_admin', name: 'CA Operations Admin' },
-      process.env.JWT_SECRET || 'inisio_jwt_secret',
-      { expiresIn: '7d' }
-    );
+    const token = generateToken({
+      id: 'user_ca_admin_dynamic',
+      email: cleanEmail,
+      role: 'ca_admin',
+      name: 'CA Operations Admin',
+    });
 
     return sendSuccess(res, {
+      _id: 'user_ca_admin_dynamic',
       email: cleanEmail,
       role: 'ca_admin',
       name: 'CA Operations Admin',
@@ -88,10 +87,13 @@ export const getCaAdminMetrics = async (req, res, next) => {
       } catch (e) {
         console.warn('[caAdminController] DB error fetching metrics data:', e.message);
       }
+    } else {
+      allLeads = [...getMemoryLeads()];
+      allProjects = [...getMemoryProjects()];
     }
 
     if (allUsers.length === 0) {
-      allUsers = memoryUsers;
+      allUsers = getMemoryUsers();
     }
 
     // Identify all CAs
@@ -215,10 +217,22 @@ export const getCaAdminLeads = async (req, res, next) => {
       } catch (e) {
         console.warn('DB error in getCaAdminLeads:', e.message);
       }
-    }
-
-    if (leads.length === 0) {
-      leads = [];
+    } else {
+      leads = [
+        ...getMemoryLeads(),
+        ...getMemoryProjects().map((p) => ({
+          _id: p._id,
+          fullName: p.promoterName || 'Promoter',
+          email: p.email || '',
+          projectName: p.projectName || '',
+          location: p.location || '',
+          industry: p.industry || '',
+          status: p.status || 'Pending Audit',
+          assignedCA: p.assignedCA || '',
+          source: 'Direct Project Registry',
+          createdAt: p.createdAt,
+        })),
+      ];
     }
 
     // Filter by category

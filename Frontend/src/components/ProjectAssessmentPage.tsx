@@ -3361,7 +3361,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <button
                         type="submit"
                         disabled={inlineAuthLoading}
-                        className="w-full py-2.5 px-4 bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 hover:from-slate-800 hover:to-slate-850 active:scale-[0.99] disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm hover:shadow-md hover:shadow-slate-900/15 flex items-center justify-center gap-2 cursor-pointer mt-2"
+                        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm shadow-blue-600/15 flex items-center justify-center gap-2 cursor-pointer mt-2"
                       >
                         {inlineAuthLoading ? (
                           <span>Processing...</span>

@@ -49,9 +49,9 @@ export const validateEnv = () => {
   }
 };
 
-const portRaw = process.env.PORT || '5000';
+const portRaw = process.env.PORT || '3000';
 const parsedPort = parseInt(portRaw, 10);
-const validPort = !isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 5000;
+const validPort = !isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 3000;
 
 const corsOriginRaw = process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS || '*';
 const allowedOrigins = corsOriginRaw === '*'
@@ -84,9 +84,15 @@ export const config = {
   SUPER_ADMIN_EMAIL: superAdminEmail,
   CA_ADMIN: caAdminEmail,
   CA_ADMIN_EMAIL: caAdminEmail,
-  ALLOW_MEMORY_FALLBACK: process.env.ALLOW_MEMORY_FALLBACK === 'true' || !isProduction,
-  allowMemoryFallback: process.env.ALLOW_MEMORY_FALLBACK === 'true' || !isProduction,
-  APP_URL: (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:5174').replace(/\/$/, ''),
+  ALLOW_MEMORY_FALLBACK:
+    process.env.ALLOW_MEMORY_FALLBACK === 'true' ||
+    !isProduction ||
+    !(process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGO_URL),
+  allowMemoryFallback:
+    process.env.ALLOW_MEMORY_FALLBACK === 'true' ||
+    !isProduction ||
+    !(process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGO_URL),
+  APP_URL: (process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, ''),
   CORS_ORIGIN: corsOriginRaw,
   ALLOWED_ORIGINS: allowedOrigins,
   RAZORPAY_KEY_ID: (process.env.RAZORPAY_KEY_ID || '').trim(),
