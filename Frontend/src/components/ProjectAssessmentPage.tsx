@@ -173,6 +173,17 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
   }, [editingProject]);
 
+  const contentMainRef = useRef<HTMLElement>(null);
+
+  const scrollToFormTop = () => {
+    if (contentMainRef.current) {
+      contentMainRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) {}
+  };
+
   useEffect(() => {
     const idx = getStepIndex(stage);
     setMaxStepReached(prev => Math.max(prev, idx));
@@ -191,7 +202,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
     else if (stepId === 5) setStage('collect_financials');
     else if (stepId === 6) setStage('final_assessment_results');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const handlePreviousStep = () => {
@@ -203,7 +214,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       else setStage('collect_bankability');
     }
     else if (currentStep === 6) setStage('collect_financials');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const handleGoBack = () => {
@@ -530,6 +541,38 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     } catch (e) {}
   }, [editingProject?.id]);
 
+  // Restore in-progress assessment draft from sessionStorage if not editing an existing project
+  React.useEffect(() => {
+    if (editingProject) return;
+    try {
+      const rawDraft = sessionStorage.getItem('inisio_assessment_draft');
+      if (rawDraft) {
+        const draft = JSON.parse(rawDraft);
+        if (draft.formData) setFormData(prev => ({ ...prev, ...draft.formData }));
+        if (draft.financials) setFinancials(prev => ({ ...prev, ...draft.financials }));
+        if (draft.riskProfileData) setRiskProfileData(draft.riskProfileData);
+        if (draft.stage && draft.stage !== 'final_assessment_results') setStage(draft.stage);
+        if (Array.isArray(draft.completedSteps)) setCompletedSteps(draft.completedSteps);
+      }
+    } catch (e) {}
+  }, [editingProject]);
+
+  // Persist draft in sessionStorage so work is not lost on reload
+  React.useEffect(() => {
+    if (editingProject || isDataSaved) return;
+    try {
+      if (formData.projectName || formData.totalCostCr || formData.industry) {
+        sessionStorage.setItem('inisio_assessment_draft', JSON.stringify({
+          formData,
+          financials,
+          riskProfileData,
+          stage,
+          completedSteps
+        }));
+      }
+    } catch (e) {}
+  }, [formData, financials, riskProfileData, stage, completedSteps, editingProject, isDataSaved]);
+
   // Calculate numbers dynamically
   const cost = parseFloat(formData.totalCostCr) || 0;
   const contrib = parseFloat(formData.promoterContribCr) || 0;
@@ -566,7 +609,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       }
       markStepComplete(1);
       setStage(2);
-      window.scrollTo({ top: 120, behavior: 'smooth' });
+      scrollToFormTop();
     } else if (stage === 2) {
       if (!formData.totalCostCr || parseFloat(formData.totalCostCr) <= 0) {
         setStep2Error('Please enter a valid Total Project Cost in ₹ Crores.');
@@ -614,7 +657,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       }));
 
       setStage(3);
-      window.scrollTo({ top: 120, behavior: 'smooth' });
+      scrollToFormTop();
     } else if (stage === 3) {
       if (!formData.landStatus) {
         showToast('Please select Land Status.', { type: 'warning' });
@@ -643,6 +686,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       }
       if (!mobileValidation.isValid) {
         setMobileTouched(true);
+        showToast(mobileValidation.error || 'Please enter a valid 10-digit Indian mobile number.', { type: 'warning', title: 'Invalid Mobile Number' });
+        const mobileEl = document.querySelector('input[name="mobile"]');
+        if (mobileEl) {
+          mobileEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          (mobileEl as HTMLElement).focus();
+        }
         return;
       }
       setIsSubmitting(true);
@@ -650,7 +699,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       setTimeout(() => {
         setIsSubmitting(false);
         setStage('feasibility_result');
-        window.scrollTo({ top: 120, behavior: 'smooth' });
+        scrollToFormTop();
       }, 800);
     }
   };
@@ -818,21 +867,51 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
 
     try {
-      const endpoint = inlineAuthMode === 'signup' ? '/api/auth/register' : '/api/auth/login';
-      const body = inlineAuthMode === 'signup'
-        ? { email: emailToUse, password: inlinePassword, name: nameToUse, phone: phoneToUse, role: 'user' }
-        : { email: emailToUse, password: inlinePassword };
+      let userData: any = null;
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json().catch(() => ({}));
+      if (inlineAuthMode === 'signup') {
+        const regRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailToUse, password: inlinePassword, name: nameToUse, phone: phoneToUse, role: 'user' })
+        });
+        const regData = await regRes.json().catch(() => ({}));
+        if (!regRes.ok || !regData.success) {
+          setInlineAuthLoading(false);
+          setInlineAuthError(regData.message || 'Registration failed. Please check your inputs.');
+          return;
+        }
+
+        // Auto-login to obtain verified session and JWT token
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailToUse, password: inlinePassword })
+        });
+        const loginData = await loginRes.json().catch(() => ({}));
+        if (loginRes.ok && loginData.success && loginData.data) {
+          userData = loginData.data;
+        } else {
+          userData = regData.data;
+        }
+      } else {
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailToUse, password: inlinePassword })
+        });
+        const loginData = await loginRes.json().catch(() => ({}));
+        if (!loginRes.ok || !loginData.success || !loginData.data) {
+          setInlineAuthLoading(false);
+          setInlineAuthError(loginData.message || 'Authentication failed. Please check your credentials.');
+          return;
+        }
+        userData = loginData.data;
+      }
+
       setInlineAuthLoading(false);
 
-      if (res.ok && data.success && data.data) {
-        const userData = data.data;
+      if (userData) {
         if (userData.token) {
           localStorage.setItem('inisio_auth_token', userData.token);
         }
@@ -901,7 +980,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           onLoginSuccess(loggedUser);
         }
       } else {
-        setInlineAuthError(data.message || 'Authentication failed. Please check your credentials.');
+        setInlineAuthError('Authentication failed. Please check your credentials.');
       }
     } catch (err) {
       setInlineAuthLoading(false);
@@ -1043,8 +1122,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     markStepComplete(6);
     setSaveSuccessMessage('Project assessment saved successfully to your dashboard!');
     recordAssessmentCompletion(formData.email || activeUser?.email);
+    try { sessionStorage.removeItem('inisio_assessment_draft'); } catch (e) {}
     setStage('final_assessment_results');
-    window.scrollTo({ top: 120, behavior: 'smooth' });
+    scrollToFormTop();
   };
 
   const handleSaveProjectEdits = async (skipRedirect = false) => {
@@ -1181,9 +1261,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const civilLakhs = (parseFloat(costLakhs) * 0.30).toFixed(2);
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-50 font-inter">
+    <div className="h-full min-h-0 flex flex-col lg:flex-row bg-slate-50 font-inter overflow-y-auto lg:overflow-hidden">
       {/* LEFT PANEL: Vertical Step Menu */}
-      <aside className="w-full lg:w-72 xl:w-80 bg-slate-900 text-white shrink-0 p-5 lg:p-6 flex flex-col justify-between border-r border-slate-800">
+      <aside className="w-full lg:w-72 xl:w-80 bg-slate-900 text-white shrink-0 p-5 lg:p-6 flex flex-col justify-between border-r border-slate-800 overflow-y-auto max-h-full">
         <div className="space-y-6">
           {/* Brand & Mode Header */}
           <div className="space-y-2 pb-4 border-b border-slate-800">
@@ -1269,7 +1349,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       </aside>
 
       {/* RIGHT PANEL: Form Content for the Selected Step */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white overflow-y-auto w-full">
+      <main ref={contentMainRef} className="flex-1 flex flex-col min-w-0 bg-white overflow-y-auto w-full h-full">
         {/* Top Sub-screen Bar with Go Back Button and Step Title */}
         <div className="bg-white border-b border-slate-200 px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-30 shadow-2xs">
           <div className="flex items-center gap-3">
@@ -2282,7 +2362,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               <button
                 onClick={() => {
                   setStage('collect_bankability');
-                  window.scrollTo({ top: 120, behavior: 'smooth' });
+                  scrollToFormTop();
                 }}
                 className="w-full sm:w-auto px-7 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
@@ -2333,7 +2413,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 setRiskProfileData(data);
                 markStepComplete(4);
                 setStage('bankability_result');
-                window.scrollTo({ top: 120, behavior: 'smooth' });
+                scrollToFormTop();
               }}
               sectionId="bankability-form-section"
             />
@@ -2471,7 +2551,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     }));
 
                     setStage('collect_financials');
-                    window.scrollTo({ top: 120, behavior: 'smooth' });
+                    scrollToFormTop();
                   }}
                   className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                 >
@@ -2516,6 +2596,21 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               totalProjectCost: currentCostFromPrev > 0 ? currentCostFromPrev.toFixed(2) : '',
               totalMeansOfFinance: currentCostFromPrev > 0 ? currentCostFromPrev.toFixed(2) : ''
             }));
+          };
+
+          const handleAutoBalance = () => {
+            const targetTotal = totalCost > 0 ? totalCost : (currentCostFromPrev > 0 ? currentCostFromPrev : 10);
+            const loan = targetTotal * 0.70;
+            const equity = targetTotal * 0.30;
+            setFinancials(prev => ({
+              ...prev,
+              termLoanCr: loan.toFixed(2),
+              promoterContributionCr: equity.toFixed(2),
+              otherFinanceCr: '0.00',
+              totalProjectCost: targetTotal.toFixed(2),
+              totalMeansOfFinance: targetTotal.toFixed(2)
+            }));
+            showToast(`Means of Finance auto-balanced to ₹${targetTotal.toFixed(2)} Cr (70% Debt / 30% Equity).`, { type: 'success' });
           };
 
           return (
@@ -2678,7 +2773,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                  <span>Note: Total Project Cost (₹{totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹{totalFin.toFixed(2)} Cr).</span>
                  <button
                    type="button"
-                   onClick={handleSyncFromPreviousInputs}
+                   onClick={handleAutoBalance}
                    className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold rounded-lg transition-colors cursor-pointer shrink-0"
                  >
                    Auto-balance Means of Finance
@@ -2691,7 +2786,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 type="button"
                 onClick={() => {
                   setStage('bankability_result');
-                  window.scrollTo({ top: 120, behavior: 'smooth' });
+                  scrollToFormTop();
                 }}
                 className="px-5 py-2.5 text-gray-600 font-bold hover:text-gray-900 transition-colors flex items-center gap-1.5 cursor-pointer text-sm"
               >
@@ -2703,13 +2798,16 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 type="button"
                 onClick={() => {
                   if (totalCost > 0 && totalFin > 0 && Math.abs(totalCost - totalFin) > 0.05) {
-                    showToast(`Total Project Cost (₹${totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹${totalFin.toFixed(2)} Cr).`, { type: 'warning' });
+                    showToast(`Total Project Cost (₹${totalCost.toFixed(2)} Cr) must equal Total Means of Finance (₹${totalFin.toFixed(2)} Cr). Difference: ₹${Math.abs(totalCost - totalFin).toFixed(2)} Cr. Click "Auto-balance Means of Finance" above or adjust figures.`, { type: 'warning', title: 'Financials Not Balanced' });
                     return;
                   }
                   handleSaveAndRedirectToOutputs();
                 }}
-                disabled={!isBalanced && (totalCost > 0 || totalFin > 0)}
-                className="px-6 py-3 bg-blue-600 disabled:opacity-50 hover:bg-blue-700 text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                className={`px-6 py-3 font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer ${
+                  !isBalanced && (totalCost > 0 || totalFin > 0)
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/20'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
               >
                 <Save className="w-4 h-4" />
                 <span>Save &amp; View Assessment Results</span>
@@ -2800,7 +2898,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       type="button"
                       onClick={() => {
                         setStage('collect_financials');
-                        window.scrollTo({ top: 120, behavior: 'smooth' });
+                        scrollToFormTop();
                       }}
                       className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
                     >

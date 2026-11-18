@@ -707,7 +707,7 @@ export default function App() {
 
           {activeTab === 'assessment' && (
             <Suspense fallback={<DashboardSkeleton />}>
-              <div className="animate-in fade-in duration-300">
+              <div className="animate-in fade-in duration-300 h-full w-full">
                 <ProjectAssessmentPage
                   currentUser={currentUser}
                   onOpenAuth={handleOpenAuth}
