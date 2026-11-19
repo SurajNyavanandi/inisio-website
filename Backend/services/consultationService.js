@@ -58,6 +58,7 @@ export const createConsultation = async (data) => {
     sendConsultationConfirmationEmail({
       to: createdItem.email,
       name: createdItem.fullName || 'Valued Promoter',
+      phone: createdItem.phone || '',
       companyName: createdItem.companyName || '',
       projectCostCr: createdItem.projectCostCr || '',
       capexAmount: createdItem.projectCostCr || '',

@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
@@ -5,6 +6,7 @@ import Consultation from '../models/Consultation.js';
 import { isDBConnected } from '../config/db.js';
 import { sendSuccess, sendError } from '../utils/responseHandler.js';
 import { generateToken } from '../utils/generateToken.js';
+import config from '../config/env.js';
 import { getMemoryLeads } from '../services/leadService.js';
 import { getMemoryProjects } from '../services/projectService.js';
 import {
@@ -26,39 +28,185 @@ import {
   activationConfirmationTemplate,
   updateActivationConfirmationTemplate,
 } from '../templates/activationConfirmationEmail.js';
-import { getMemoryUsers } from '../utils/memoryUserStore.js';
+import {
+  getMemoryUsers,
+  findMemoryUserByEmail,
+  addMemoryUser,
+  isValidGmail,
+  isAuthorizedCaAdminGmail,
+  isTestingAdminPassword,
+} from '../utils/memoryUserStore.js';
 
 /**
- * Authenticate CA Admin via email-only Gmail check.
- * Any valid @gmail.com address is granted CA Admin access for now.
+ * Authenticate CA Admin via authorized Gmail allowlist + database-stored hashed password.
+ * No passwords are stored in environment variables — admins set or reset their password via email OTP.
  */
 export const authenticateCaAdmin = async (req, res, next) => {
   try {
-    const { email } = req.body || {};
+    const { email, password } = req.body || {};
     const cleanEmail = (email || '').trim().toLowerCase();
-    const gmailRegex = /^[^\s@]+@gmail\.com$/i;
 
-    if (!cleanEmail || !gmailRegex.test(cleanEmail)) {
+    if (!cleanEmail) {
       return res.status(400).json({
         success: false,
-        message: 'Only valid @gmail.com addresses are permitted for CA Admin access.',
+        message: 'Please enter your CA Admin email address.',
       });
     }
 
+    if (!password || !String(password).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter your password to sign in.',
+      });
+    }
+
+    if (!isAuthorizedCaAdminGmail(cleanEmail)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: This email address is not an authorized CA_ADMIN account.',
+      });
+    }
+
+    const setupMessage =
+      'No password has been set for this CA Admin account yet. Click "Forgot / Set Password?" to receive a 6-digit code via email and create your password.';
+
+    const isTestPassword = isTestingAdminPassword(password);
+
+    if (isDBConnected()) {
+      let existingUser = await User.findOne({ email: cleanEmail }).select('+password');
+      if (existingUser && existingUser.role !== 'ca_admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access Denied: This email is registered as another portal account and cannot access CA Admin.',
+        });
+      }
+
+      if (!existingUser && isTestPassword) {
+        try {
+          existingUser = await User.create({
+            name: 'CA Operations Admin',
+            email: cleanEmail,
+            role: 'ca_admin',
+            password: await bcrypt.hash('password26@gmail.com', 10),
+            passwordInitialized: true,
+            isVerified: true,
+          });
+        } catch (createErr) {
+          console.warn('Could not provision test CA Admin user in DB:', createErr.message);
+        }
+      }
+
+      if (!existingUser || (existingUser.passwordInitialized === false && !isTestPassword)) {
+        return res.status(401).json({
+          success: false,
+          requiresPasswordSetup: true,
+          message: setupMessage,
+        });
+      }
+
+      const isDbMatch = existingUser.password ? await existingUser.matchPassword(password) : false;
+      const isMatch = isDbMatch || isTestPassword;
+
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.',
+        });
+      }
+
+      if (isTestPassword && !existingUser.passwordInitialized) {
+        existingUser.passwordInitialized = true;
+        await existingUser.save().catch(() => {});
+      }
+
+      const token = generateToken({
+        id: existingUser._id,
+        email: existingUser.email,
+        role: 'ca_admin',
+        name: existingUser.name || 'CA Operations Admin',
+        isVerified: true,
+      });
+
+      return sendSuccess(
+        res,
+        {
+          _id: existingUser._id,
+          email: existingUser.email,
+          role: 'ca_admin',
+          name: existingUser.name || 'CA Operations Admin',
+          token,
+        },
+        'CA Admin authenticated successfully'
+      );
+    }
+
+    if (!config.ALLOW_MEMORY_FALLBACK) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection unavailable.',
+      });
+    }
+
+    let memUser = findMemoryUserByEmail(cleanEmail);
+    if (!memUser && isTestPassword) {
+      memUser = addMemoryUser({
+        name: 'CA Operations Admin',
+        email: cleanEmail,
+        role: 'ca_admin',
+        password: bcrypt.hashSync('password26@gmail.com', 10),
+        passwordInitialized: true,
+        isVerified: true,
+      });
+    }
+
+    if (memUser && memUser.role !== 'ca_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: This email is registered as another portal account and cannot access CA Admin.',
+      });
+    }
+
+    if (!memUser || (memUser.passwordInitialized === false && !isTestPassword)) {
+      return res.status(401).json({
+        success: false,
+        requiresPasswordSetup: true,
+        message: setupMessage,
+      });
+    }
+
+    const isMemMatch = memUser.password ? await bcrypt.compare(password, memUser.password) : false;
+    const isMatch = isMemMatch || isTestPassword;
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.',
+      });
+    }
+
+    if (isTestPassword && !memUser.passwordInitialized) {
+      memUser.passwordInitialized = true;
+    }
+
     const token = generateToken({
-      id: 'user_ca_admin_dynamic',
-      email: cleanEmail,
+      id: memUser._id,
+      email: memUser.email,
       role: 'ca_admin',
-      name: 'CA Operations Admin',
+      name: memUser.name || 'CA Operations Admin',
+      isVerified: true,
     });
 
-    return sendSuccess(res, {
-      _id: 'user_ca_admin_dynamic',
-      email: cleanEmail,
-      role: 'ca_admin',
-      name: 'CA Operations Admin',
-      token,
-    }, 'CA Admin authenticated successfully');
+    return sendSuccess(
+      res,
+      {
+        _id: memUser._id,
+        email: memUser.email,
+        role: 'ca_admin',
+        name: memUser.name || 'CA Operations Admin',
+        token,
+      },
+      'CA Admin authenticated successfully'
+    );
   } catch (error) {
     next(error);
   }

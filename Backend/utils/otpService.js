@@ -1,46 +1,37 @@
-/**
- * Centralized OTP Service for Authentication, Verification, and Testing
- *
- * In non-production environments, uses a fixed test OTP ('123456') so users
- * and role accounts do not have to type it manually during local tests.
- * In production, generates cryptographically random 6-digit codes.
- *
- * Can be swapped with Resend, Twilio, or another email/SMS service later.
- */
+import crypto from 'crypto';
 
-export const FIXED_TEST_OTP = '123456';
+/**
+ * Centralized OTP Service for Authentication & Password Reset
+ * Generates cryptographically secure 6-digit OTP codes for real-time email delivery via Resend.
+ */
 
 export const isProduction = () => {
   return process.env.NODE_ENV === 'production';
 };
 
 /**
- * Generate a 6-digit OTP code.
+ * Generate a cryptographically random 6-digit OTP code.
  */
 export const generateOtp = () => {
-  if (!isProduction()) {
-    return FIXED_TEST_OTP;
-  }
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 };
 
 /**
- * Verify a submitted OTP against expected OTP.
+ * Strictly verify a submitted 6-digit OTP against the expected OTP.
  */
 export const verifyOtpCode = (expectedOtp, submittedOtp) => {
-  if (!submittedOtp) return false;
-  const cleanSubmitted = String(submittedOtp).trim();
-
-  // In non-production, the fixed test OTP is always accepted
-  if (!isProduction() && cleanSubmitted === FIXED_TEST_OTP) {
-    return true;
-  }
-
-  if (!expectedOtp) return false;
+  if (!expectedOtp || !submittedOtp) return false;
   const cleanExpected = String(expectedOtp).trim();
-
-  return cleanExpected === cleanSubmitted;
+  const cleanSubmitted = String(submittedOtp).trim();
+  if (cleanExpected.length !== cleanSubmitted.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(cleanExpected), Buffer.from(cleanSubmitted));
+  } catch {
+    return cleanExpected === cleanSubmitted;
+  }
 };
+
+export const FIXED_TEST_OTP = '';
 
 export default {
   FIXED_TEST_OTP,

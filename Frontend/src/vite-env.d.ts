@@ -4,6 +4,9 @@ interface ImportMetaEnv {
   readonly VITE_BACKEND_URL?: string;
   readonly VITE_ADMIN_EMAIL?: string;
   readonly VITE_SUPER_ADMIN_EMAIL?: string;
+  readonly VITE_ADMIN_EMAILS?: string;
+  readonly VITE_CA_ADMIN?: string;
+  readonly VITE_CA_ADMIN_EMAIL?: string;
   readonly VITE_BACKEND_API_URL?: string;
   readonly VITE_API_URL?: string;
 }

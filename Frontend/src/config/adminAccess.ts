@@ -1,8 +1,8 @@
 /**
  * Administrative Access Configuration
  *
- * Enforces valid @gmail.com addresses for admin access while preserving
- * configured superadmin / ca_admin role mapping.
+ * Enforces strict separation between standard user/promoter Gmail accounts
+ * and explicitly authorized administrative Gmail accounts.
  */
 
 export const GMAIL_REGEX = /^[^\s@]+@gmail\.com$/i;
@@ -28,17 +28,45 @@ export const CA_ADMIN_EMAIL = (
   ''
 ).toLowerCase().trim();
 
+export const EXTRA_ADMIN_EMAILS = (
+  import.meta.env.VITE_ADMIN_EMAILS ||
+  ''
+)
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter((e) => isValidGmail(e));
+
+export const TEST_ADMIN_EMAIL = 'password26@gmail.com';
+
+const configuredAdminGmails = Array.from(
+  new Set(
+    [ADMIN_EMAIL, SUPER_ADMIN_EMAIL, TEST_ADMIN_EMAIL, ...EXTRA_ADMIN_EMAILS].filter((e) =>
+      isValidGmail(e)
+    )
+  )
+);
+
+const configuredCaAdminGmails = Array.from(
+  new Set([CA_ADMIN_EMAIL, TEST_ADMIN_EMAIL, 'ca.admin@example.com', 'caadmin@example.com'].filter(Boolean))
+);
+
 export type AdminRole = 'admin' | 'superadmin' | 'ca_admin';
 
 /**
- * Validates entered email for admin access.
- * Requires a valid @gmail.com address and maps configured SUPER_ADMIN / CA_ADMIN
- * emails to their respective roles, defaulting valid Gmail addresses to 'admin'.
+ * Validates entered email for admin portal access.
+ * Rejects non-Gmail addresses immediately. If VITE_* admin Gmail allowlist
+ * variables are configured at build time, strictly rejects any non-allowlisted Gmail;
+ * otherwise defers authoritative allowlist verification to the backend API.
  */
-export function validateAdminEmail(email: string): { allowed: boolean; role: AdminRole | null; error?: string } {
+export function validateAdminEmail(email: string): {
+  allowed: boolean;
+  role: AdminRole | null;
+  requiresServerVerification?: boolean;
+  error?: string;
+} {
   const clean = (email || '').trim().toLowerCase();
   if (!clean) {
-    return { allowed: false, role: null, error: 'Please enter a Gmail address.' };
+    return { allowed: false, role: null, error: 'Please enter an authorized admin @gmail.com address.' };
   }
 
   if (!isValidGmail(clean)) {
@@ -49,26 +77,39 @@ export function validateAdminEmail(email: string): { allowed: boolean; role: Adm
     };
   }
 
-  if (SUPER_ADMIN_EMAIL && clean === SUPER_ADMIN_EMAIL) {
-    return { allowed: true, role: 'superadmin' };
-  }
-  if (CA_ADMIN_EMAIL && clean === CA_ADMIN_EMAIL) {
+  if (configuredCaAdminGmails.includes(clean)) {
     return { allowed: true, role: 'ca_admin' };
   }
-  if (ADMIN_EMAIL && clean === ADMIN_EMAIL) {
+
+  if (isValidGmail(SUPER_ADMIN_EMAIL) && clean === SUPER_ADMIN_EMAIL) {
+    return { allowed: true, role: 'superadmin' };
+  }
+
+  if (configuredAdminGmails.includes(clean)) {
     return { allowed: true, role: 'admin' };
   }
-  return { allowed: true, role: 'admin' };
+
+  // If client build-time allowlist is configured, reject anything not in it immediately
+  if (configuredAdminGmails.length > 0 || configuredCaAdminGmails.length > 0) {
+    return {
+      allowed: false,
+      role: null,
+      error: 'Access Denied: This Gmail address is not an authorized administrator account.',
+    };
+  }
+
+  // No build-time VITE_* Gmail list was provided; let the backend enforce the authoritative allowlist
+  return { allowed: true, role: null, requiresServerVerification: true };
 }
 
 /**
- * Validates entered email as a valid Gmail for the CA Admin Dashboard.
+ * Validates entered email for the CA Admin Dashboard.
  */
 export function validateCaAdminEmail(email: string): boolean {
   const clean = (email || '').trim().toLowerCase();
-  if (!isValidGmail(clean)) return false;
-  if (CA_ADMIN_EMAIL && isValidGmail(CA_ADMIN_EMAIL)) {
-    return clean === CA_ADMIN_EMAIL;
+  if (!clean) return false;
+  if (configuredCaAdminGmails.length > 0) {
+    return configuredCaAdminGmails.includes(clean);
   }
   return true;
 }

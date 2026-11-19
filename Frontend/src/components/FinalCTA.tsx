@@ -39,14 +39,18 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2 font-inter">
-              <button
-                onClick={onOpenAssessment}
+              <a
+                href="/assessment"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onOpenAssessment();
+                }}
                 className="w-full sm:w-auto px-7 py-3.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl shadow-md shadow-blue-500/20 hover:shadow-blue-glow transition-all flex items-center justify-center gap-2 group cursor-pointer"
               >
                 <Calculator className="w-4 h-4 text-blue-100" />
                 <span>Start Free Assessment</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-              </button>
+              </a>
 
               <button
                 onClick={onOpenConsultation}

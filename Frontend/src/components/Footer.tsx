@@ -23,7 +23,8 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenAssessment,
   onOpenConsultation,
 }) => {
-  const handleNav = (target: string) => {
+  const handleNav = (target: string, e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
     if (onSelectTab) {
       onSelectTab(target);
     }
@@ -38,9 +39,11 @@ export const Footer: React.FC<FooterProps> = ({
           
           {/* Brand & Overview Column (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
-            <button
-              onClick={() => handleNav('home')}
-              className="flex items-center gap-2.5 cursor-pointer text-left focus:outline-none group"
+            <a
+              href="/"
+              onClick={(e) => handleNav('home', e)}
+              aria-label="Inisio Capital Home"
+              className="inline-flex items-center gap-2.5 cursor-pointer text-left focus:outline-none group"
             >
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform duration-200">
                 <TrendingUp className="w-5 h-5 stroke-[2.5]" />
@@ -53,10 +56,10 @@ export const Footer: React.FC<FooterProps> = ({
                   Greenfield Project Advisory &amp; Debt Syndication
                 </span>
               </div>
-            </button>
+            </a>
 
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm">
-              End-to-end investment banking advisory for greenfield industrial and commercial ventures. Bankability scorecards, Detailed Project Reports (DPR), and streamlined multi-bank term loan syndication across India.
+              End-to-end project finance and investment banking advisory for greenfield industrial and commercial ventures. Bankability scorecards, Detailed Project Reports (DPR), CMA modeling, and multi-bank term loan syndication from Hyderabad across India.
             </p>
 
             {/* Compliance Badges */}
@@ -73,105 +76,106 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
 
           {/* Solutions & Advisory Column (3 cols) */}
-          <div className="lg:col-span-3 space-y-3">
-            <h4 className="font-manrope font-bold text-white text-sm tracking-tight flex items-center gap-1.5">
+          <nav className="lg:col-span-3 space-y-3" aria-label="Advisory Solutions">
+            <h2 className="font-manrope font-bold text-white text-sm tracking-tight flex items-center gap-1.5">
               <FileCheck2 className="w-4 h-4 text-blue-400" />
               <span>Advisory Solutions</span>
-            </h4>
+            </h2>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
-                  <span>Reality Check &amp; TEFR Feasibility</span>
+                <a href="/how-it-works" onClick={(e) => handleNav('how-it-works', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                  <span>6-Step Debt Syndication Process</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={onOpenAssessment} className="text-blue-400 hover:text-blue-300 transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/assessment" onClick={(e) => { e.preventDefault(); onOpenAssessment(); }} className="text-blue-400 hover:text-blue-300 transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>Free Bankability Assessment</span>
                   <ArrowUpRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={onOpenConsultation} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
-                  <span>CMA Data &amp; Financial Modeling</span>
+                <a href="/about" onClick={(e) => handleNav('about', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                  <span>Why Choose Inisio Capital</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
-                  <span>Bank-Grade DPR Preparation</span>
+                <a href="/how-it-works" onClick={(e) => handleNav('how-it-works', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                  <span>Bank-Grade DPR &amp; CMA Modeling</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={onOpenConsultation} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <button type="button" onClick={onOpenConsultation} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>Promoter Equity Assistance</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               </li>
               <li>
-                <button onClick={() => handleNav('solutions')} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
-                  <span>Multi-Bank Debt Syndication</span>
+                <a href="/contact" onClick={(e) => handleNav('contact', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                  <span>Contact Hyderabad Advisory Desk</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                </a>
               </li>
             </ul>
-          </div>
+          </nav>
 
-          {/* Priority Sectors Column (2 cols) */}
-          <div className="lg:col-span-2 space-y-3">
-            <h4 className="font-manrope font-bold text-white text-sm tracking-tight flex items-center gap-1.5">
+          {/* Priority Sectors & Resources Column (2 cols) */}
+          <nav className="lg:col-span-2 space-y-3" aria-label="Sectors and Resources">
+            <h2 className="font-manrope font-bold text-white text-sm tracking-tight flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-blue-400" />
-              <span>Priority Sectors</span>
-            </h4>
+              <span>Sectors &amp; Resources</span>
+            </h2>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <button onClick={() => handleNav('industries')} className="hover:text-white transition-colors cursor-pointer text-left">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Food Processing &amp; Agri
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={() => handleNav('industries')} className="hover:text-white transition-colors cursor-pointer text-left">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Solar &amp; Clean Energy
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={() => handleNav('industries')} className="hover:text-white transition-colors cursor-pointer text-left">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Hospitals &amp; Healthcare
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={() => handleNav('industries')} className="hover:text-white transition-colors cursor-pointer text-left">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Warehousing &amp; Cold Storage
-                </button>
+                </a>
               </li>
               <li>
-                <button onClick={() => handleNav('industries')} className="hover:text-white transition-colors cursor-pointer text-left">
-                  Textiles &amp; Manufacturing
-                </button>
+                <a href="/blogs" onClick={(e) => handleNav('blogs', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
+                  Advisory Blogs &amp; Guides
+                </a>
               </li>
               <li>
-                <button onClick={() => handleNav('faqs')} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400">
-                  FAQs &amp; Advisory Blogs
-                </button>
+                <a href="/faq" onClick={(e) => handleNav('faq', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
+                  Greenfield Funding FAQs
+                </a>
               </li>
             </ul>
-          </div>
+          </nav>
 
           {/* Contact & Desk Info (3 cols) */}
           <div className="lg:col-span-3 space-y-3">
-            <h4 className="font-manrope font-bold text-white text-sm tracking-tight">
+            <h2 className="font-manrope font-bold text-white text-sm tracking-tight">
               Advisory Desk &amp; Headquarters
-            </h4>
+            </h2>
             
             <div className="space-y-2.5 text-xs text-slate-400 leading-relaxed">
               <div className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-                <span>Plot 24 &amp; 25, Kakatiya Hills, Road No 9, Madhapur, Hyderabad, Telangana 500081</span>
+                <span>2nd Floor, Plot 24 &amp; 25, Kakatiya Hills, Road No 9, Madhapur, Hyderabad, Telangana 500081</span>
               </div>
 
               <div className="flex items-center gap-2 pt-0.5">
                 <Clock className="w-4 h-4 text-slate-500 shrink-0" />
+                {/* TODO: Confirm official office hours (9:30 AM - 6:30 PM here vs 9:00 AM - 7:00 PM in ContactSection) */}
                 <span>Mon – Sat: 9:30 AM – 6:30 PM IST</span>
               </div>
 
@@ -190,13 +194,14 @@ export const Footer: React.FC<FooterProps> = ({
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
                 >
-                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414-.074-.124-.272-.198-.57-.347z"/>
                     <path d="M12 0C5.373 0 0 5.373 0 12c0 2.12.553 4.11 1.522 5.836L.055 23.513l5.833-1.528A11.936 11.936 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22a9.932 9.932 0 01-5.067-1.39l-.364-.216-3.762.986.1-3.666-.238-.378A9.948 9.948 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/>
                   </svg>
                   <span>WhatsApp: +91 63020 26462</span>
                 </a>
 
+                {/* TODO: Confirm official contact email (contact@inisio.com here vs advisory@inisio.in in ContactSection) */}
                 <a
                   href="mailto:contact@inisio.com"
                   className="flex items-center gap-2 text-slate-300 hover:text-white font-medium transition-colors"

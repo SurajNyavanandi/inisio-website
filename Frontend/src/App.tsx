@@ -85,6 +85,7 @@ export default function App() {
     if (path.startsWith('/blog/')) return path.replace('/blog/', '');
     return '';
   });
+  const [activeBlogData, setActiveBlogData] = useState<any>(null);
 
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window === 'undefined') return 'home';
@@ -205,30 +206,38 @@ export default function App() {
     };
     checkAdminHash();
 
-    // Check for password reset link parameters in URL (e.g. ?action=reset-password&email=...&otp=...)
+    // Check for password reset link parameters in URL (e.g. ?mode=reset-password&token=...&email=...)
     const checkResetPasswordParams = () => {
       try {
         const searchParams = new URLSearchParams(window.location.search);
         const action = searchParams.get('action');
+        const mode = searchParams.get('mode');
         const email = searchParams.get('email') || searchParams.get('to');
-        const otp = searchParams.get('otp') || searchParams.get('token') || searchParams.get('code');
+        const otp = searchParams.get('token') || searchParams.get('otp') || searchParams.get('code');
 
-        if (action === 'activate-ca' || searchParams.has('activateCa')) {
+        if (action === 'activate-ca' || mode === 'activate-ca' || searchParams.has('activateCa')) {
           const claimToken = searchParams.get('token') || searchParams.get('claimToken') || '';
           if (claimToken) {
             setActivationToken(claimToken);
             setActivationModalOpen(true);
+            window.history.replaceState({}, '', window.location.pathname);
             return;
           }
         }
 
-        if (action === 'reset-password' || searchParams.has('resetPassword') || searchParams.has('resetToken')) {
+        if (
+          mode === 'reset-password' ||
+          action === 'reset-password' ||
+          searchParams.has('resetPassword') ||
+          searchParams.has('resetToken')
+        ) {
           setAuthInitialMode('reset-password');
           setAuthPrefill({
             email: email || '',
             otp: otp || '',
           });
           setAuthModalOpen(true);
+          window.history.replaceState({}, '', window.location.pathname);
         }
       } catch (err) {
         console.warn('Error reading URL search params:', err);
@@ -365,6 +374,7 @@ export default function App() {
     setSelectedIndustryForAssessment(industryName || '');
     setEditingProjectForAssessment(null);
     setActiveTab('assessment');
+    window.history.pushState({}, '', '/assessment');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -381,24 +391,24 @@ export default function App() {
       return;
     }
 
-    // Single-page anchor navigation (solutions, industries, faqs, contact)
-    const singlePageAnchors = ['solutions', 'industries', 'faqs', 'faq', 'contact', 'how-it-works', 'about'];
+    // Single-page anchor navigation for home-only section links
+    const singlePageAnchors = ['solutions', 'faqs'];
     if (singlePageAnchors.includes(tab)) {
-      const targetAnchor = tab === 'faq' ? 'faqs' : tab === 'how-it-works' || tab === 'about' ? 'solutions' : tab;
       setEditingProjectForAssessment(null);
       if (activeTab !== 'home') {
         setActiveTab('home');
-        window.history.pushState({}, '', `/#${targetAnchor}`);
-        setTimeout(() => scrollToAnchor(targetAnchor), 80);
+        window.history.pushState({}, '', `/#${tab}`);
+        setTimeout(() => scrollToAnchor(tab), 80);
       } else {
-        window.history.pushState({}, '', `/#${targetAnchor}`);
-        scrollToAnchor(targetAnchor);
+        window.history.pushState({}, '', `/#${tab}`);
+        scrollToAnchor(tab);
       }
       return;
     }
 
     if (tab === 'home') {
       setActiveBlogSlug('');
+      setActiveBlogData(null);
       setEditingProjectForAssessment(null);
       if (activeTab !== 'home') {
         setActiveTab('home');
@@ -416,14 +426,13 @@ export default function App() {
         setActiveBlogSlug(blogSlug);
         window.history.pushState({}, '', `/blogs/${blogSlug}`);
       } else {
-        // Direct to blogs section on single-page home
-        setActiveTab('home');
-        window.history.pushState({}, '', '/#faqs');
-        setTimeout(() => scrollToAnchor('faqs'), 80);
-        return;
+        setActiveBlogSlug('');
+        setActiveBlogData(null);
+        window.history.pushState({}, '', '/blogs');
       }
     } else {
       setActiveBlogSlug('');
+      setActiveBlogData(null);
       window.history.pushState({}, '', `/${tab}`);
     }
 
@@ -488,7 +497,7 @@ export default function App() {
   return (
     <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isFullScreenMode ? 'h-screen overflow-hidden' : 'justify-between overflow-x-hidden'}`}>
       {/* Dynamic SEO Meta, Titles & Structured Data */}
-      <SEOHead activeTab={activeTab} activeBlogSlug={activeBlogSlug} />
+      <SEOHead activeTab={activeTab} activeBlogSlug={activeBlogSlug} activeBlog={activeBlogData} />
 
       <div className={`w-full min-w-0 ${isFullScreenMode ? 'h-full flex flex-col' : ''}`}>
         {/* Navbar (Hidden in full-screen dashboard/assessment mode) */}
@@ -533,7 +542,7 @@ export default function App() {
                   onOpenConsultation={() => setConsultationModalOpen(true)}
                 />
                 <ProjectActionCards
-                  onNavigateToAbout={() => handleSelectTab('solutions')}
+                  onNavigateToAbout={() => handleSelectTab('about')}
                   onNavigateToContact={() => handleSelectTab('contact')}
                 />
               </div>
@@ -816,9 +825,12 @@ export default function App() {
                   }}
                   onBackToBlogs={() => {
                     setActiveBlogSlug('');
+                    setActiveBlogData(null);
                     window.history.pushState({}, '', '/blogs');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
+                  onBlogLoaded={(blog) => setActiveBlogData(blog)}
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
                   onNavigateHome={() => handleSelectTab('home')}
                 />
               </div>

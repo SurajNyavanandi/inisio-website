@@ -31,7 +31,15 @@ export interface ReconciledFinancials {
   totalCostFormatted: string;
   totalFinanceFormatted: string;
   isBalanced: boolean;
+  hasExplicitBreakdown: boolean;
 }
+
+const parsePositiveNum = (val: number | string | undefined | null): number | null => {
+  if (val === undefined || val === null || val === '') return null;
+  const parsed = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, parsed);
+};
 
 export function reconcileProjectFinancials(params: {
   totalCostCr?: number | string;
@@ -47,43 +55,109 @@ export function reconcileProjectFinancials(params: {
   promoterContributionCr?: number | string;
   otherFinanceCr?: number | string;
 }): ReconciledFinancials {
-  const totalCost = Math.max(0, Number(params.totalCostCr) || 10);
-  const loanReq = Math.max(0, Number(params.loanRequiredCr) || totalCost * 0.7);
-  const promoterContrib = Math.max(0, Number(params.promoterContribCr) || Math.max(0, totalCost - loanReq));
-  const otherFinance = Math.max(0, Number(params.otherFinanceCr) || 0);
+  const explicitMachinery = parsePositiveNum(params.machineryCostCr);
+  const explicitCivil = parsePositiveNum(params.civilCostCr);
+  const explicitConsultancy = parsePositiveNum(params.consultancyCostCr);
+  const explicitOtherCosts = parsePositiveNum(params.otherCostsCr);
 
-  const machinery = params.machineryCostCr !== undefined && params.machineryCostCr !== ''
-    ? Number(params.machineryCostCr) || 0
-    : totalCost * 0.55;
+  const hasExplicitBreakdown =
+    explicitMachinery !== null ||
+    explicitCivil !== null ||
+    explicitConsultancy !== null ||
+    explicitOtherCosts !== null;
 
-  const civil = params.civilCostCr !== undefined && params.civilCostCr !== ''
-    ? Number(params.civilCostCr) || 0
-    : totalCost * 0.25;
+  const explicitBreakdownSum =
+    (explicitMachinery ?? 0) +
+    (explicitCivil ?? 0) +
+    (explicitConsultancy ?? 0) +
+    (explicitOtherCosts ?? 0);
 
-  const consultancy = params.consultancyCostCr !== undefined && params.consultancyCostCr !== ''
-    ? Number(params.consultancyCostCr) || 0
-    : totalCost * 0.03;
+  const rawTotalCost = parsePositiveNum(params.totalCostCr);
+  const explicitTermLoan = parsePositiveNum(params.termLoanCr) ?? parsePositiveNum(params.loanRequiredCr);
+  const explicitPromoterContrib =
+    parsePositiveNum(params.promoterContributionCr) ?? parsePositiveNum(params.promoterContribCr);
+  const explicitOtherFinance = parsePositiveNum(params.otherFinanceCr) ?? 0;
 
-  const otherCosts = params.otherCostsCr !== undefined && params.otherCostsCr !== ''
-    ? Number(params.otherCostsCr) || 0
-    : Math.max(0, totalCost - machinery - civil - consultancy);
+  const explicitFinanceSum =
+    (explicitTermLoan ?? 0) + (explicitPromoterContrib ?? 0) + explicitOtherFinance;
 
-  const totalFinance = loanReq + promoterContrib + otherFinance;
+  // Prefer explicit breakdown total when detailed breakdown is entered; otherwise use entered totalCostCr or sum of funding
+  const totalCost =
+    rawTotalCost !== null && rawTotalCost > 0
+      ? rawTotalCost
+      : explicitBreakdownSum > 0
+      ? explicitBreakdownSum
+      : explicitFinanceSum > 0
+      ? explicitFinanceSum
+      : 0;
 
-  let debtPct = params.debtPct !== undefined && params.debtPct !== '' ? Number(params.debtPct) : NaN;
-  let eqPct = params.eqPct !== undefined && params.eqPct !== '' ? Number(params.eqPct) : NaN;
+  const termLoan =
+    explicitTermLoan !== null
+      ? explicitTermLoan
+      : totalCost > 0 && explicitPromoterContrib !== null
+      ? Math.max(0, totalCost - explicitPromoterContrib - explicitOtherFinance)
+      : totalCost > 0
+      ? Number((totalCost * 0.7).toFixed(2))
+      : 0;
 
-  if (isNaN(debtPct) || isNaN(eqPct)) {
-    if (totalCost > 0) {
-      debtPct = Math.round((loanReq / totalCost) * 100);
+  const promoterContrib =
+    explicitPromoterContrib !== null
+      ? explicitPromoterContrib
+      : totalCost > 0
+      ? Math.max(0, Number((totalCost - termLoan - explicitOtherFinance).toFixed(2)))
+      : 0;
+
+  const otherFinance = explicitOtherFinance;
+
+  // Preserve exact user-entered cost breakdown values (including 0); only estimate when user has not entered any breakdown
+  const machinery = hasExplicitBreakdown
+    ? explicitMachinery ?? 0
+    : totalCost > 0
+    ? Number((totalCost * 0.55).toFixed(2))
+    : 0;
+
+  const civil = hasExplicitBreakdown
+    ? explicitCivil ?? 0
+    : totalCost > 0
+    ? Number((totalCost * 0.25).toFixed(2))
+    : 0;
+
+  const consultancy = hasExplicitBreakdown
+    ? explicitConsultancy ?? 0
+    : totalCost > 0
+    ? Number((totalCost * 0.03).toFixed(2))
+    : 0;
+
+  const otherCosts = hasExplicitBreakdown
+    ? explicitOtherCosts ?? 0
+    : totalCost > 0
+    ? Math.max(0, Number((totalCost - machinery - civil - consultancy).toFixed(2)))
+    : 0;
+
+  const finalTotalCost =
+    hasExplicitBreakdown && explicitBreakdownSum > 0 && rawTotalCost === null
+      ? explicitBreakdownSum
+      : totalCost;
+
+  const totalFinance = Number((termLoan + promoterContrib + otherFinance).toFixed(2));
+  const denom = totalFinance > 0 ? totalFinance : finalTotalCost;
+
+  let debtPct: number;
+  let eqPct: number;
+  if (denom > 0) {
+    debtPct = Math.round((termLoan / denom) * 100);
+    eqPct = Math.round((promoterContrib / denom) * 100);
+    if (otherFinance === 0 && debtPct + eqPct !== 100) {
       eqPct = Math.max(0, 100 - debtPct);
-    } else {
-      debtPct = 70;
-      eqPct = 30;
     }
+  } else {
+    const fallbackDebt = parsePositiveNum(params.debtPct);
+    const fallbackEq = parsePositiveNum(params.eqPct);
+    debtPct = fallbackDebt !== null ? Math.round(fallbackDebt) : 0;
+    eqPct = fallbackEq !== null ? Math.round(fallbackEq) : 0;
   }
 
-  const isBalanced = totalCost === 0 || Math.abs(totalCost - totalFinance) < 0.05;
+  const isBalanced = finalTotalCost === 0 || Math.abs(finalTotalCost - totalFinance) < 0.05;
 
   return {
     debtPct,
@@ -92,8 +166,8 @@ export function reconcileProjectFinancials(params: {
     civilCostCr: civil,
     consultancyCostCr: consultancy,
     otherCostsCr: Math.max(0, otherCosts),
-    totalCostCr: totalCost,
-    termLoanCr: loanReq,
+    totalCostCr: finalTotalCost,
+    termLoanCr: termLoan,
     promoterContributionCr: promoterContrib,
     otherFinanceCr: otherFinance,
     totalFinanceCr: totalFinance,
@@ -101,11 +175,12 @@ export function reconcileProjectFinancials(params: {
     civilFormatted: civil.toFixed(2),
     consultancyFormatted: consultancy.toFixed(2),
     otherCostsFormatted: Math.max(0, otherCosts).toFixed(2),
-    termLoanFormatted: loanReq.toFixed(2),
+    termLoanFormatted: termLoan.toFixed(2),
     promoterContributionFormatted: promoterContrib.toFixed(2),
     otherFinanceFormatted: otherFinance.toFixed(2),
-    totalCostFormatted: totalCost.toFixed(2),
+    totalCostFormatted: finalTotalCost.toFixed(2),
     totalFinanceFormatted: totalFinance.toFixed(2),
-    isBalanced
+    isBalanced,
+    hasExplicitBreakdown,
   };
 }

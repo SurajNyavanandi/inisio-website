@@ -3,7 +3,13 @@ import { verifyToken } from '../utils/generateToken.js';
 import User from '../models/User.js';
 import { sendError } from '../utils/responseHandler.js';
 import { isDBConnected } from '../config/db.js';
-import { isAuthorizedAdminEmail, getAdminEmail1, getAdminEmail2 } from '../utils/memoryUserStore.js';
+import {
+  isAuthorizedAdminEmail,
+  isAuthorizedAdminGmail,
+  isAuthorizedCaAdminGmail,
+  getAdminEmail1,
+  getAdminEmail2,
+} from '../utils/memoryUserStore.js';
 
 /**
  * Middleware to authenticate requests using JWT Access Token
@@ -120,19 +126,25 @@ export const authorizeRoles = (...roles) => {
           ? 'dpr'
           : userRole;
 
-    // Strict Admin and Super Admin email validation:
-    // If user is operating under an admin/superadmin role, verify authorized administrative Gmail
+    // Strict Admin, Super Admin, and CA Admin Gmail allowlist validation:
+    // Normal user/promoter Gmail accounts must never gain administrative privileges.
     const isAdmin = ['admin', 'superadmin'].includes(normalizedRole);
     if (isAdmin) {
-      const isGmail = /^[^\s@]+@gmail\.com$/i.test(userEmail);
-      const isAllowedAdmin = isAuthorizedAdminEmail(userEmail) || isGmail;
-      if (!isAllowedAdmin) {
+      if (!isAuthorizedAdminGmail(userEmail)) {
         return sendError(
           res,
           'Access Denied: Only authorized administrative Gmail accounts have access to administrative resources.',
           403
         );
       }
+    }
+
+    if (normalizedRole === 'ca_admin' && !isAuthorizedCaAdminGmail(userEmail)) {
+      return sendError(
+        res,
+        'Access Denied: Only authorized CA Admin Gmail accounts have access to CA Admin resources.',
+        403
+      );
     }
 
     // Strict Super Admin Access Control: Super Admin is strictly Read-Only across all resources

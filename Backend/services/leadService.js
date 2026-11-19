@@ -4,7 +4,8 @@ import mongoose from 'mongoose';
 import { isDBConnected } from '../config/db.js';
 import { isAuthorizedAdminEmail } from '../utils/memoryUserStore.js';
 import { escapeRegex } from '../middleware/validateMiddleware.js';
-import { sendLeadAssessmentConfirmationEmail } from '../utils/emailService.js';
+import { sendLeadAssessmentConfirmationEmail, sendDprStatusEmail } from '../utils/emailService.js';
+import config from '../config/env.js';
 import { getMemoryProjects } from './projectService.js';
 import notificationService from './notificationService.js';
 
@@ -17,6 +18,92 @@ const isSuperAdminOrAdmin = (role = '', email = '') => {
     ['superadmin', 'admin', 'admin1', 'admin2', 'admin3'].includes(role) ||
     isAuthorizedAdminEmail(email)
   );
+};
+
+const DPR_MILESTONE_STATUSES = new Set([
+  'dpr requested',
+  'dpr in progress',
+  'in review',
+  'under review',
+  'dpr ready',
+  'dpr completed',
+  'completed',
+  'approved',
+  'bank sanction approved',
+]);
+
+const isDprMilestoneStatus = (status = '') => {
+  const norm = String(status || '').trim().toLowerCase();
+  return Boolean(norm) && (DPR_MILESTONE_STATUSES.has(norm) || norm.includes('dpr'));
+};
+
+const notifyDprMilestoneIfNeeded = (previous = {}, updated = {}) => {
+  try {
+    const prevStatus = String(previous?.status || '').trim();
+    const nextStatus = String(updated?.status || '').trim();
+    const prevAssigned = String(previous?.dprAssignedTo || '').trim();
+    const nextAssigned = String(updated?.dprAssignedTo || '').trim();
+    const prevCompleted = Boolean(previous?.dprCompleted);
+    const nextCompleted = Boolean(updated?.dprCompleted);
+
+    const statusChangedToMilestone =
+      nextStatus && nextStatus.toLowerCase() !== prevStatus.toLowerCase() && isDprMilestoneStatus(nextStatus);
+    const assignedChanged = Boolean(nextAssigned) && nextAssigned.toLowerCase() !== prevAssigned.toLowerCase();
+    const completedNow = !prevCompleted && nextCompleted;
+
+    if (!statusChangedToMilestone && !assignedChanged && !completedNow) return;
+
+    const projectName = updated?.projectName || previous?.projectName || 'Greenfield Project';
+    const promoterEmail = String(updated?.email || previous?.email || '').trim();
+    const promoterName = updated?.fullName || updated?.promoterName || previous?.fullName || 'Promoter';
+    const displayStatus = completedNow
+      ? 'DPR Completed'
+      : statusChangedToMilestone
+        ? nextStatus
+        : 'DPR Assigned';
+    const note = updated?.caReviewNotes || updated?.notes || '';
+
+    if (promoterEmail && promoterEmail.includes('@')) {
+      sendDprStatusEmail({
+        to: promoterEmail,
+        name: promoterName,
+        projectName,
+        status: displayStatus,
+        assignedTo: nextAssigned,
+        note,
+        recipientType: 'promoter',
+      }).catch(() => {});
+    }
+
+    if (assignedChanged && nextAssigned.includes('@')) {
+      sendDprStatusEmail({
+        to: nextAssigned,
+        name: nextAssigned.split('@')[0],
+        projectName,
+        status: displayStatus,
+        assignedTo: nextAssigned,
+        note,
+        recipientType: 'consultant',
+      }).catch(() => {});
+    }
+
+    if (statusChangedToMilestone && nextStatus.toLowerCase().includes('requested')) {
+      const adminInbox = (process.env.ADMIN_EMAIL || config.ADMIN_EMAIL || '').trim();
+      if (adminInbox && adminInbox.includes('@') && !adminInbox.endsWith('@example.com')) {
+        sendDprStatusEmail({
+          to: adminInbox,
+          name: 'Admin',
+          projectName,
+          status: displayStatus,
+          assignedTo: nextAssigned,
+          note: `Requested by ${promoterName}${promoterEmail ? ` (${promoterEmail})` : ''}`,
+          recipientType: 'admin',
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[LeadService] DPR email notification notice:', err.message);
+  }
 };
 
 const isAssignedToTeamMember = (assignment, requester, team) => {
@@ -480,9 +567,19 @@ export const updateLead = async (id, rawUpdates, requester = null) => {
             error.statusCode = 403;
             throw error;
           }
+          const prevSnap = {
+            status: lead.status,
+            dprAssignedTo: lead.dprAssignedTo,
+            dprCompleted: lead.dprCompleted,
+            email: lead.email,
+            fullName: lead.fullName,
+            projectName: lead.projectName,
+          };
           Object.assign(lead, updates);
           lead.updatedAt = new Date();
-          return await lead.save();
+          const savedLead = await lead.save();
+          notifyDprMilestoneIfNeeded(prevSnap, savedLead);
+          return savedLead;
         }
 
         const proj = await Project.findById(id);
@@ -492,9 +589,12 @@ export const updateLead = async (id, rawUpdates, requester = null) => {
             error.statusCode = 403;
             throw error;
           }
+          const prevSnap = mapProjectToLead(proj.toObject());
           Object.assign(proj, applyUpdatesToProjectPayload(updates));
           const savedProj = await proj.save();
-          return mapProjectToLead(savedProj.toObject());
+          const mappedSaved = mapProjectToLead(savedProj.toObject());
+          notifyDprMilestoneIfNeeded(prevSnap, mappedSaved);
+          return mappedSaved;
         }
       }
 
@@ -509,9 +609,19 @@ export const updateLead = async (id, rawUpdates, requester = null) => {
             error.statusCode = 403;
             throw error;
           }
+          const prevSnap = {
+            status: existing.status,
+            dprAssignedTo: existing.dprAssignedTo,
+            dprCompleted: existing.dprCompleted,
+            email: existing.email,
+            fullName: existing.fullName,
+            projectName: existing.projectName,
+          };
           Object.assign(existing, updates);
           existing.updatedAt = new Date();
-          return await existing.save();
+          const savedExisting = await existing.save();
+          notifyDprMilestoneIfNeeded(prevSnap, savedExisting);
+          return savedExisting;
         }
       }
     } catch (err) {
@@ -527,7 +637,9 @@ export const updateLead = async (id, rawUpdates, requester = null) => {
       error.statusCode = 403;
       throw error;
     }
+    const prevSnap = { ...memoryLeads[idx] };
     memoryLeads[idx] = { ...memoryLeads[idx], ...updates, updatedAt: new Date() };
+    notifyDprMilestoneIfNeeded(prevSnap, memoryLeads[idx]);
     return memoryLeads[idx];
   }
 
@@ -539,12 +651,15 @@ export const updateLead = async (id, rawUpdates, requester = null) => {
       error.statusCode = 403;
       throw error;
     }
+    const prevSnap = mapProjectToLead(memProjects[projIdx]);
     memProjects[projIdx] = {
       ...memProjects[projIdx],
       ...applyUpdatesToProjectPayload(updates),
       updatedAt: new Date(),
     };
-    return mapProjectToLead(memProjects[projIdx]);
+    const mappedSaved = mapProjectToLead(memProjects[projIdx]);
+    notifyDprMilestoneIfNeeded(prevSnap, mappedSaved);
+    return mappedSaved;
   }
 
   const error = new Error('Lead not found');
@@ -567,26 +682,40 @@ export const assignLead = async (id, { dprAssignedTo, consultationAssignedTo }, 
   if (isDBConnected()) {
     const lead = await Lead.findById(id).catch(() => null);
     if (lead) {
+      const prevSnap = {
+        status: lead.status,
+        dprAssignedTo: lead.dprAssignedTo,
+        dprCompleted: lead.dprCompleted,
+        email: lead.email,
+        fullName: lead.fullName,
+        projectName: lead.projectName,
+      };
       if (dprAssignedTo !== undefined) lead.dprAssignedTo = dprAssignedTo;
       if (consultationAssignedTo !== undefined) {
         lead.consultationAssignedTo = consultationAssignedTo;
         if (consultationAssignedTo) lead.consultationStatus = 'New';
       }
       lead.assignedAt = new Date().toISOString();
-      return lead.save();
+      const savedLead = await lead.save();
+      notifyDprMilestoneIfNeeded(prevSnap, savedLead);
+      return savedLead;
     }
 
     const proj = await Project.findById(id).catch(() => null);
     if (proj) {
+      const prevSnap = mapProjectToLead(proj.toObject());
       if (dprAssignedTo !== undefined) proj.dprAssignedTo = dprAssignedTo;
       if (consultationAssignedTo !== undefined) proj.consultationAssignedTo = consultationAssignedTo;
       const saved = await proj.save();
-      return mapProjectToLead(saved.toObject());
+      const mappedSaved = mapProjectToLead(saved.toObject());
+      notifyDprMilestoneIfNeeded(prevSnap, mappedSaved);
+      return mappedSaved;
     }
   }
 
   const idx = memoryLeads.findIndex((l) => String(l._id) === String(id) || String(l.id) === String(id));
   if (idx !== -1) {
+    const prevSnap = { ...memoryLeads[idx] };
     if (dprAssignedTo !== undefined) memoryLeads[idx].dprAssignedTo = dprAssignedTo;
     if (consultationAssignedTo !== undefined) {
       memoryLeads[idx].consultationAssignedTo = consultationAssignedTo;
@@ -594,16 +723,20 @@ export const assignLead = async (id, { dprAssignedTo, consultationAssignedTo }, 
     }
     memoryLeads[idx].assignedAt = new Date().toISOString();
     memoryLeads[idx].updatedAt = new Date();
+    notifyDprMilestoneIfNeeded(prevSnap, memoryLeads[idx]);
     return memoryLeads[idx];
   }
 
   const memProjects = getMemoryProjects();
   const projIdx = memProjects.findIndex((p) => String(p._id) === String(id) || String(p.id) === String(id));
   if (projIdx !== -1) {
+    const prevSnap = mapProjectToLead(memProjects[projIdx]);
     if (dprAssignedTo !== undefined) memProjects[projIdx].dprAssignedTo = dprAssignedTo;
     if (consultationAssignedTo !== undefined) memProjects[projIdx].consultationAssignedTo = consultationAssignedTo;
     memProjects[projIdx].updatedAt = new Date();
-    return mapProjectToLead(memProjects[projIdx]);
+    const mappedSaved = mapProjectToLead(memProjects[projIdx]);
+    notifyDprMilestoneIfNeeded(prevSnap, mappedSaved);
+    return mappedSaved;
   }
 
   const error = new Error('Lead not found');
@@ -627,6 +760,14 @@ export const updateLeadProgress = async (id, progress, requester) => {
         error.statusCode = 403;
         throw error;
       }
+      const prevSnap = {
+        status: lead.status,
+        dprAssignedTo: lead.dprAssignedTo,
+        dprCompleted: lead.dprCompleted,
+        email: lead.email,
+        fullName: lead.fullName,
+        projectName: lead.projectName,
+      };
       fields.forEach((field) => {
         if (progress[field] !== undefined) lead[field] = Boolean(progress[field]);
       });
@@ -635,7 +776,9 @@ export const updateLeadProgress = async (id, progress, requester) => {
       lead.successProbability = lead.isFunded
         ? 100
         : 25 + (lead.assessmentCompleted ? 15 : 0) + (lead.documentsUploaded ? 15 : 0) + (lead.dprCompleted ? 20 : 0) + (lead.bankApplicationSubmitted ? 25 : 0);
-      return lead.save();
+      const savedLead = await lead.save();
+      notifyDprMilestoneIfNeeded(prevSnap, savedLead);
+      return savedLead;
     }
 
     const proj = await Project.findById(id).catch(() => null);
@@ -659,6 +802,7 @@ export const updateLeadProgress = async (id, progress, requester) => {
       error.statusCode = 403;
       throw error;
     }
+    const prevSnap = { ...memoryLeads[idx] };
     fields.forEach((field) => {
       if (progress[field] !== undefined) memoryLeads[idx][field] = Boolean(progress[field]);
     });
@@ -668,6 +812,7 @@ export const updateLeadProgress = async (id, progress, requester) => {
       ? 100
       : 25 + (memoryLeads[idx].assessmentCompleted ? 15 : 0) + (memoryLeads[idx].documentsUploaded ? 15 : 0) + (memoryLeads[idx].dprCompleted ? 20 : 0) + (memoryLeads[idx].bankApplicationSubmitted ? 25 : 0);
     memoryLeads[idx].updatedAt = new Date();
+    notifyDprMilestoneIfNeeded(prevSnap, memoryLeads[idx]);
     return memoryLeads[idx];
   }
 

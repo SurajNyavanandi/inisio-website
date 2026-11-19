@@ -2,6 +2,7 @@ import React from 'react';
 import { Phone, MessageCircle } from 'lucide-react';
 
 export const FloatingContactButtons: React.FC = () => {
+  // TODO: Confirm whether these floating quick-contact numbers should be updated from placeholder +919876543210 to the official desk number +91 63020 26462
   const phoneNumber = '+919876543210';
   const whatsappNumber = '919876543210';
   const message = encodeURIComponent('Hello Inisio, I would like to discuss debt syndication and DPR advisory for my greenfield project.');

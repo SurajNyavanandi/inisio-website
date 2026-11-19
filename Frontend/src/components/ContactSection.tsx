@@ -120,7 +120,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
             </h2>
           )}
           <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
-            Discuss your greenfield project feasibility, capital requirements, and bank loan syndication with our senior advisory team.
+            Discuss your greenfield project feasibility, Detailed Project Report (DPR), CMA modeling, and bank loan syndication with Inisio Capital's senior advisory desk in Madhapur, Hyderabad, serving promoters across Telangana and India.
           </p>
         </div>
 
@@ -129,9 +129,15 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
           {/* Left Column: Contact Details (Left Aligned) */}
           <div className="lg:col-span-5 space-y-6 font-inter text-left">
             <div className="bg-slate-50 rounded-2xl p-6 sm:p-8 border border-slate-200/80 space-y-6">
-              <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                Inisio Advisory Headquarters
-              </h3>
+              {isStandalone ? (
+                <h2 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  Inisio Advisory Headquarters
+                </h2>
+              ) : (
+                <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  Inisio Advisory Headquarters
+                </h3>
+              )}
 
               <div className="space-y-5 text-sm sm:text-base text-slate-600">
                 <div className="flex items-start gap-3.5">
@@ -160,6 +166,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-semibold text-slate-900 block text-sm">Direct Email</span>
+                    {/* TODO: Confirm official contact email (advisory@inisio.in here vs contact@inisio.com in Footer) */}
                     <a href="mailto:advisory@inisio.in" className="text-slate-900 font-semibold hover:underline text-sm">advisory@inisio.in</a>
                   </div>
                 </div>
@@ -170,6 +177,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-semibold text-slate-900 block text-sm">Working Hours</span>
+                    {/* TODO: Confirm official office hours (9:00 AM - 7:00 PM here vs 9:30 AM - 6:30 PM in Footer & JSON-LD) */}
                     <p className="text-slate-600 text-xs sm:text-sm">Monday - Saturday | 9:00 AM - 7:00 PM IST</p>
                   </div>
                 </div>

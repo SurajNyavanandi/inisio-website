@@ -70,7 +70,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({
             </h2>
           )}
           <p className="font-inter text-sm text-slate-600 leading-relaxed">
-            Clear, transparent answers on DPR drafting, CMA modeling, bankability ratings, and institutional debt underwriting.
+            Clear, transparent answers from Inisio Capital on bank-grade DPR drafting, CMA financial modeling, bankability ratings, central and state government subsidies, and term loan underwriting across India.
           </p>
         </div>
 
@@ -150,8 +150,8 @@ export const FAQSection: React.FC<FAQSectionProps> = ({
               <MessageCircle className="w-5 h-5" />
             </div>
             <div>
-              <h4 className="font-manrope font-bold text-slate-900 text-sm">Have a specific question about your project?</h4>
-              <p className="font-inter text-xs text-slate-500">Speak directly with our senior greenfield advisory desk.</p>
+              <h3 className="font-manrope font-bold text-slate-900 text-sm">Have a specific question about your project?</h3>
+              <p className="font-inter text-xs text-slate-500">Speak directly with our senior greenfield advisory desk in Hyderabad.</p>
             </div>
           </div>
 

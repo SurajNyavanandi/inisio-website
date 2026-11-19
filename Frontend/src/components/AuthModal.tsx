@@ -16,12 +16,9 @@ import {
   ShieldCheck,
   Building,
   ArrowRight,
-  ChevronDown,
-  ChevronUp,
   KeyRound,
   RotateCw,
-  Send,
-  Sparkles
+  Send
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -73,7 +70,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Email verification / Reset OTP states
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-  const [devOtp, setDevOtp] = useState('');
   const [resendingOtp, setResendingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
@@ -172,10 +168,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setResendingOtp(false);
       if (response.ok && resData.success) {
         setResendCooldown(30);
-        setSuccessMessage('A fresh verification code has been sent to your email.');
-        if (resData.data?.otp) {
-          setDevOtp(resData.data.otp);
-        }
+        setSuccessMessage(resData.message || 'A fresh 6-digit code has been sent to your email.');
       } else {
         setError(resData.message || 'Unable to resend code.');
       }
@@ -350,6 +343,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (response.ok && resData.success && resData.data) {
         const userData = resData.data;
+
+        if (userData.requiresVerification || (!userData.token && userData.isVerified === false)) {
+          setIsVerifyingOtp(true);
+          setOtpCode('');
+          setResendCooldown(30);
+          setSuccessMessage(
+            userData.message ||
+              resData.message ||
+              `We sent a 6-digit verification code to ${cleanEmail}. Enter it below to verify your email.`
+          );
+          return;
+        }
 
         if (userData.token) {
           localStorage.setItem('inisio_auth_token', userData.token);
@@ -532,7 +537,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             )}
 
-            {successMessage && !isVerifyingOtp && (
+            {successMessage && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2 animate-in fade-in">
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                 <span>{successMessage}</span>

@@ -50,7 +50,7 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
           )}
 
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
-            Most greenfield projects face delays or loan rejections because promoters approach banks without institutional credit appraisal readiness. Inisio structures your debt capacity, financial ratios, and technical feasibility to clear lender underwriting committees.
+            Most greenfield projects face delays or loan rejections because promoters approach banks without institutional credit appraisal readiness. Based in Madhapur, Hyderabad and serving industrial promoters across Telangana and India, Inisio Capital structures your debt capacity, CMA financial ratios, Detailed Project Reports (DPR), and technical feasibility to clear lender underwriting committees.
           </p>
         </div>
 
@@ -233,25 +233,25 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
             <div className="space-y-2 border-b md:border-b-0 md:border-r border-slate-800 pb-4 md:pb-0 md:pr-4">
               <span className="font-mono text-xs font-bold text-blue-400">01 / DISCOVERY</span>
-              <h4 className="font-manrope font-bold text-sm text-white">Understand Requirements</h4>
+              <h3 className="font-manrope font-bold text-sm text-white">Understand Requirements</h3>
               <p className="text-xs text-slate-400 leading-relaxed">Detailed review of capex outlays, production capacities, land status, and machinery.</p>
             </div>
 
             <div className="space-y-2 border-b md:border-b-0 md:border-r border-slate-800 pb-4 md:pb-0 md:pr-4">
               <span className="font-mono text-xs font-bold text-blue-400">02 / MODELING</span>
-              <h4 className="font-manrope font-bold text-sm text-white">Credit Feasibility (TEFR)</h4>
+              <h3 className="font-manrope font-bold text-sm text-white">Credit Feasibility (TEFR)</h3>
               <p className="text-xs text-slate-400 leading-relaxed">Financial engineering of DSCR, sensitivity thresholds, and break-even capacity.</p>
             </div>
 
             <div className="space-y-2 border-b md:border-b-0 md:border-r border-slate-800 pb-4 md:pb-0 md:pr-4">
               <span className="font-mono text-xs font-bold text-blue-400">03 / DOCUMENTATION</span>
-              <h4 className="font-manrope font-bold text-sm text-white">Bank-Grade DPR Compilation</h4>
+              <h3 className="font-manrope font-bold text-sm text-white">Bank-Grade DPR Compilation</h3>
               <p className="text-xs text-slate-400 leading-relaxed">Accredited CA &amp; DPR partner certification matching target bank appraisal norms.</p>
             </div>
 
             <div className="space-y-2">
               <span className="font-mono text-xs font-bold text-emerald-400">04 / DISBURSEMENT</span>
-              <h4 className="font-manrope font-bold text-sm text-white">Sanction &amp; Debt Closing</h4>
+              <h3 className="font-manrope font-bold text-sm text-white">Sanction &amp; Debt Closing</h3>
               <p className="text-xs text-slate-400 leading-relaxed">Direct representation before lender credit committees to achieve final sanction.</p>
             </div>
           </div>

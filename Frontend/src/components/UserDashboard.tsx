@@ -16,9 +16,12 @@ import {
   ArrowRight,
   Sparkles,
   FileText,
+  FileCheck,
+  Eye,
   RefreshCw,
 } from 'lucide-react';
 import { fetchLeadsFromDatabase, getStoredLeads, LeadRecord } from '../utils/leadStore';
+import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
   DashboardCard,
@@ -55,6 +58,35 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
+
+  const handleOpenProjectPdf = async (lead: LeadRecord, type: 'teaser' | 'dpr') => {
+    try {
+      const {
+        mapLeadRecordToPdfData,
+        generateProjectTeaserPDF,
+        generateDprExecutiveSummaryPDF,
+      } = await import('../utils/pdfGenerator');
+      const payload = mapLeadRecordToPdfData(lead);
+      const res =
+        type === 'teaser'
+          ? generateProjectTeaserPDF(payload, 'preview')
+          : generateDprExecutiveSummaryPDF(payload, 'preview');
+      if (res) {
+        setPdfPreview({
+          blobUrl: res.blobUrl,
+          filename: res.filename,
+          title:
+            type === 'teaser'
+              ? `${payload.projectName || 'Project'} — Executive Teaser`
+              : `${payload.projectName || 'Project'} — DPR Executive Summary`,
+          subtitle: `${payload.industry || 'Greenfield Project'}${payload.location ? ` · ${payload.location}` : ''}`,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to generate project PDF:', err);
+    }
+  };
 
   const loadUserProjects = async () => {
     setLoading(true);
@@ -308,8 +340,26 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         {Number(lead.projectCost || lead.totalCostCr || 0).toFixed(2)} Cr
                       </p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProjectPdf(lead, 'teaser')}
+                        title="Preview Project Teaser PDF"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Teaser PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenProjectPdf(lead, 'dpr')}
+                        title="Preview DPR Executive Summary PDF"
+                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <FileCheck className="w-3.5 h-3.5" />
+                        <span>DPR PDF</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => onOpenAssessment(lead)}
@@ -412,13 +462,33 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
                       </td>
                       <td className={`${DASHBOARD_TABLE.td} text-right`}>
-                        <button
-                          type="button"
-                          onClick={() => onOpenAssessment(lead)}
-                          className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-                        >
-                          View / Resume
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProjectPdf(lead, 'teaser')}
+                            title="Preview Project Teaser PDF"
+                            className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Teaser</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProjectPdf(lead, 'dpr')}
+                            title="Preview DPR Executive Summary PDF"
+                            className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <FileCheck className="w-3.5 h-3.5" />
+                            <span>DPR</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onOpenAssessment(lead)}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                          >
+                            Resume
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -561,6 +631,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
         </div>
       )}
+      <PdfPreviewModal preview={pdfPreview} onClose={() => setPdfPreview(null)} />
     </DashboardLayout>
   );
 };

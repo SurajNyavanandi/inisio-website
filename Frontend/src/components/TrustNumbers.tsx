@@ -95,8 +95,11 @@ export const TrustNumbers: React.FC = () => {
   };
 
   return (
-    <section className="py-6 sm:py-8 bg-slate-50/60 border-y border-slate-200/80 relative">
+    <section className="py-6 sm:py-8 bg-slate-50/60 border-y border-slate-200/80 relative" aria-labelledby="trust-numbers-heading">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 id="trust-numbers-heading" className="sr-only">
+          Inisio Capital Track Record and Pan-India Debt Syndication Benchmarks
+        </h2>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <p className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />

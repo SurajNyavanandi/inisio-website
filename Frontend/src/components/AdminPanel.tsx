@@ -15,7 +15,13 @@ import {
   Edit3,
   Loader2,
   ShieldCheck,
-  Users
+  Users,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RotateCw,
+  ArrowRight
 } from 'lucide-react';
 import {
   AdminRole,
@@ -243,10 +249,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   const canEdit = activeRole === 'admin';
   const isViewOnly = activeRole === 'superadmin';
 
-  // Login Form State (Email-only Gmail access for admin desk)
+  // Login & Password Reset State (Authorized Gmail + DB-verified Password)
+  const [authView, setAuthView] = useState<'login' | 'forgot' | 'reset'>('login');
   const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   // Active Navigation: Overview, Projects, DPR Requests, Consultations, Visitors
   const [activeTab, setActiveTab] = useState<'overview' | 'projects' | 'dpr' | 'consultations' | 'visitors'>('overview');
@@ -401,23 +421,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen, onClose, activeRole, loadAllAdminData]);
 
-  // Backend-Authenticated Email-Only Gmail Admin Login
+  // Backend-Authenticated Gmail + Password Admin Login
   const handleAccessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+    setAuthSuccess('');
 
     const cleanEmail = emailInput.trim().toLowerCase();
     if (!isValidGmail(cleanEmail)) {
       setAuthError('Please enter a valid @gmail.com address for admin access.');
       return;
     }
+    if (!passwordInput.trim()) {
+      setAuthError('Please enter your admin password.');
+      return;
+    }
 
     setAuthLoading(true);
     const detected = validateAdminEmail(cleanEmail);
+    if (!detected.allowed) {
+      setAuthError(detected.error || 'Access Denied: This Gmail address is not an authorized administrator account.');
+      setAuthLoading(false);
+      return;
+    }
 
     try {
       if (detected.role === 'ca_admin') {
-        const res = await api.post('/ca-admin/auth', { email: cleanEmail });
+        const res = await api.post('/ca-admin/auth', { email: cleanEmail, password: passwordInput });
         if (res && res.token) {
           localStorage.setItem(
             'inisio_ca_admin_session',
@@ -435,6 +465,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
       const authData = await api.post('/auth/admin-login', {
         email: cleanEmail,
+        password: passwordInput,
       });
 
       if (!authData || !authData.token) {
@@ -480,8 +511,95 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
       setActiveRole(backendRole as AdminRole);
       setEmailInput('');
+      setPasswordInput('');
     } catch (err: any) {
       setAuthError(err?.message || 'Access Denied');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRequestAdminReset = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!isValidGmail(cleanEmail)) {
+      setAuthError('Please enter your authorized @gmail.com address.');
+      return;
+    }
+    const detected = validateAdminEmail(cleanEmail);
+    if (!detected.allowed) {
+      setAuthError(detected.error || 'Access Denied: This Gmail address is not an authorized administrator account.');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const resData = await response.json().catch(() => ({}));
+      if (response.ok && resData.success) {
+        setAuthSuccess(
+          resData.message || `A 6-digit password reset code has been sent to ${cleanEmail}.`
+        );
+        setResendCooldown(30);
+        setAuthView('reset');
+      } else {
+        setAuthError(resData.message || 'Unable to send reset code. Please check your admin Gmail address.');
+      }
+    } catch {
+      setAuthError('Network error while sending reset code. Please try again.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleConfirmAdminReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthSuccess('');
+
+    const cleanEmail = emailInput.trim().toLowerCase();
+    const cleanOtp = resetOtp.trim();
+
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setAuthError('Please enter the 6-digit code sent to your Gmail.');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setAuthError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setAuthError('Passwords do not match.');
+      return;
+    }
+
+    setAuthLoading(true);
+    try {
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, otp: cleanOtp, newPassword }),
+      });
+      const resData = await response.json().catch(() => ({}));
+      if (response.ok && resData.success) {
+        setAuthSuccess('Password updated successfully. You can now sign in with your new password.');
+        setPasswordInput('');
+        setResetOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setAuthView('login');
+      } else {
+        setAuthError(resData.message || 'Invalid or expired 6-digit code.');
+      }
+    } catch {
+      setAuthError('Network error while updating password. Please try again.');
     } finally {
       setAuthLoading(false);
     }
@@ -889,7 +1007,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-slate-900 font-manrope">Admin Desk Access</div>
+                  <div className="text-sm font-bold text-slate-900 font-manrope">
+                    {authView === 'forgot'
+                      ? 'Reset / Set Admin Password'
+                      : authView === 'reset'
+                        ? 'Create New Password'
+                        : 'Admin Desk Access'}
+                  </div>
                   <div className="text-[11px] text-slate-500">Executive Operations Panel</div>
                 </div>
               </div>
@@ -903,39 +1027,262 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               </button>
             </div>
 
-            <form onSubmit={handleAccessSubmit} className="space-y-3">
-              <div className="space-y-1">
-                <label className="block text-[11px] font-semibold text-slate-600">
-                  Authorized Gmail Address
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={emailInput}
-                  onChange={(e) => {
-                    setEmailInput(e.target.value);
-                    if (authError) setAuthError('');
-                  }}
-                  placeholder="yourname@gmail.com"
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900 placeholder:text-slate-400"
-                  autoFocus
-                />
+            {authSuccess && (
+              <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>{authSuccess}</span>
               </div>
+            )}
 
-              {authError && (
-                <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium text-center">
-                  {authError}
+            {authError && (
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium space-y-1.5">
+                <p>{authError}</p>
+                {authView === 'login' && authError.toLowerCase().includes('no password') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthView('forgot');
+                      setAuthError('');
+                    }}
+                    className="text-blue-700 hover:text-blue-900 underline font-semibold cursor-pointer"
+                  >
+                    Set password via email code &rarr;
+                  </button>
+                )}
+              </div>
+            )}
+
+            {authView === 'forgot' ? (
+              <form onSubmit={handleRequestAdminReset} className="space-y-3">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Enter your authorized admin Gmail address. We will send a 6-digit code to set or reset your password.
+                </p>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    Authorized Gmail Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={(e) => {
+                      setEmailInput(e.target.value);
+                      if (authError) setAuthError('');
+                    }}
+                    placeholder="yourname@gmail.com"
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900 placeholder:text-slate-400"
+                    autoFocus
+                  />
                 </div>
-              )}
 
-              <button
-                type="submit"
-                disabled={authLoading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
-              >
-                {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Enter Desk</span>}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={authLoading || !emailInput.trim()}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  {authLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Send 6-Digit Code</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthView('reset');
+                      setAuthError('');
+                    }}
+                    className="text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                  >
+                    Already have a code?
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthView('login');
+                      setAuthError('');
+                      setAuthSuccess('');
+                    }}
+                    className="text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              </form>
+            ) : authView === 'reset' ? (
+              <form onSubmit={handleConfirmAdminReset} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    Authorized Gmail Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="yourname@gmail.com"
+                    className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    6-Digit Reset Code
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      value={resetOtp}
+                      onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="• • • • • •"
+                      className="w-full pl-9 pr-3 py-2 text-sm font-mono tracking-widest text-center bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="password"
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Min. 6 characters"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <button
+                    type="button"
+                    disabled={authLoading || resendCooldown > 0}
+                    onClick={() => handleRequestAdminReset()}
+                    className="text-blue-600 hover:text-blue-800 font-semibold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {authLoading && <RotateCw className="w-3 h-3 animate-spin" />}
+                    <span>{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthView('login');
+                      setAuthError('');
+                      setAuthSuccess('');
+                    }}
+                    className="text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading || resetOtp.length < 6 || newPassword.length < 6}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Save New Password</span>}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleAccessSubmit} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-semibold text-slate-600">
+                    Authorized Gmail Address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={emailInput}
+                    onChange={(e) => {
+                      setEmailInput(e.target.value);
+                      if (authError) setAuthError('');
+                    }}
+                    placeholder="yourname@gmail.com"
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900 placeholder:text-slate-400"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-semibold text-slate-600">
+                      Password
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthView('forgot');
+                        setAuthError('');
+                        setAuthSuccess('');
+                      }}
+                      className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                    >
+                      Forgot / Set password?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={passwordInput}
+                      onChange={(e) => {
+                        setPasswordInput(e.target.value);
+                        if (authError) setAuthError('');
+                      }}
+                      placeholder="Enter your password"
+                      className="w-full pl-9 pr-9 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white text-slate-900 placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+                >
+                  {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Enter Desk</span>}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       ) : (

@@ -161,9 +161,9 @@ export const Testimonials: React.FC = () => {
                           .toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-manrope font-bold text-sm text-slate-900">
+                        <h3 className="font-manrope font-bold text-sm text-slate-900">
                           {currentItem.name}
-                        </h4>
+                        </h3>
                         <p className="text-xs text-slate-500">
                           {currentItem.title},{' '}
                           <span className="font-semibold text-slate-700">

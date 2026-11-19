@@ -46,6 +46,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    passwordInitialized: {
+      type: Boolean,
+      default: true,
+    },
     resetPasswordOtp: {
       type: String,
       default: null,

@@ -78,7 +78,15 @@ export const config = {
   JWT_SECRET: jwtSecret,
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || process.env.JWT_EXPIRE || '7d',
   RESEND_API_KEY: (process.env.RESEND_API_KEY || '').trim(),
-  EMAIL_FROM: process.env.EMAIL_FROM || 'Inisio Capital Advisory <onboarding@resend.dev>',
+  RESEND_DOMAIN: (process.env.RESEND_DOMAIN || '').trim().toLowerCase(),
+  EMAIL_FROM: (
+    process.env.EMAIL_FROM ||
+    process.env.RESEND_FROM ||
+    process.env.RESEND_FROM_EMAIL ||
+    process.env.FROM_EMAIL ||
+    process.env.MAIL_FROM ||
+    'Inisio Advisory <no-reply@inisio.in>'
+  ).trim(),
   ADMIN_EMAIL: adminEmail1,
   SUPERADMIN_EMAIL: superAdminEmail,
   SUPER_ADMIN_EMAIL: superAdminEmail,
@@ -109,7 +117,15 @@ export const config = {
   },
   email: {
     resendApiKey: (process.env.RESEND_API_KEY || '').trim(),
-    from: process.env.EMAIL_FROM || 'Inisio Capital Advisory <onboarding@resend.dev>',
+    resendDomain: (process.env.RESEND_DOMAIN || '').trim().toLowerCase(),
+    from: (
+      process.env.EMAIL_FROM ||
+      process.env.RESEND_FROM ||
+      process.env.RESEND_FROM_EMAIL ||
+      process.env.FROM_EMAIL ||
+      process.env.MAIL_FROM ||
+      'Inisio Advisory <no-reply@inisio.in>'
+    ).trim(),
   },
   razorpay: {
     keyId: (process.env.RAZORPAY_KEY_ID || '').trim(),

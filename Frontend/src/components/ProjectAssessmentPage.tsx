@@ -11,6 +11,7 @@ import { MembershipPlansModal } from './MembershipPlansModal';
 import { DPRRequestModal } from './DPRRequestModal';
 import { FundingRequestModal } from './FundingRequestModal';
 import { PromoterFundAssistanceModal } from './PromoterFundAssistanceModal';
+import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import { recordAssessmentCompletion } from '../utils/membershipStore';
 import { UISelect } from './ui/Select';
 import { Input } from './ui/Input';
@@ -107,6 +108,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const isSavingRef = useRef<boolean>(false);
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isDownloadingDprPdf, setIsDownloadingDprPdf] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
   const [isDPRModalOpen, setIsDPRModalOpen] = useState(false);
   const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
@@ -423,17 +426,24 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         activeUser?.email || 
         '';
 
-      const projCost = parseFloat(String(editingProject.totalCostCr)) || 10;
-      const projContrib = parseFloat(String(editingProject.promoterContribCr)) || (projCost * 0.25);
-      const projLoan = parseFloat(String(editingProject.loanRequiredCr)) || (projCost - projContrib);
+      const rawProjCost = parseFloat(String(editingProject.totalCostCr ?? editingProject.projectCost ?? ''));
+      const projCost = Number.isFinite(rawProjCost) && rawProjCost > 0 ? rawProjCost : 0;
+      const rawProjContrib = parseFloat(String(editingProject.promoterContribCr ?? ''));
+      const projContrib = Number.isFinite(rawProjContrib) && rawProjContrib >= 0 ? rawProjContrib : 0;
+      const rawProjLoan = parseFloat(String(editingProject.loanRequiredCr ?? editingProject.proposedLoan ?? ''));
+      const projLoan = Number.isFinite(rawProjLoan) && rawProjLoan >= 0
+        ? rawProjLoan
+        : projCost > 0 && projContrib > 0
+        ? Math.max(0, projCost - projContrib)
+        : 0;
 
       setFormData({
         projectName: editingProject.projectName || '',
         industry: editingProject.industry || defaultIndustry || '',
         location: editingProject.location || '',
-        totalCostCr: String(editingProject.totalCostCr || projCost),
-        promoterContribCr: String(editingProject.promoterContribCr || projContrib),
-        loanRequiredCr: String(editingProject.loanRequiredCr || projLoan),
+        totalCostCr: projCost > 0 ? String(projCost) : '',
+        promoterContribCr: Number.isFinite(rawProjContrib) ? String(projContrib) : '',
+        loanRequiredCr: Number.isFinite(rawProjLoan) || projLoan > 0 ? String(projLoan) : '',
         landStatus: editingProject.landStatus || '',
         collateralStatus: editingProject.collateralStatus || '',
         promoterExp: editingProject.promoterExp || '',
@@ -455,8 +465,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         const extras = editingProject.promotersList.slice(1).map((p: any, idx: number) => ({
           id: p.id || `p-${idx + 2}`,
           name: p.name || '',
-          experienceYears: String(p.experienceYears || '5 Years'),
-          qualification: p.qualification || 'Graduate / Professional'
+          experienceYears: String(p.experienceYears || ''),
+          qualification: p.qualification || ''
         }));
         setAdditionalPromoters(extras);
       } else {
@@ -464,51 +474,51 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         setAdditionalPromoters([]);
       }
 
-      // Pre-fill Underwriting / Bankability Risk Profile
-      const projEqPct = projCost > 0 ? Math.round((projContrib / projCost) * 100) : 25;
-      const projDebtPct = 100 - projEqPct;
+      // Restore actual saved risk profile only (never fabricate fake CIBIL / collateral defaults)
+      const savedRisk = editingProject.riskProfileData || editingProject.riskProfile || null;
+      setRiskProfileData(savedRisk);
 
-      if (editingProject.riskProfileData) {
-        setRiskProfileData(editingProject.riskProfileData);
-      } else {
-        setRiskProfileData({
-          industryExperience: editingProject.promoterExp || '6 to 10 Years',
-          educationalBackground: 'Post Graduate (Master\'s / MBA)',
-          businessConstitution: 'Private Limited Company',
-          businessVintage: '4 to 7 Years',
-          contributionType: editingProject.landStatus?.toLowerCase().includes('owned') ? 'Combination of Cash & Land' : 'Cash / Bank Balance',
-          collateralCoveragePct: '110',
-          debtEquityRatio: `${projDebtPct}:${projEqPct}`,
-          managementTeamSize: '5',
-          technicalWorkforceCount: '15',
-          cibilScore: '785',
-          isNewToCredit: false
-        });
-      }
-
-      if (editingProject.financials) {
+      const savedFin = editingProject.financials || null;
+      const hasSavedStr = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== '';
+      if (savedFin) {
         setFinancials({
-          consultancyCostCr: editingProject.financials.consultancyCostCr ? String(editingProject.financials.consultancyCostCr) : (projCost * 0.05).toFixed(2),
-          machineryCostCr: editingProject.financials.machineryCostCr ? String(editingProject.financials.machineryCostCr) : (projCost * 0.65).toFixed(2),
-          civilCostCr: editingProject.financials.civilCostCr ? String(editingProject.financials.civilCostCr) : (projCost * 0.25).toFixed(2),
-          otherCostsCr: editingProject.financials.otherCostsCr ? String(editingProject.financials.otherCostsCr) : (projCost * 0.05).toFixed(2),
-          termLoanCr: editingProject.financials.termLoanCr ? String(editingProject.financials.termLoanCr) : projLoan.toFixed(2),
-          promoterContributionCr: editingProject.financials.promoterContributionCr ? String(editingProject.financials.promoterContributionCr) : projContrib.toFixed(2),
-          otherFinanceCr: editingProject.financials.otherFinanceCr ? String(editingProject.financials.otherFinanceCr) : '0.00',
-          totalProjectCost: editingProject.financials.totalProjectCost ? String(editingProject.financials.totalProjectCost) : projCost.toFixed(2),
-          totalMeansOfFinance: editingProject.financials.totalMeansOfFinance ? String(editingProject.financials.totalMeansOfFinance) : projCost.toFixed(2)
+          consultancyCostCr: hasSavedStr(savedFin.consultancyCostCr) ? String(savedFin.consultancyCostCr) : '',
+          machineryCostCr: hasSavedStr(savedFin.machineryCostCr) ? String(savedFin.machineryCostCr) : '',
+          civilCostCr: hasSavedStr(savedFin.civilCostCr) ? String(savedFin.civilCostCr) : '',
+          otherCostsCr: hasSavedStr(savedFin.otherCostsCr) ? String(savedFin.otherCostsCr) : '',
+          termLoanCr: hasSavedStr(savedFin.termLoanCr)
+            ? String(savedFin.termLoanCr)
+            : projLoan > 0
+            ? projLoan.toFixed(2)
+            : '',
+          promoterContributionCr: hasSavedStr(savedFin.promoterContributionCr)
+            ? String(savedFin.promoterContributionCr)
+            : Number.isFinite(rawProjContrib)
+            ? projContrib.toFixed(2)
+            : '',
+          otherFinanceCr: hasSavedStr(savedFin.otherFinanceCr) ? String(savedFin.otherFinanceCr) : '0.00',
+          totalProjectCost: hasSavedStr(savedFin.totalProjectCost)
+            ? String(savedFin.totalProjectCost)
+            : projCost > 0
+            ? projCost.toFixed(2)
+            : '',
+          totalMeansOfFinance: hasSavedStr(savedFin.totalMeansOfFinance)
+            ? String(savedFin.totalMeansOfFinance)
+            : projCost > 0
+            ? projCost.toFixed(2)
+            : ''
         });
       } else {
         setFinancials({
-          consultancyCostCr: (projCost * 0.05).toFixed(2),
-          machineryCostCr: (projCost * 0.65).toFixed(2),
-          civilCostCr: (projCost * 0.25).toFixed(2),
-          otherCostsCr: (projCost * 0.05).toFixed(2),
-          termLoanCr: projLoan.toFixed(2),
-          promoterContributionCr: projContrib.toFixed(2),
+          consultancyCostCr: '',
+          machineryCostCr: '',
+          civilCostCr: '',
+          otherCostsCr: '',
+          termLoanCr: projLoan > 0 ? projLoan.toFixed(2) : '',
+          promoterContributionCr: Number.isFinite(rawProjContrib) ? projContrib.toFixed(2) : '',
           otherFinanceCr: '0.00',
-          totalProjectCost: projCost.toFixed(2),
-          totalMeansOfFinance: projCost.toFixed(2)
+          totalProjectCost: projCost > 0 ? projCost.toFixed(2) : '',
+          totalMeansOfFinance: projCost > 0 ? projCost.toFixed(2) : ''
         });
       }
     } else if (defaultIndustry) {
@@ -762,16 +772,16 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const results = computeResults();
   const comprehensiveRisk = calculateComprehensiveRiskScore(riskProfileData, results.feasibilityScore);
 
-  // Map all inputs into the PDF payload (using fully reconciled and verified financial figures)
+  // Map 100% of entered & saved project inputs into the PDF/DOCX payload (zero fake defaults)
   const getPDFData = (): TeaserPDFData => {
     const calculatedDscr = calculateSystemDscr({
       industry: formData.industry
     });
 
     const reconciled = reconcileProjectFinancials({
-      totalCostCr: formData.totalCostCr,
-      loanRequiredCr: formData.loanRequiredCr,
-      promoterContribCr: formData.promoterContribCr,
+      totalCostCr: financials.totalProjectCost || formData.totalCostCr,
+      loanRequiredCr: financials.termLoanCr || formData.loanRequiredCr,
+      promoterContribCr: financials.promoterContributionCr || formData.promoterContribCr,
       debtPct: results.debtPct,
       eqPct: results.eqPct,
       consultancyCostCr: financials.consultancyCostCr,
@@ -784,22 +794,50 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     });
 
     const promotersList = buildPromotersList();
-    const directors = promotersList.map(p => ({
+    const directors = promotersList.map((p) => ({
       name: p.name,
       title: p.role || 'Director / Promoter'
     }));
 
+    const existingCustomCosts =
+      Array.isArray(editingProject?.costComponents) && editingProject.costComponents.length > 0
+        ? editingProject.costComponents
+        : Array.isArray(editingProject?.customCostComponents) && editingProject.customCostComponents.length > 0
+        ? editingProject.customCostComponents
+        : undefined;
+
     return {
-      // Step 1 Feasibility Inputs
+      // Core Project & Contact Identity
       fullName: formData.fullName,
+      companyName: activeUser?.company || editingProject?.companyName || '',
       mobile: formData.mobile,
       email: formData.email,
       projectName: formData.projectName || 'Greenfield Project',
       industry: formData.industry,
       location: formData.location,
+
+      // Exact Reconciled Financials & Breakdown
       totalCostCr: reconciled.totalCostFormatted,
       promoterContribCr: reconciled.promoterContributionFormatted,
       loanRequiredCr: reconciled.termLoanFormatted,
+      termLoanCr: reconciled.termLoanFormatted,
+      promoterContributionCr: reconciled.promoterContributionFormatted,
+      otherFinanceCr: reconciled.otherFinanceFormatted,
+      machineryCostCr: reconciled.hasExplicitBreakdown ? reconciled.machineryFormatted : undefined,
+      civilCostCr: reconciled.hasExplicitBreakdown ? reconciled.civilFormatted : undefined,
+      consultancyCostCr: reconciled.hasExplicitBreakdown ? reconciled.consultancyFormatted : undefined,
+      otherCostsCr: reconciled.hasExplicitBreakdown ? reconciled.otherCostsFormatted : undefined,
+      hasExplicitBreakdown: reconciled.hasExplicitBreakdown,
+      costComponents: existingCustomCosts,
+      customCostComponents: existingCustomCosts,
+      customFinanceComponents: editingProject?.customFinanceComponents,
+      eqPct: reconciled.eqPct,
+      debtPct: reconciled.debtPct,
+      estimatedLoan: results.estimatedLoan,
+      dscrEstimate: calculatedDscr,
+      estInterestRate: '8.85% - 9.40% p.a.',
+
+      // Site, Security, Banking & Brief
       landStatus: formData.landStatus,
       collateralStatus: formData.collateralStatus,
       promoterExp: formData.promoterExp,
@@ -808,25 +846,33 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       branchLocation: formData.branchLocation,
       bankIfscCode: formData.bankIfscCode,
       bankAppRefNumber: formData.bankAppRefNumber,
-      feasibilityScore: results.feasibilityScore,
-      bankabilityRating: riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : results.bankabilityRating,
-      estimatedLoan: results.estimatedLoan,
-      eqPct: reconciled.eqPct ?? 30,
-      debtPct: reconciled.debtPct ?? 70,
-      dscrEstimate: calculatedDscr,
-      estInterestRate: '8.85% - 9.40%',
+
+      // Full Promoter Roster
+      promotersList,
       directors,
 
-      // Step 2 Bankability Underwriting Inputs
+      // Scores & Detailed Risk Profile (100% aligned with on-screen display)
+      feasibilityScore: results.feasibilityScore,
+      bankabilityRating: riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : results.bankabilityRating,
+      riskScoreOutOf10: riskProfileData ? comprehensiveRisk.scoreOutOf10 : Number(results.bankabilityRating),
       riskProfileData: riskProfileData || undefined,
-      riskScoreOutOf10: comprehensiveRisk.scoreOutOf10,
-      machineryCostCr: reconciled.machineryFormatted,
-      civilCostCr: reconciled.civilFormatted,
-      consultancyCostCr: reconciled.consultancyFormatted,
-      otherCostsCr: reconciled.otherCostsFormatted,
-      termLoanCr: reconciled.termLoanFormatted,
-      promoterContributionCr: reconciled.promoterContributionFormatted,
-      otherFinanceCr: reconciled.otherFinanceFormatted
+      riskSummary: comprehensiveRisk,
+
+      // DPR & Workflow Metadata (from saved project when available)
+      status: editingProject?.status || (isDataSaved ? 'Assessment Submitted' : 'Draft Appraisal'),
+      stage: editingProject?.stage || 'Underwriting & Teaser Ready',
+      assignedCA: editingProject?.assignedCA,
+      dprAssignedTo: editingProject?.dprAssignedTo,
+      caReviewNotes: editingProject?.caReviewNotes,
+      checklistUploaded: editingProject?.checklistUploaded,
+      checklistFileName: editingProject?.checklistFileName,
+      documents: editingProject?.documents,
+      uploadedDocuments: editingProject?.uploadedDocuments,
+      dprFile: editingProject?.dprFile,
+      cmaFile: editingProject?.cmaFile,
+      isFunded: editingProject?.isFunded,
+      createdAt: editingProject?.createdAt,
+      updatedAt: new Date().toISOString()
     };
   };
 
@@ -990,18 +1036,53 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
   const handleDownloadTeaser = async (action: 'download' | 'preview' = 'download') => {
     if (!activeUser) {
-      handleRequireAuth('login', 'Please sign in or create an account to preview or download the AI Project Teaser.');
+      handleRequireAuth('login', 'Please sign in or create an account to preview or download the Project Teaser.');
       return;
     }
     setIsDownloadingPdf(true);
     try {
       const pdfData = getPDFData();
       const { generateProjectTeaserPDF } = await import('../utils/pdfGenerator');
-      generateProjectTeaserPDF(pdfData, action);
+      const result = generateProjectTeaserPDF(pdfData, action);
+      if (action === 'preview' && result) {
+        setPdfPreview({
+          blobUrl: result.blobUrl,
+          filename: result.filename,
+          title: `${pdfData.projectName || 'Project'} — Executive Project Teaser`,
+          subtitle: `${pdfData.industry || 'Greenfield Project'} · A4 Institutional PDF`,
+        });
+      }
     } catch (err) {
       console.error('PDF generation error:', err);
+      showToast('Could not generate Project Teaser PDF. Please try again.', { type: 'error' });
     } finally {
-      setTimeout(() => setIsDownloadingPdf(false), 1000);
+      setTimeout(() => setIsDownloadingPdf(false), 600);
+    }
+  };
+
+  const handleDownloadDprSummary = async (action: 'download' | 'preview' = 'download') => {
+    if (!activeUser) {
+      handleRequireAuth('login', 'Please sign in or create an account to preview or download the DPR Executive Summary.');
+      return;
+    }
+    setIsDownloadingDprPdf(true);
+    try {
+      const pdfData = getPDFData();
+      const { generateDprExecutiveSummaryPDF } = await import('../utils/pdfGenerator');
+      const result = generateDprExecutiveSummaryPDF(pdfData, action);
+      if (action === 'preview' && result) {
+        setPdfPreview({
+          blobUrl: result.blobUrl,
+          filename: result.filename,
+          title: `${pdfData.projectName || 'Project'} — DPR Executive Summary`,
+          subtitle: `${pdfData.industry || 'Greenfield Project'} · Detailed Project Report Brief`,
+        });
+      }
+    } catch (err) {
+      console.error('DPR PDF generation error:', err);
+      showToast('Could not generate DPR Executive Summary PDF. Please try again.', { type: 'error' });
+    } finally {
+      setTimeout(() => setIsDownloadingDprPdf(false), 600);
     }
   };
 
@@ -3427,28 +3508,52 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     </p>
                   </div>
 
-                  {/* Dual Primary Download Actions (PDF & DOCX) */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                    {/* Primary PDF Download */}
+                  {/* Primary Download Actions (Teaser PDF, DPR Summary PDF & Teaser DOCX) */}
+                  <div className="flex flex-wrap items-stretch sm:items-center gap-2.5 shrink-0">
+                    {/* Primary Teaser PDF Download */}
                     <button
                       type="button"
                       onClick={() => handleDownloadTeaser('download')}
                       disabled={isDownloadingPdf}
-                        className={`px-4 py-2.5 font-black text-xs rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`px-4 py-2.5 font-bold text-xs rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
                         activeUser
-                          ? 'bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white hover:shadow-rose-500/25'
+                          ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white'
                           : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
                       }`}
                     >
                       {!activeUser ? (
                         <>
-                          <Lock className="w-4 h-4 text-amber-400" />
-                          <span>Sign In to Download PDF</span>
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Sign In to Download Teaser PDF</span>
                         </>
                       ) : (
                         <>
-                          <FileText className="w-4 h-4 stroke-[2.5]" />
-                          <span>{isDownloadingPdf ? 'Generating PDF...' : 'Download Project Teaser (PDF)'}</span>
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{isDownloadingPdf ? 'Generating...' : 'Teaser (PDF)'}</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* DPR Executive Summary PDF Download */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadDprSummary('download')}
+                      disabled={isDownloadingDprPdf}
+                      className={`px-4 py-2.5 font-bold text-xs rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
+                        activeUser
+                          ? 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                      }`}
+                    >
+                      {!activeUser ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>DPR Summary (PDF)</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileCheck className="w-3.5 h-3.5" />
+                          <span>{isDownloadingDprPdf ? 'Generating...' : 'DPR Summary (PDF)'}</span>
                         </>
                       )}
                     </button>
@@ -3458,21 +3563,21 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       type="button"
                       onClick={() => handleDownloadDocxTeaser()}
                       disabled={isDownloadingDocx}
-                        className={`px-4 py-2.5 font-black text-xs rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
+                      className={`px-4 py-2.5 font-bold text-xs rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
                         activeUser
-                          ? 'bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white hover:shadow-blue-500/25'
+                          ? 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
                           : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
                       }`}
                     >
                       {!activeUser ? (
                         <>
-                          <Lock className="w-4 h-4 text-amber-400" />
-                          <span>Sign In to Download DOCX</span>
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Teaser (DOCX)</span>
                         </>
                       ) : (
                         <>
-                          <Download className="w-4 h-4 stroke-[2.5]" />
-                          <span>{isDownloadingDocx ? 'Generating DOCX...' : 'Download Project Teaser (DOCX)'}</span>
+                          <Download className="w-3.5 h-3.5" />
+                          <span>{isDownloadingDocx ? 'Generating...' : 'Teaser (DOCX)'}</span>
                         </>
                       )}
                     </button>
@@ -3481,15 +3586,26 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
                 {/* Secondary Actions Row */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleDownloadTeaser('preview')}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                      disabled={isDownloadingPdf}
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer whitespace-nowrap"
                     >
                       {!activeUser && <Lock className="w-3.5 h-3.5 text-amber-400" />}
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Preview PDF Teaser</span>
+                      <Eye className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Preview Teaser PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadDprSummary('preview')}
+                      disabled={isDownloadingDprPdf}
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer whitespace-nowrap"
+                    >
+                      {!activeUser && <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                      <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Preview DPR Summary</span>
                     </button>
                   </div>
 
@@ -3746,6 +3862,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           </button>
         </div>
       )}
+      {/* In-App Institutional PDF Preview Modal */}
+      <PdfPreviewModal preview={pdfPreview} onClose={() => setPdfPreview(null)} />
     </div>
   );
 };

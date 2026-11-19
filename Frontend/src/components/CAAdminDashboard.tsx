@@ -20,9 +20,14 @@ import {
   Users,
   Clock,
   Send,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
+  RotateCw,
 } from 'lucide-react';
 import { resolveApiUrl } from '../utils/apiClient';
-import { isValidGmail } from '../config/adminAccess';
+import { isValidGmail, validateCaAdminEmail } from '../config/adminAccess';
 import { CaActivationModal } from './CaActivationModal';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
@@ -62,9 +67,23 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
     return null;
   });
 
+  const [authView, setAuthView] = useState<'login' | 'forgot' | 'reset'>('login');
   const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [loginSuccess, setLoginSuccess] = useState('');
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   const [activeTab, setActiveTab] = useState<CAAdminTab>('card-registration');
   const [loading, setLoading] = useState(false);
@@ -173,10 +192,19 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setLoginSuccess('');
 
     const clean = loginEmail.trim().toLowerCase();
     if (!isValidGmail(clean)) {
       setLoginError('Please enter a valid @gmail.com address for CA Admin access.');
+      return;
+    }
+    if (!validateCaAdminEmail(clean)) {
+      setLoginError('Access Denied: This Gmail address is not an authorized CA_ADMIN account.');
+      return;
+    }
+    if (!loginPassword.trim()) {
+      setLoginError('Please enter your password to sign in.');
       return;
     }
 
@@ -186,16 +214,17 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
       const res = await fetch(resolveApiUrl('/ca-admin/auth'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: clean }),
+        body: JSON.stringify({ email: clean, password: loginPassword }),
       });
       const data = await res.json();
 
-      if (res.ok && data.success && data.data?.token) {
+      if (res.ok && data.success && data.data?.token && data.data?.role === 'ca_admin') {
         const session = {
           email: data.data.email,
           token: data.data.token,
         };
         setCaAdminSession(session);
+        setLoginPassword('');
         try {
           localStorage.setItem(STORAGE_KEY_CA_ADMIN_SESSION, JSON.stringify(session));
           localStorage.setItem('inisio_auth_token', data.data.token);
@@ -205,6 +234,84 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
       }
     } catch {
       setLoginError('Unable to reach authentication server. Please check backend connection.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleRequestCaReset = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setLoginError('');
+    setLoginSuccess('');
+
+    const clean = loginEmail.trim().toLowerCase();
+    if (!isValidGmail(clean) || !validateCaAdminEmail(clean)) {
+      setLoginError('Access Denied: Only authorized CA Admin @gmail.com accounts can reset passwords here.');
+      return;
+    }
+
+    setLoginLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: clean }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setLoginSuccess(data.message || `A 6-digit password reset code has been sent to ${clean}.`);
+        setResendCooldown(30);
+        setAuthView('reset');
+      } else {
+        setLoginError(data.message || 'Unable to send reset code. Please check your CA Admin Gmail.');
+      }
+    } catch {
+      setLoginError('Network error while sending reset code. Please try again.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleConfirmCaReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setLoginSuccess('');
+
+    const clean = loginEmail.trim().toLowerCase();
+    const cleanOtp = resetOtp.trim();
+    if (!cleanOtp || cleanOtp.length < 6) {
+      setLoginError('Please enter the 6-digit code sent to your Gmail.');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setLoginError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setLoginError('Passwords do not match.');
+      return;
+    }
+
+    setLoginLoading(true);
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: clean, otp: cleanOtp, newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setLoginSuccess('Password updated successfully. You can now sign in with your new password.');
+        setLoginPassword('');
+        setResetOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setAuthView('login');
+      } else {
+        setLoginError(data.message || 'Invalid or expired 6-digit code.');
+      }
+    } catch {
+      setLoginError('Network error while resetting password. Please try again.');
     } finally {
       setLoginLoading(false);
     }
@@ -364,48 +471,278 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
 
   if (!caAdminSession) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4 font-inter">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-2xl space-y-6 text-center">
+      <div className="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4 font-inter overflow-y-auto">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-xl p-8 shadow-2xl space-y-6 text-center my-8">
           <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center mx-auto">
             <ShieldCheck className="w-6 h-6" />
           </div>
 
           <div className="space-y-1.5">
-            <h1 className="text-xl font-extrabold text-white font-manrope">CA Admin Portal</h1>
+            <h1 className="text-xl font-extrabold text-white font-manrope">
+              {authView === 'forgot'
+                ? 'Reset / Set CA Admin Password'
+                : authView === 'reset'
+                  ? 'Create New Password'
+                  : 'CA Admin Portal'}
+            </h1>
             <p className="text-xs text-slate-400">
-              Restricted Operations: Visiting Card Scanner &amp; Network Administration
+              {authView === 'forgot'
+                ? 'Enter your authorized CA Admin Gmail to receive a 6-digit code.'
+                : authView === 'reset'
+                  ? 'Enter the 6-digit code sent to your Gmail and choose a new password.'
+                  : 'Restricted Operations: Visiting Card Scanner & Network Administration'}
             </p>
           </div>
 
-          {loginError && (
-            <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs font-medium text-left flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <span>{loginError}</span>
+          {loginSuccess && (
+            <div className="p-3 rounded-lg bg-emerald-950/60 border border-emerald-800/80 text-emerald-300 text-xs font-medium text-left flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <span>{loginSuccess}</span>
             </div>
           )}
 
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <input
-              type="email"
-              required
-              autoFocus
-              value={loginEmail}
-              onChange={(e) => {
-                setLoginEmail(e.target.value);
-                if (loginError) setLoginError('');
-              }}
-              placeholder="Enter authorized @gmail.com address"
-              className="w-full px-4 py-3 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-center"
-            />
+          {loginError && (
+            <div className="p-3 rounded-lg bg-rose-950/60 border border-rose-800/80 text-rose-300 text-xs font-medium text-left space-y-1.5">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <span>{loginError}</span>
+              </div>
+              {authView === 'login' && loginError.toLowerCase().includes('no password') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthView('forgot');
+                    setLoginError('');
+                  }}
+                  className="text-blue-400 hover:text-blue-300 underline font-semibold pl-6 cursor-pointer"
+                >
+                  Set password via email code &rarr;
+                </button>
+              )}
+            </div>
+          )}
 
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Authenticate &amp; Enter</span>}
-            </button>
-          </form>
+          {authView === 'forgot' ? (
+            <form onSubmit={handleRequestCaReset} className="space-y-4 text-left">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Authorized Gmail Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  autoFocus
+                  value={loginEmail}
+                  onChange={(e) => {
+                    setLoginEmail(e.target.value);
+                    if (loginError) setLoginError('');
+                  }}
+                  placeholder="yourname@gmail.com"
+                  className="w-full px-4 py-3 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading || !loginEmail.trim()}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Send 6-Digit Code</span>}
+              </button>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthView('reset');
+                    setLoginError('');
+                  }}
+                  className="text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+                >
+                  Already have a code?
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthView('login');
+                    setLoginError('');
+                    setLoginSuccess('');
+                  }}
+                  className="text-slate-400 hover:text-white font-semibold cursor-pointer"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            </form>
+          ) : authView === 'reset' ? (
+            <form onSubmit={handleConfirmCaReset} className="space-y-3.5 text-left">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Authorized Gmail Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="yourname@gmail.com"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  6-Digit Reset Code
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={resetOtp}
+                    onChange={(e) => setResetOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="• • • • • •"
+                    className="w-full pl-10 pr-4 py-2.5 text-sm font-mono tracking-widest text-center bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  New Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min. 6 characters"
+                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="w-full pl-10 pr-4 py-2.5 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  disabled={loginLoading || resendCooldown > 0}
+                  onClick={() => handleRequestCaReset()}
+                  className="text-blue-400 hover:text-blue-300 font-semibold inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  {loginLoading && <RotateCw className="w-3 h-3 animate-spin" />}
+                  <span>{resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Code'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthView('login');
+                    setLoginError('');
+                    setLoginSuccess('');
+                  }}
+                  className="text-slate-400 hover:text-white font-semibold cursor-pointer"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading || resetOtp.length < 6 || newPassword.length < 6}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Save New Password</span>}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Authorized Gmail Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  autoFocus
+                  value={loginEmail}
+                  onChange={(e) => {
+                    setLoginEmail(e.target.value);
+                    if (loginError) setLoginError('');
+                  }}
+                  placeholder="yourname@gmail.com"
+                  className="w-full px-4 py-3 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthView('forgot');
+                      setLoginError('');
+                      setLoginSuccess('');
+                    }}
+                    className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+                  >
+                    Forgot / Set password?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-400" />
+                  <input
+                    type={showLoginPassword ? 'text' : 'password'}
+                    required
+                    value={loginPassword}
+                    onChange={(e) => {
+                      setLoginPassword(e.target.value);
+                      if (loginError) setLoginError('');
+                    }}
+                    placeholder="Enter your password"
+                    className="w-full pl-10 pr-10 py-3 text-sm bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword((prev) => !prev)}
+                    className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-200 cursor-pointer"
+                    aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Authenticate &amp; Enter</span>}
+              </button>
+            </form>
+          )}
 
           {onNavigateHome && (
             <div className="pt-2">

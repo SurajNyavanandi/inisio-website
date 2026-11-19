@@ -58,7 +58,7 @@ export const adminLoginSchema = z
       .toLowerCase()
       .trim()
       .regex(/^[^\s@]+@gmail\.com$/i, 'Only valid @gmail.com addresses are permitted for admin access'),
-    password: z.string().max(100).optional(),
+    password: z.string().min(1, 'Password is required').max(100),
   })
   .strict();
 

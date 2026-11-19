@@ -11,8 +11,11 @@ import {
   ArrowRight,
   Wrench,
   Layers,
+  Eye,
+  Download,
 } from 'lucide-react';
 import { fetchLeadsFromDatabase, getStoredLeads, LeadRecord } from '../utils/leadStore';
+import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
   DashboardCard,
@@ -43,6 +46,27 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
+
+  const handleDprSummaryPdf = async (lead: LeadRecord, action: 'preview' | 'download') => {
+    try {
+      const { mapLeadRecordToPdfData, generateDprExecutiveSummaryPDF } = await import(
+        '../utils/pdfGenerator'
+      );
+      const payload = mapLeadRecordToPdfData(lead);
+      const res = generateDprExecutiveSummaryPDF(payload, action);
+      if (action === 'preview' && res) {
+        setPdfPreview({
+          blobUrl: res.blobUrl,
+          filename: res.filename,
+          title: `${payload.projectName || 'Project'} — DPR Executive Summary`,
+          subtitle: `Promoter: ${payload.fullName || 'Lead Promoter'} · ${payload.industry || 'Manufacturing'}`,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to generate DPR Summary PDF:', err);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -229,8 +253,24 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                         {l.projectCost || l.totalCostCr || '0'} Cr
                       </p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
                       <DashboardStatusBadge status={l.status || 'Active DPR'} />
+                      <button
+                        type="button"
+                        onClick={() => handleDprSummaryPdf(l, 'preview')}
+                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>DPR Summary</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDprSummaryPdf(l, 'download')}
+                        title="Download DPR Executive Summary PDF"
+                        className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -264,19 +304,20 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                   <th className={DASHBOARD_TABLE.th}>Sector</th>
                   <th className={DASHBOARD_TABLE.th}>Outlay</th>
                   <th className={DASHBOARD_TABLE.th}>Term Loan</th>
-                  <th className={`${DASHBOARD_TABLE.th} text-right`}>Stage</th>
+                  <th className={DASHBOARD_TABLE.th}>Stage</th>
+                  <th className={`${DASHBOARD_TABLE.th} text-right`}>DPR Brief</th>
                 </tr>
               </thead>
               <tbody className={DASHBOARD_TABLE.tbody}>
                 {loading ? (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <DashboardLoadingState label="Loading drafting queue..." />
                     </td>
                   </tr>
                 ) : filteredLeads.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={7}>
                       <DashboardEmptyState
                         icon={FolderOpen}
                         title="No projects match your search"
@@ -298,8 +339,28 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                       <td className={`${DASHBOARD_TABLE.td} font-semibold text-blue-700 tabular-nums whitespace-nowrap`}>
                         ₹ {l.proposedLoan || l.loanRequiredCr || '0'} Cr
                       </td>
-                      <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                      <td className={DASHBOARD_TABLE.td}>
                         <DashboardStatusBadge status={l.status || 'Active DPR'} />
+                      </td>
+                      <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleDprSummaryPdf(l, 'preview')}
+                            className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Preview</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDprSummaryPdf(l, 'download')}
+                            title="Download DPR Executive Summary PDF"
+                            className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -425,6 +486,7 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
           </DashboardCard>
         </div>
       )}
+      <PdfPreviewModal preview={pdfPreview} onClose={() => setPdfPreview(null)} />
     </DashboardLayout>
   );
 };

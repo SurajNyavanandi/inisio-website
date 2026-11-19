@@ -4,6 +4,7 @@ export interface LeadRecord {
   id: string;
   _id?: string;
   fullName: string;
+  companyName?: string;
   email: string;
   phone: string;
   mobile?: string;
@@ -25,14 +26,23 @@ export interface LeadRecord {
   createdAt: string;
   updatedAt?: string;
   notes?: string;
+  description?: string;
+  landStatus?: string;
+  collateralStatus?: string;
+  promoterExp?: string;
   meansOfFinance?: any;
+  financials?: any;
   riskProfile?: any;
+  riskProfileData?: any;
   downloadedPDF?: boolean;
   assignedCA?: string;
   dprAssignedTo?: string;
   consultationAssignedTo?: string;
   assignedBank?: string;
   bankName?: string;
+  branchLocation?: string;
+  bankIfscCode?: string;
+  bankAppRefNumber?: string;
   caReviewNotes?: string;
   promotersList?: any[];
   costComponents?: any[];
@@ -52,6 +62,9 @@ export interface LeadRecord {
   submittedAt?: string;
   consultationStatus?: string;
   assessmentCompleted?: boolean;
+  promoterContributionAvailable?: 'Yes' | 'No';
+  promoterFundAssistanceStatus?: string;
+  promoterFundAssistanceRequest?: any;
 }
 
 const STORAGE_KEY = 'inisio_stored_leads';
@@ -63,34 +76,42 @@ export function normalizeLead(item: any): LeadRecord {
       fullName: '',
       email: '',
       phone: '',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
   }
 
   const id = String(item._id || item.id || `lead_${Date.now()}`);
   const projectCost =
-    item.totalCostCr !== undefined
+    item.totalCostCr !== undefined && item.totalCostCr !== ''
       ? item.totalCostCr
-      : item.capexCr !== undefined
+      : item.capexCr !== undefined && item.capexCr !== ''
       ? item.capexCr
-      : item.projectCost || '0';
+      : item.projectCost ?? '';
   const proposedLoan =
-    item.loanRequiredCr !== undefined
+    item.loanRequiredCr !== undefined && item.loanRequiredCr !== ''
       ? item.loanRequiredCr
-      : item.loanCr !== undefined
+      : item.loanCr !== undefined && item.loanCr !== ''
       ? item.loanCr
-      : item.proposedLoan || '0';
+      : item.proposedLoan ?? '';
   const dscr =
-    item.dscrEstimate !== undefined
+    item.dscrEstimate !== undefined && item.dscrEstimate !== '' && Number(item.dscrEstimate) > 0
       ? item.dscrEstimate
-      : item.dscr !== undefined
+      : item.dscr !== undefined && item.dscr !== '' && Number(item.dscr) > 0
       ? item.dscr
-      : '1.45';
+      : '';
+
+  const mergedRiskProfile = item.riskProfileData || item.riskProfile || undefined;
+  const mergedCostComponents = Array.isArray(item.costComponents) && item.costComponents.length > 0
+    ? item.costComponents
+    : Array.isArray(item.customCostComponents) && item.customCostComponents.length > 0
+    ? item.customCostComponents
+    : undefined;
 
   return {
     id,
     _id: item._id || id,
     fullName: item.fullName || item.promoterName || item.name || '',
+    companyName: item.companyName || item.company || '',
     email: item.email || '',
     phone: item.mobile || item.phone || '',
     mobile: item.mobile || item.phone || '',
@@ -101,7 +122,7 @@ export function normalizeLead(item: any): LeadRecord {
     totalCostCr: projectCost,
     proposedLoan,
     loanRequiredCr: proposedLoan,
-    promoterContribCr: item.promoterContribCr ?? item.equityCr ?? '0',
+    promoterContribCr: item.promoterContribCr ?? item.equityCr ?? '',
     dscr,
     dscrEstimate: dscr,
     bankabilityScore: item.feasibilityScore || item.bankabilityScore || '',
@@ -111,19 +132,28 @@ export function normalizeLead(item: any): LeadRecord {
     status: item.status || 'Active Lead',
     createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : undefined,
-    notes: item.notes || item.caReviewNotes || '',
+    notes: item.notes || item.description || item.caReviewNotes || '',
+    description: item.description || item.notes || '',
+    landStatus: item.landStatus || '',
+    collateralStatus: item.collateralStatus || '',
+    promoterExp: item.promoterExp || '',
     meansOfFinance: item.meansOfFinance,
-    riskProfile: item.riskProfile,
+    financials: item.financials,
+    riskProfile: mergedRiskProfile,
+    riskProfileData: mergedRiskProfile,
     downloadedPDF: Boolean(item.downloadedPDF),
     assignedCA: item.assignedCA,
     dprAssignedTo: item.dprAssignedTo,
     consultationAssignedTo: item.consultationAssignedTo,
     assignedBank: item.assignedBank || item.bankName,
     bankName: item.bankName || item.assignedBank,
+    branchLocation: item.branchLocation || '',
+    bankIfscCode: item.bankIfscCode || '',
+    bankAppRefNumber: item.bankAppRefNumber || '',
     caReviewNotes: item.caReviewNotes,
     promotersList: Array.isArray(item.promotersList) ? item.promotersList : undefined,
-    costComponents: Array.isArray(item.costComponents) ? item.costComponents : undefined,
-    customCostComponents: Array.isArray(item.customCostComponents) ? item.customCostComponents : undefined,
+    costComponents: mergedCostComponents,
+    customCostComponents: Array.isArray(item.customCostComponents) ? item.customCostComponents : mergedCostComponents,
     customFinanceComponents: Array.isArray(item.customFinanceComponents) ? item.customFinanceComponents : undefined,
     uploadedDocuments: Array.isArray(item.uploadedDocuments) ? item.uploadedDocuments : undefined,
     documentsUploaded: Boolean(item.documentsUploaded),
@@ -139,6 +169,9 @@ export function normalizeLead(item: any): LeadRecord {
     submittedAt: item.submittedAt,
     consultationStatus: item.consultationStatus,
     assessmentCompleted: item.assessmentCompleted !== undefined ? Boolean(item.assessmentCompleted) : undefined,
+    promoterContributionAvailable: item.promoterContributionAvailable,
+    promoterFundAssistanceStatus: item.promoterFundAssistanceStatus,
+    promoterFundAssistanceRequest: item.promoterFundAssistanceRequest,
   };
 }
 
@@ -151,7 +184,7 @@ export function getStoredLeads(emailFilter?: string): LeadRecord[] {
     const list: LeadRecord[] = Array.isArray(parsed) ? parsed.map(normalizeLead) : [];
     if (emailFilter) {
       const clean = emailFilter.toLowerCase().trim();
-      return list.filter(l => (l.email || '').toLowerCase().trim() === clean);
+      return list.filter((l) => (l.email || '').toLowerCase().trim() === clean);
     }
     return list;
   } catch {
@@ -159,7 +192,11 @@ export function getStoredLeads(emailFilter?: string): LeadRecord[] {
   }
 }
 
-export async function fetchLeadsFromDatabaseStrict(params?: { search?: string; filterSource?: string; email?: string }): Promise<LeadRecord[]> {
+export async function fetchLeadsFromDatabaseStrict(params?: {
+  search?: string;
+  filterSource?: string;
+  email?: string;
+}): Promise<LeadRecord[]> {
   const res = await api.leads.getAll(params);
   const dataList = Array.isArray(res) ? res : (res as any)?.data || [];
   const normalized = dataList.map(normalizeLead);
@@ -174,7 +211,11 @@ export async function fetchLeadsFromDatabaseStrict(params?: { search?: string; f
   return normalized;
 }
 
-export async function fetchLeadsFromDatabase(params?: { search?: string; filterSource?: string; email?: string }): Promise<LeadRecord[]> {
+export async function fetchLeadsFromDatabase(params?: {
+  search?: string;
+  filterSource?: string;
+  email?: string;
+}): Promise<LeadRecord[]> {
   try {
     return await fetchLeadsFromDatabaseStrict(params);
   } catch (err) {
@@ -186,10 +227,11 @@ export async function fetchLeadsFromDatabase(params?: { search?: string; filterS
 export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRecord> {
   const norm = normalizeLead(lead);
 
-  // Send to real backend database API
+  // Send full structured assessment & project details to backend database API
   try {
     const payload = {
       fullName: norm.fullName,
+      companyName: norm.companyName || undefined,
       mobile: norm.phone || norm.mobile || '',
       email: norm.email || '',
       projectName: norm.projectName || '',
@@ -201,10 +243,29 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
       feasibilityScore: Number(norm.feasibilityScore) || 0,
       bankabilityRating: norm.bankabilityRating || '',
       dscrEstimate: Number(norm.dscr) || 0,
-      notes: norm.notes,
+      landStatus: norm.landStatus || '',
+      collateralStatus: norm.collateralStatus || '',
+      promoterExp: norm.promoterExp || '',
+      notes: norm.notes || norm.description || '',
+      bankName: norm.bankName || norm.assignedBank || '',
+      assignedBank: norm.assignedBank || norm.bankName || '',
+      branchLocation: norm.branchLocation || '',
+      bankIfscCode: norm.bankIfscCode || '',
+      bankAppRefNumber: norm.bankAppRefNumber || '',
       meansOfFinance: norm.meansOfFinance,
-      riskProfile: norm.riskProfile,
-      downloadedPDF: norm.downloadedPDF
+      financials: norm.financials,
+      riskProfile: norm.riskProfileData || norm.riskProfile,
+      riskProfileData: norm.riskProfileData || norm.riskProfile,
+      promotersList: norm.promotersList,
+      costComponents: norm.costComponents,
+      customCostComponents: norm.customCostComponents,
+      customFinanceComponents: norm.customFinanceComponents,
+      downloadedPDF: norm.downloadedPDF,
+      source: norm.source,
+      assessmentCompleted: norm.assessmentCompleted,
+      promoterContributionAvailable: norm.promoterContributionAvailable,
+      promoterFundAssistanceStatus: norm.promoterFundAssistanceStatus,
+      promoterFundAssistanceRequest: norm.promoterFundAssistanceRequest,
     };
 
     const res = await api.leads.create(payload);
@@ -218,7 +279,7 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
 
   // Update local storage cache
   const currentLeads = getStoredLeads();
-  const updated = [norm, ...currentLeads.filter(l => l.id !== norm.id && l._id !== norm._id)];
+  const updated = [norm, ...currentLeads.filter((l) => l.id !== norm.id && l._id !== norm._id)];
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
@@ -253,12 +314,17 @@ export async function updateLeadRecord(
   }
 
   const currentLeads = getStoredLeads();
-  const index = currentLeads.findIndex(l => l.id === id || l._id === id);
-  const updatedLead = serverRecord || (index !== -1 ? normalizeLead({ ...currentLeads[index], ...updates }) : normalizeLead({ id, ...updates }));
+  const index = currentLeads.findIndex((l) => l.id === id || l._id === id);
+  const updatedLead =
+    serverRecord ||
+    (index !== -1
+      ? normalizeLead({ ...currentLeads[index], ...updates })
+      : normalizeLead({ id, ...updates }));
 
-  const nextList = index !== -1
-    ? currentLeads.map((l, idx) => (idx === index ? updatedLead : l))
-    : [updatedLead, ...currentLeads];
+  const nextList =
+    index !== -1
+      ? currentLeads.map((l, idx) => (idx === index ? updatedLead : l))
+      : [updatedLead, ...currentLeads];
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(nextList));
@@ -272,7 +338,10 @@ export async function updateLeadRecord(
   return updatedLead;
 }
 
-export async function deleteLeadRecord(id: string, options?: { throwOnError?: boolean }): Promise<void> {
+export async function deleteLeadRecord(
+  id: string,
+  options?: { throwOnError?: boolean }
+): Promise<void> {
   try {
     await api.leads.delete(id);
   } catch (err) {
@@ -283,7 +352,7 @@ export async function deleteLeadRecord(id: string, options?: { throwOnError?: bo
   }
 
   const currentLeads = getStoredLeads();
-  const filtered = currentLeads.filter(l => l.id !== id && l._id !== id);
+  const filtered = currentLeads.filter((l) => l.id !== id && l._id !== id);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
   } catch (err) {
@@ -317,8 +386,20 @@ export function exportLeadsToCSV(leadsToExport?: LeadRecord[]): void {
   const leads = leadsToExport && leadsToExport.length > 0 ? leadsToExport : getStoredLeads();
   if (!leads.length) return;
 
-  const headers = ['ID', 'Full Name', 'Email', 'Phone', 'Project Name', 'Industry', 'Project Cost (Cr)', 'Loan Amount (Cr)', 'DSCR', 'Status', 'Created At'];
-  const rows = leads.map(l => [
+  const headers = [
+    'ID',
+    'Full Name',
+    'Email',
+    'Phone',
+    'Project Name',
+    'Industry',
+    'Project Cost (Cr)',
+    'Loan Amount (Cr)',
+    'DSCR',
+    'Status',
+    'Created At',
+  ];
+  const rows = leads.map((l) => [
     l.id || l._id || '',
     `"${l.fullName || ''}"`,
     `"${l.email || ''}"`,
@@ -329,10 +410,11 @@ export function exportLeadsToCSV(leadsToExport?: LeadRecord[]): void {
     l.proposedLoan || l.loanRequiredCr || '',
     l.dscr || l.dscrEstimate || '',
     `"${l.status || ''}"`,
-    l.createdAt
+    l.createdAt,
   ]);
 
-  const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+  const csvContent =
+    'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
   const encodedUri = encodeURI(csvContent);
   const link = document.createElement('a');
   link.setAttribute('href', encodedUri);

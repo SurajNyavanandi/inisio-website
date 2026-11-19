@@ -67,25 +67,28 @@ export const LatestBlogs: React.FC<LatestBlogsProps> = ({
   }, []);
 
   return (
-    <div className="pt-12 sm:pt-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="pt-12 sm:pt-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" aria-labelledby="latest-insights-heading">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-blue-700 flex items-center gap-1.5 font-inter">
             <BookOpen className="w-3.5 h-3.5 text-blue-600" />
             <span>Advisory Knowledge Hub</span>
           </p>
-          <h3 className="font-manrope text-xl sm:text-2xl font-bold text-slate-900 mt-1">
+          <h2 id="latest-insights-heading" className="font-manrope text-xl sm:text-2xl font-bold text-slate-900 mt-1">
             Latest Insights on Debt Syndication &amp; Project Financing
-          </h3>
+          </h2>
         </div>
-        <button
-          type="button"
-          onClick={() => onNavigateToBlogs()}
+        <a
+          href="/blogs"
+          onClick={(e) => {
+            e.preventDefault();
+            onNavigateToBlogs();
+          }}
           className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer font-inter shrink-0"
         >
           <span>View All Articles</span>
           <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        </a>
       </div>
 
       {loading ? (
@@ -113,35 +116,43 @@ export const LatestBlogs: React.FC<LatestBlogsProps> = ({
           {blogs.slice(0, 3).map((blog) => (
             <article
               key={blog.slug}
-              onClick={() => onNavigateToBlogs(blog.slug)}
-              className="bg-white rounded-2xl border border-slate-200/90 p-6 hover:border-blue-400 hover:shadow-sm transition-all duration-200 flex flex-col justify-between cursor-pointer group"
+              className="bg-white rounded-2xl border border-slate-200/90 hover:border-blue-400 hover:shadow-sm transition-all duration-200 flex flex-col justify-between group"
             >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span className="font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full">
-                    {blog.category}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-slate-400" />
-                    {blog.readTime}
-                  </span>
+              <a
+                href={`/blogs/${blog.slug}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigateToBlogs(blog.slug);
+                }}
+                className="p-6 flex flex-col justify-between h-full cursor-pointer"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span className="font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full">
+                      {blog.category}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      {blog.readTime}
+                    </span>
+                  </div>
+
+                  <h3 className="font-manrope font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">
+                    {blog.title}
+                  </h3>
+
+                  <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                    {blog.excerpt}
+                  </p>
                 </div>
 
-                <h4 className="font-manrope font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors leading-snug">
-                  {blog.title}
-                </h4>
-
-                <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
-                  {blog.excerpt}
-                </p>
-              </div>
-
-              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-slate-400">{blog.date}</span>
-                <span className="font-bold text-blue-600 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                  Read Analysis <ArrowRight className="w-3 h-3" />
-                </span>
-              </div>
+                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{blog.date}</span>
+                  <span className="font-bold text-blue-600 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Read Analysis <ArrowRight className="w-3 h-3" />
+                  </span>
+                </div>
+              </a>
             </article>
           ))}
         </div>
@@ -150,7 +161,7 @@ export const LatestBlogs: React.FC<LatestBlogsProps> = ({
           No advisory articles published yet.
         </div>
       )}
-    </div>
+    </section>
   );
 };
 export default LatestBlogs;

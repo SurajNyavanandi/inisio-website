@@ -118,18 +118,21 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
               </h2>
             )}
             <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
-              Every industrial domain has distinct debt-service norms, promoter contribution thresholds, and state subsidy schemes. Select your sector to evaluate bank loan feasibility.
+              Every industrial domain carries distinct bank DSCR norms, promoter equity thresholds, and central or state capital subsidy schemes. Explore Inisio Capital's sector benchmarks across food processing, solar power, warehousing, healthcare, and hospitality in Telangana and across India.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenAssessment}
+          <a
+            href="/assessment"
+            onClick={(e) => {
+              e.preventDefault();
+              onOpenAssessment();
+            }}
             className="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
           >
             <span>Run Free Assessment</span>
             <ArrowRight className="w-4 h-4" />
-          </button>
+          </a>
         </div>
 
         {/* Filter Badges */}

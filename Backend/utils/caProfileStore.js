@@ -286,7 +286,7 @@ export const dispatchClaimInvitation = async (profileId, clientOrigin = '') => {
     await profile.save();
   }
 
-  const baseUrl = (clientOrigin || process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+  const baseUrl = (clientOrigin || process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
   const claimUrl = `${baseUrl}/?action=activate-ca&token=${token}`;
 
   const emailPayload = renderClaimInvitationEmail({
@@ -298,14 +298,15 @@ export const dispatchClaimInvitation = async (profileId, clientOrigin = '') => {
     sourceTag: profile.sourceTag,
   });
 
-  // TODO: Replace mock email dispatch with production email provider (e.g., Resend, SendGrid, Amazon SES)
-  // Example production call:
-  // await resend.emails.send({ from: 'onboarding@inisio.com', to: profile.email, subject: emailPayload.subject, html: emailPayload.html });
-  sendEmail({
-    to: profile.email,
-    subject: emailPayload.subject,
-    html: emailPayload.html,
-  }).catch((e) => console.warn('[Claim Email] Dispatch log notice:', e.message));
+  sendEmail(
+    {
+      to: profile.email,
+      subject: emailPayload.subject,
+      text: emailPayload.text,
+      html: emailPayload.html,
+    },
+    { type: 'ca_claim_invitation' }
+  ).catch((e) => console.warn('[Claim Email] Dispatch log notice:', e.message));
 
   return {
     success: true,
@@ -467,21 +468,24 @@ export const activateCaProfile = async ({ token, password, name, phone, firmName
     if (profile.name) memUser.name = profile.name;
   }
 
-  // Dispatch activation confirmation email
+  // Dispatch activation confirmation email via Resend
   const confirmation = renderActivationConfirmationEmail({
     name: profile.name,
     firmName: profile.firmName,
     email: profile.email,
-    loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#ca-login`,
+    loginUrl: `${(process.env.APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '')}/#ca-login`,
     sourceTag: profile.sourceTag,
   });
 
-  // TODO: Replace mock confirmation email with production email provider
-  sendEmail({
-    to: profile.email,
-    subject: confirmation.subject,
-    html: confirmation.html,
-  }).catch(() => {});
+  sendEmail(
+    {
+      to: profile.email,
+      subject: confirmation.subject,
+      text: confirmation.text,
+      html: confirmation.html,
+    },
+    { type: 'ca_activation_confirmation' }
+  ).catch(() => {});
 
   return {
     success: true,

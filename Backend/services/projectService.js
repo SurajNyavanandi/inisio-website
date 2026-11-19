@@ -1,7 +1,9 @@
 import Project from '../models/Project.js';
 import notificationService from './notificationService.js';
 import { isDBConnected } from '../config/db.js';
+import config from '../config/env.js';
 import { escapeRegex } from '../middleware/validateMiddleware.js';
+import { sendDprStatusEmail } from '../utils/emailService.js';
 
 let memoryProjects = [];
 
@@ -19,6 +21,83 @@ const PRIVILEGED_PROJECT_ROLES = new Set([
   'admin2',
   'admin3',
 ]);
+
+const DPR_STATUS_MILESTONES = new Set([
+  'dpr requested',
+  'dpr in progress',
+  'in review',
+  'under review',
+  'dpr ready',
+  'dpr completed',
+  'completed',
+  'approved',
+  'bank sanction approved',
+]);
+
+const notifyProjectDprUpdate = (previous = {}, updated = {}) => {
+  try {
+    const prevStatus = String(previous?.status || '').trim();
+    const nextStatus = String(updated?.status || '').trim();
+    const prevAssigned = String(previous?.dprAssignedTo || '').trim();
+    const nextAssigned = String(updated?.dprAssignedTo || '').trim();
+
+    const normNext = nextStatus.toLowerCase();
+    const statusHit =
+      Boolean(nextStatus) &&
+      normNext !== prevStatus.toLowerCase() &&
+      (DPR_STATUS_MILESTONES.has(normNext) || normNext.includes('dpr'));
+    const assignedHit = Boolean(nextAssigned) && nextAssigned.toLowerCase() !== prevAssigned.toLowerCase();
+
+    if (!statusHit && !assignedHit) return;
+
+    const projectName = updated?.projectName || previous?.projectName || 'Greenfield Project';
+    const promoterEmail = String(updated?.email || previous?.email || '').trim();
+    const promoterName = updated?.promoterName || previous?.promoterName || 'Promoter';
+    const displayStatus = statusHit ? nextStatus : 'DPR Assigned';
+    const note = updated?.caReviewNotes || '';
+
+    if (promoterEmail && promoterEmail.includes('@')) {
+      sendDprStatusEmail({
+        to: promoterEmail,
+        name: promoterName,
+        projectName,
+        status: displayStatus,
+        assignedTo: nextAssigned,
+        note,
+        recipientType: 'promoter',
+      }).catch(() => {});
+    }
+
+    if (assignedHit && nextAssigned.includes('@')) {
+      sendDprStatusEmail({
+        to: nextAssigned,
+        name: nextAssigned.split('@')[0],
+        projectName,
+        status: displayStatus,
+        assignedTo: nextAssigned,
+        note,
+        recipientType: 'consultant',
+      }).catch(() => {});
+    }
+
+    if (statusHit && normNext.includes('requested')) {
+      const adminInbox = (process.env.ADMIN_EMAIL || config.ADMIN_EMAIL || '').trim();
+      if (adminInbox && adminInbox.includes('@') && !adminInbox.endsWith('@example.com')) {
+        sendDprStatusEmail({
+          to: adminInbox,
+          name: 'Admin',
+          projectName,
+          status: displayStatus,
+          assignedTo: nextAssigned,
+          note: `Requested by ${promoterName}${promoterEmail ? ` (${promoterEmail})` : ''}`,
+          recipientType: 'admin',
+        }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[ProjectService] DPR email notification notice:', err.message);
+  }
+};
 
 export const getProjects = async (filter = {}, userRole = 'admin', userId = null, userEmail = null) => {
   if (userRole === 'user' && !userId && !userEmail) {
@@ -277,8 +356,16 @@ export const updateProject = async (id, rawUpdates = {}, requester = null) => {
     try {
       const project = await Project.findById(id);
       if (project) {
+        const prevSnap = {
+          status: project.status,
+          dprAssignedTo: project.dprAssignedTo,
+          email: project.email,
+          promoterName: project.promoterName,
+          projectName: project.projectName,
+        };
         Object.assign(project, sanitizedUpdates);
         const saved = await project.save();
+        notifyProjectDprUpdate(prevSnap, saved);
         return saved;
       }
     } catch (err) {
@@ -296,11 +383,13 @@ export const updateProject = async (id, rawUpdates = {}, requester = null) => {
     throw error;
   }
 
+  const prevSnap = { ...memoryProjects[idx] };
   memoryProjects[idx] = {
     ...memoryProjects[idx],
     ...sanitizedUpdates,
     updatedAt: new Date(),
   };
+  notifyProjectDprUpdate(prevSnap, memoryProjects[idx]);
   return memoryProjects[idx];
 };
 

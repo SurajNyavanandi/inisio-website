@@ -248,14 +248,18 @@ export const Hero: React.FC<HeroProps> = ({
 
                   {/* CTA Buttons */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-                    <button
-                      onClick={onOpenAssessment}
+                    <a
+                      href="/assessment"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onOpenAssessment();
+                      }}
                       className="px-5 py-3 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-xl shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer min-h-[44px]"
                     >
                       <Calculator className="w-4 h-4 text-blue-100" />
                       <span>{activeSlideData.primaryBtnText}</span>
                       <ArrowRight className="w-4 h-4" />
-                    </button>
+                    </a>
 
                     <button
                       onClick={onOpenConsultation}
@@ -345,31 +349,35 @@ export const Hero: React.FC<HeroProps> = ({
           >
             {/* Duplicated list to create infinite smooth continuous loop */}
             <div className="flex gap-6 sm:gap-8 animate-marquee shrink-0">
-              {[...industries, ...industries, ...industries].map((ind, index) => (
-                <div
-                  key={index}
-                  onClick={onOpenAssessment}
-                  className="flex-none w-24 sm:w-28 flex flex-col items-center text-center cursor-pointer group"
-                >
-                  {/* Clean, compact rounded light blue icon container */}
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#f0f5ff] hover:bg-[#e6f0ff] border border-blue-100/70 flex items-center justify-center p-3.5 shadow-2xs group-hover:shadow-md group-hover:-translate-y-1 transition-all duration-300">
-                    <img
-                      src={ind.icon}
-                      alt={`${ind.name} Greenfield Project Finance & Debt Syndication`}
-                      width={48}
-                      height={48}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="w-10 h-10 sm:w-12 sm:h-12 object-contain group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
+              {[...industries, ...industries, ...industries].map((ind, index) => {
+                const isDuplicate = index >= industries.length;
+                return (
+                  <div
+                    key={index}
+                    aria-hidden={isDuplicate || undefined}
+                    onClick={onOpenAssessment}
+                    className="flex-none w-24 sm:w-28 flex flex-col items-center text-center cursor-pointer group"
+                  >
+                    {/* Clean, compact rounded light blue icon container */}
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-[#f0f5ff] hover:bg-[#e6f0ff] border border-blue-100/70 flex items-center justify-center p-3.5 shadow-2xs group-hover:shadow-md group-hover:-translate-y-1 transition-all duration-300">
+                      <img
+                        src={ind.icon}
+                        alt={isDuplicate ? '' : `${ind.name} Greenfield Project Finance & Debt Syndication`}
+                        width={48}
+                        height={48}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-10 sm:w-12 sm:h-12 object-contain group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
 
-                  {/* Title centered below box */}
-                  <h3 className="mt-2.5 font-manrope text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors leading-tight max-w-[110px]">
-                    {ind.name}
-                  </h3>
-                </div>
-              ))}
+                    {/* Title centered below box */}
+                    <span className="mt-2.5 font-manrope text-xs font-bold text-slate-800 group-hover:text-blue-600 transition-colors leading-tight max-w-[110px]">
+                      {ind.name}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
