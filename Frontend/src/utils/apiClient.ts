@@ -80,7 +80,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
     if (!response.ok) {
       const errorMsg = data?.message || `Request failed with status ${response.status}`;
-      throw new Error(errorMsg);
+      const apiErr: any = new Error(errorMsg);
+      apiErr.status = response.status;
+      apiErr.code = data?.code || undefined;
+      apiErr.data = data;
+      throw apiErr;
     }
 
     return data.data !== undefined ? data.data : data;
@@ -266,6 +270,20 @@ export const api = {
 
   // Assessments & Underwriting
   assessments: {
+    getQuota: (params?: {
+      email?: string;
+      mobile?: string;
+      clientProjectId?: string;
+      projectId?: string;
+    }) => {
+      const query = new URLSearchParams();
+      if (params?.email) query.append('email', params.email);
+      if (params?.mobile) query.append('mobile', params.mobile);
+      if (params?.clientProjectId) query.append('clientProjectId', params.clientProjectId);
+      if (params?.projectId) query.append('projectId', params.projectId);
+      const qs = query.toString();
+      return request<any>(`/assessments/quota${qs ? `?${qs}` : ''}`);
+    },
     evaluate: (data: any) =>
       request<any>('/assessments/evaluate', {
         method: 'POST',

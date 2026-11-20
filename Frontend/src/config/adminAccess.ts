@@ -36,18 +36,16 @@ export const EXTRA_ADMIN_EMAILS = (
   .map((e) => e.trim().toLowerCase())
   .filter((e) => isValidGmail(e));
 
-export const TEST_ADMIN_EMAIL = 'password26@gmail.com';
-
 const configuredAdminGmails = Array.from(
   new Set(
-    [ADMIN_EMAIL, SUPER_ADMIN_EMAIL, TEST_ADMIN_EMAIL, ...EXTRA_ADMIN_EMAILS].filter((e) =>
+    [ADMIN_EMAIL, SUPER_ADMIN_EMAIL, ...EXTRA_ADMIN_EMAILS].filter((e) =>
       isValidGmail(e)
     )
   )
 );
 
 const configuredCaAdminGmails = Array.from(
-  new Set([CA_ADMIN_EMAIL, TEST_ADMIN_EMAIL, 'ca.admin@example.com', 'caadmin@example.com'].filter(Boolean))
+  new Set([CA_ADMIN_EMAIL].filter((e) => isValidGmail(e)))
 );
 
 export type AdminRole = 'admin' | 'superadmin' | 'ca_admin';
@@ -107,9 +105,10 @@ export function validateAdminEmail(email: string): {
  */
 export function validateCaAdminEmail(email: string): boolean {
   const clean = (email || '').trim().toLowerCase();
-  if (!clean) return false;
+  if (!isValidGmail(clean)) return false;
   if (configuredCaAdminGmails.length > 0) {
     return configuredCaAdminGmails.includes(clean);
   }
+  // Defer to backend CA_ADMIN allowlist check when VITE_CA_ADMIN is unset at build time
   return true;
 }

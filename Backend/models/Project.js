@@ -7,6 +7,11 @@ const projectSchema = new mongoose.Schema(
       ref: 'User',
       required: false,
     },
+    clientProjectId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     email: {
       type: String,
       trim: true,
@@ -141,6 +146,7 @@ const projectSchema = new mongoose.Schema(
 );
 
 // Indexes for filters, sorts, and lookups
+projectSchema.index({ clientProjectId: 1 }, { sparse: true });
 projectSchema.index({ userId: 1 });
 projectSchema.index({ email: 1 });
 projectSchema.index({ mobile: 1 });

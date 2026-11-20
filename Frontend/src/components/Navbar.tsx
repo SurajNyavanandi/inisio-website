@@ -13,6 +13,7 @@ import {
 
 interface NavbarProps {
   activeTab: string;
+  activeSection?: string;
   onSelectTab: (tab: string) => void;
   onOpenAssessment: (defaultIndustry?: string) => void;
   onOpenConsultation: () => void;
@@ -25,6 +26,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
+  activeSection = '',
   onSelectTab,
   onOpenAssessment,
   currentUser,
@@ -84,19 +86,28 @@ export const Navbar: React.FC<NavbarProps> = ({
     };
   }, [mobileMenuOpen]);
 
-  // 4 concise navigation items with crawlable public URLs
+  // 4 concise home-page section links
   const navLinks = [
-    { id: 'how-it-works', name: 'Solutions', target: 'how-it-works', href: '/how-it-works' },
-    { id: 'industries', name: 'Industries', target: 'industries', href: '/industries' },
-    { id: 'faq', name: 'Insights & FAQ', target: 'faq', href: '/faq' },
-    { id: 'contact', name: 'Contact', target: 'contact', href: '/contact' }
+    { id: 'solutions', name: 'Solutions', target: 'solutions', href: '/#solutions' },
+    { id: 'industries', name: 'Industries', target: 'industries', href: '/#industries' },
+    { id: 'faqs', name: 'Insights & FAQ', target: 'faqs', href: '/#faqs' },
+    { id: 'contact', name: 'Contact', target: 'contact', href: '/#contact' }
   ];
+
+  const isNavItemActive = (target: string) => {
+    if (activeTab === 'home') {
+      return activeSection === target;
+    }
+    if (target === 'faqs' && (activeTab === 'blogs' || activeTab === 'faq')) return true;
+    if (target === 'solutions' && (activeTab === 'about' || activeTab === 'how-it-works')) return true;
+    return activeTab === target;
+  };
 
   const handleNavClick = (target: string, e?: React.MouseEvent) => {
     if (e) e.preventDefault();
-    onSelectTab(target);
     setMobileMenuOpen(false);
     setUserDropdownOpen(false);
+    onSelectTab(target);
   };
 
   const getDashboardTabForRole = (role?: string) => {
@@ -118,54 +129,50 @@ export const Navbar: React.FC<NavbarProps> = ({
     return 'Promoter';
   };
 
-  const userInitial = (currentUser?.name?.trim() || currentUser?.email || 'U').charAt(0).toUpperCase();
-
   return (
     <>
-      {/* Full-width Crisp Institutional Top Bar — always stays sharp ABOVE mobile backdrop */}
+      {/* Full-width Crisp Fixed Top Bar — always stays pinned & sharp ABOVE mobile backdrop */}
       <header
-        className={`sticky top-0 z-50 w-full transition-colors duration-200 ${
+        className={`fixed top-0 inset-x-0 z-50 w-full transition-all duration-200 ${
           isScrolled || mobileMenuOpen
-            ? 'bg-white border-b border-slate-200 shadow-[0_1px_12px_rgba(15,23,42,0.06)]'
-            : 'bg-white/95 backdrop-blur-md border-b border-slate-200/75'
+            ? 'bg-white/98 backdrop-blur-md border-b border-slate-200/90 shadow-[0_2px_16px_rgba(15,23,42,0.06)]'
+            : 'bg-white/95 backdrop-blur-md border-b border-slate-200/70'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4 lg:gap-8 h-16">
-            {/* Zone 1: Clean Single-Line Brand Mark */}
+          <div className="flex items-center justify-between gap-3 md:gap-4 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:gap-6 h-16">
+            {/* Zone 1: Brand Mark (Synced with Hero Manrope Typography) */}
             <a
               href="/"
               onClick={(e) => handleNavClick('home', e)}
               aria-label="Inisio Home"
-              className="flex items-center gap-2.5 cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 rounded-lg group"
+              className="inline-flex items-center gap-2.5 cursor-pointer shrink-0 justify-self-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 rounded-lg group"
             >
               <span className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs group-hover:bg-blue-700 transition-colors shrink-0">
                 <TrendingUp className="w-4 h-4 stroke-[2.5]" />
               </span>
-              <span className="font-manrope text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap">
+              <span className="font-manrope text-[21px] sm:text-[22px] font-bold tracking-tight leading-none text-slate-900 whitespace-nowrap">
                 Inisio
               </span>
             </a>
 
-            {/* Zone 2: Clean Typographic Navigation Links (Visible on Tablet 768px+ and Desktop) */}
+            {/* Zone 2: Centered Navigation Links (Tablet 768px+ and Desktop) */}
             <nav
-              className="hidden md:flex items-center gap-6 lg:gap-8 font-inter"
+              className="hidden md:flex items-center justify-center gap-5 lg:gap-7 font-inter"
               aria-label="Main navigation"
             >
               {navLinks.map((link) => {
-                const isActive =
-                  activeTab === link.target ||
-                  (link.target === 'faq' && activeTab === 'blogs') ||
-                  (link.target === 'how-it-works' && activeTab === 'about');
+                const isActive = isNavItemActive(link.target);
                 return (
                   <a
                     key={link.id}
                     href={link.href}
                     onClick={(e) => handleNavClick(link.target, e)}
-                    className={`relative py-1 text-sm font-medium transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 rounded-sm ${
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`relative py-1 text-sm transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 rounded-sm ${
                       isActive
                         ? 'text-blue-600 font-semibold'
-                        : 'text-slate-600 hover:text-slate-950'
+                        : 'text-slate-600 font-medium hover:text-slate-950'
                     }`}
                   >
                     {link.name}
@@ -181,20 +188,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             </nav>
 
             {/* Zone 3: Tablet & Desktop Actions (768px+) */}
-            <div className="hidden md:flex items-center gap-3 shrink-0 font-inter">
+            <div className="hidden md:flex items-center justify-end gap-2.5 lg:gap-3 shrink-0 justify-self-end font-inter">
               {currentUser ? (
                 <div className="relative shrink-0" ref={dropdownRef}>
                   <button
                     type="button"
                     onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                    className="h-9 px-2.5 text-slate-700 hover:text-slate-950 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors flex items-center gap-2 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+                    className="h-9 px-3 text-slate-700 hover:text-slate-950 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
                     title={`${currentUser.name} (${currentUser.email})`}
                     aria-expanded={userDropdownOpen}
                   >
-                    <span className="w-6 h-6 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                      {userInitial}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-900 truncate max-w-[96px] lg:max-w-[130px]">
+                    <span className="text-xs font-semibold text-slate-900 truncate max-w-[110px] lg:max-w-[150px]">
                       {currentUser.name}
                     </span>
                     <ChevronDown
@@ -263,7 +267,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </a>
             </div>
 
-            {/* Mobile Controls (< 768px): Uncluttered 1 CTA + Menu Toggle */}
+            {/* Mobile Controls (< 768px): Uncluttered Compact CTA + Accessible 44px Menu Toggle */}
             <div className="flex items-center gap-2 md:hidden shrink-0 font-inter">
               <a
                 href="/assessment"
@@ -272,7 +276,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setMobileMenuOpen(false);
                   onOpenAssessment();
                 }}
-                className="h-9 px-3.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs inline-flex items-center gap-1 whitespace-nowrap cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+                className="min-h-[40px] h-10 px-3.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-lg shadow-xs inline-flex items-center gap-1 whitespace-nowrap cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
               >
                 <span>Free Assessment</span>
               </a>
@@ -280,7 +284,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((prev) => !prev)}
-                className="w-10 h-10 text-slate-700 hover:text-slate-950 hover:bg-slate-100 rounded-lg border border-slate-200/80 cursor-pointer flex items-center justify-center shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+                className="w-11 h-11 text-slate-700 hover:text-slate-950 hover:bg-slate-100 rounded-lg border border-slate-200/80 cursor-pointer flex items-center justify-center shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
                 aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
                 aria-expanded={mobileMenuOpen}
               >
@@ -291,7 +295,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Mobile Slide-Down Drawer (< 768px) — Backdrop starts BELOW header so header stays 100% crisp */}
+      {/* Mobile Slide-Down Drawer (< 768px) — Flush directly below the fixed 64px header */}
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-x-0 top-16 bottom-0 z-40 font-inter">
           {/* Subtle Scrim Below Header Only */}
@@ -301,25 +305,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             aria-hidden="true"
           />
 
-          {/* Clean Full-Width Drawer Panel Attached Flush to Header */}
-          <div className="relative bg-white border-b border-slate-200 shadow-xl px-4 py-4 space-y-4">
+          {/* Clean Full-Width Drawer Panel Attached Flush to Fixed Header */}
+          <div className="relative bg-white border-b border-slate-200 shadow-xl px-4 py-4 space-y-4 max-h-[calc(100vh-4rem)] overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
             <nav className="flex flex-col divide-y divide-slate-100" aria-label="Mobile navigation">
               {navLinks.map((link) => {
-                const isActive =
-                  activeTab === link.target ||
-                  (link.target === 'faq' && activeTab === 'blogs') ||
-                  (link.target === 'how-it-works' && activeTab === 'about');
+                const isActive = isNavItemActive(link.target);
                 return (
                   <a
                     key={link.id}
                     href={link.href}
                     onClick={(e) => handleNavClick(link.target, e)}
-                    className={`w-full py-3.5 px-2 text-sm font-semibold transition-colors cursor-pointer flex items-center justify-between ${
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`w-full min-h-[44px] py-3 px-2 text-sm font-semibold transition-colors cursor-pointer flex items-center justify-between ${
                       isActive ? 'text-blue-600' : 'text-slate-800 hover:text-blue-600'
                     }`}
                   >
                     <span>{link.name}</span>
-                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                    <ArrowRight className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
                   </a>
                 );
               })}
@@ -328,23 +330,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="pt-3 border-t border-slate-200/80 space-y-3">
               {currentUser ? (
                 <>
-                  <div className="flex items-center gap-3 px-2 py-2 bg-slate-50 rounded-lg border border-slate-200/70">
-                    <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm font-bold shrink-0">
-                      {userInitial}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{currentUser.name}</p>
-                      <p className="text-xs text-slate-500 truncate">
-                        {getRoleLabel(currentUser.role)} · {currentUser.email}
-                      </p>
-                    </div>
+                  <div className="px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-200/70">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{currentUser.name}</p>
+                    <p className="text-xs text-slate-500 truncate mt-0.5">
+                      {getRoleLabel(currentUser.role)} · {currentUser.email}
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <button
                       type="button"
                       onClick={() => handleNavClick(getDashboardTabForRole(currentUser.role))}
-                      className="h-11 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                      className="min-h-[44px] h-11 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                     >
                       <LayoutDashboard className="w-4 h-4 shrink-0" />
                       <span>Dashboard</span>
@@ -355,7 +352,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setMobileMenuOpen(false);
                         onLogout();
                       }}
-                      className="h-11 px-3 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                      className="min-h-[44px] h-11 px-3 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                     >
                       <LogOut className="w-4 h-4 shrink-0" />
                       <span>Sign Out</span>
@@ -369,7 +366,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setMobileMenuOpen(false);
                     onOpenAuth('login');
                   }}
-                  className="w-full h-11 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  className="w-full min-h-[44px] h-11 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <LogIn className="w-4 h-4 shrink-0" />
                   <span>Sign In to Your Account</span>

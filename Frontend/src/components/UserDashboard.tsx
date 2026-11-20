@@ -21,7 +21,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { fetchLeadsFromDatabase, getStoredLeads, LeadRecord } from '../utils/leadStore';
+import { fetchServerAssessmentQuota, AssessmentQuotaStatus } from '../utils/membershipStore';
 import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
+import { useToast } from './ui/Toast';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
   DashboardCard,
@@ -59,8 +61,41 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
+  const [quotaStatus, setQuotaStatus] = useState<AssessmentQuotaStatus | null>(null);
+  const { toast: showToast } = useToast();
 
-  const handleOpenProjectPdf = async (lead: LeadRecord, type: 'teaser' | 'dpr') => {
+  const handleStartNewAssessment = () => {
+    if (quotaStatus && !quotaStatus.allowed && !quotaStatus.hasPaidMembership) {
+      showToast(
+        'Your 1 free project assessment is already used. You can edit or re-download your existing project anytime, or upgrade to assess another project.',
+        { type: 'info', title: 'Free Assessment Limit Reached' }
+      );
+      onOpenMembership();
+      return;
+    }
+    onOpenAssessment();
+  };
+
+  const handleDownloadProjectDocx = async (lead: LeadRecord) => {
+    try {
+      const [{ mapLeadRecordToPdfData }, { generateProjectTeaserDOCX }] = await Promise.all([
+        import('../utils/pdfGenerator'),
+        import('../utils/docxGenerator'),
+      ]);
+      const payload = mapLeadRecordToPdfData(lead);
+      const filename = await generateProjectTeaserDOCX(payload);
+      showToast(`Downloaded ${filename}`, { type: 'success' });
+    } catch (err) {
+      console.error('Failed to generate Teaser DOCX:', err);
+      showToast('Could not download Project Teaser DOCX. Please try again.', { type: 'error' });
+    }
+  };
+
+  const handleOpenProjectPdf = async (
+    lead: LeadRecord,
+    type: 'teaser' | 'dpr',
+    action: 'preview' | 'download' = 'preview'
+  ) => {
     try {
       const {
         mapLeadRecordToPdfData,
@@ -70,21 +105,27 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       const payload = mapLeadRecordToPdfData(lead);
       const res =
         type === 'teaser'
-          ? generateProjectTeaserPDF(payload, 'preview')
-          : generateDprExecutiveSummaryPDF(payload, 'preview');
-      if (res) {
+          ? generateProjectTeaserPDF(payload, action)
+          : generateDprExecutiveSummaryPDF(payload, action);
+      if (action === 'preview' && res) {
         setPdfPreview({
           blobUrl: res.blobUrl,
           filename: res.filename,
           title:
             type === 'teaser'
-              ? `${payload.projectName || 'Project'} — Executive Teaser`
-              : `${payload.projectName || 'Project'} — DPR Executive Summary`,
-          subtitle: `${payload.industry || 'Greenfield Project'}${payload.location ? ` · ${payload.location}` : ''}`,
+              ? `${res.resolved.projectName} - Project Teaser`
+              : `${res.resolved.projectName} - Detailed Project Report (DPR)`,
+          subtitle: `${res.resolved.sector} · ${res.resolved.location}`,
+          resolved: res.resolved,
+          documentType: type,
+          onDownloadDocx: type === 'teaser' ? () => handleDownloadProjectDocx(lead) : undefined,
         });
+      } else if (res) {
+        showToast(`Downloaded ${res.filename}`, { type: 'success' });
       }
     } catch (err) {
       console.error('Failed to generate project PDF:', err);
+      showToast('Could not generate the document. Please try again.', { type: 'error' });
     }
   };
 
@@ -97,6 +138,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         return (l.email || '').toLowerCase() === user.email.toLowerCase();
       });
       setLeads(userLeads);
+      const serverQuota = await fetchServerAssessmentQuota({
+        user,
+        email: user?.email,
+        mobile: user?.phone,
+        localCompletedCount: userLeads.filter((l) => l.assessmentCompleted || l.downloadedPDF).length,
+      });
+      setQuotaStatus(serverQuota);
     } catch (err) {
       console.warn('Error loading user projects:', err);
       const local = getStoredLeads().filter(
@@ -191,11 +239,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       sidebarAction={
         <button
           type="button"
-          onClick={() => onOpenAssessment()}
+          onClick={handleStartNewAssessment}
           className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
         >
           <Plus className="w-3.5 h-3.5 shrink-0" />
-          <span>Appraise Project</span>
+          <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade for New Project' : 'Appraise Project'}</span>
         </button>
       }
       headerActions={
@@ -211,11 +259,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => onOpenAssessment()}
+            onClick={handleStartNewAssessment}
             className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New Appraisal</span>
+            <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan' : 'New Appraisal'}</span>
           </button>
         </div>
       }
@@ -232,11 +280,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <>
                 <button
                   type="button"
-                  onClick={() => onOpenAssessment()}
+                  onClick={handleStartNewAssessment}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>New Project Appraisal</span>
+                  <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade for More Projects' : 'New Project Appraisal'}</span>
                 </button>
                 <button
                   type="button"
@@ -391,11 +439,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 />
                 <button
                   type="button"
-                  onClick={() => onOpenAssessment()}
+                  onClick={handleStartNewAssessment}
                   className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>New Project</span>
+                  <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan' : 'New Project'}</span>
                 </button>
               </>
             }
@@ -524,10 +572,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => onOpenAssessment()}
+                onClick={handleStartNewAssessment}
                 className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
               >
-                <span>Launch Comprehensive Appraisal</span>
+                <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan to Start New Appraisal' : 'Launch Comprehensive Appraisal'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -546,10 +594,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => onOpenAssessment()}
+                onClick={handleStartNewAssessment}
                 className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
               >
-                <span>Open Quick Calculator</span>
+                <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Membership Plan' : 'Open Quick Calculator'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -615,10 +663,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <div className="space-y-1">
               <span className="text-xs font-semibold text-blue-700">Active Tier</span>
               <h3 className="text-lg font-extrabold text-slate-900 font-manrope">
-                {user?.membershipPlan || 'Inisio Greenfield Starter'}
+                {quotaStatus?.hasPaidMembership
+                  ? quotaStatus.membershipTier
+                  : user?.membershipPlan || 'Inisio Greenfield Starter (1 Free Assessment)'}
               </h3>
               <p className="text-xs text-slate-600">
-                Full access to credit appraisal scorecards and automated bank teaser exports.
+                {quotaStatus?.hasPaidMembership
+                  ? 'Unlimited greenfield project evaluations, institutional DPR/CMA models, and direct syndication desk access.'
+                  : quotaStatus && !quotaStatus.allowed
+                  ? 'Free quota status: 1 of 1 free assessment used. You can view, edit, and re-download PDF/DOCX for your existing project anytime. Upgrade to evaluate additional projects.'
+                  : 'Free quota status: 0 of 1 free assessment used. Includes full bankability appraisal and downloadable Project Teaser (PDF & DOCX).'}
               </p>
             </div>
             <button

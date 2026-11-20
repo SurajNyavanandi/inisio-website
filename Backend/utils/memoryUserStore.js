@@ -13,12 +13,6 @@ export const isValidGmail = (email) => {
   return Boolean(clean) && GMAIL_REGEX.test(clean);
 };
 
-export const isTestingAdminPassword = (password) => {
-  if (!password) return false;
-  const p = String(password).trim();
-  return p === 'password26@gmail.com' || p === 'password26';
-};
-
 export const getAdminEmail1 = () => {
   return (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAIL_1 || 'admin@example.com').toLowerCase().trim();
 };
@@ -42,21 +36,15 @@ export const isCaAdminEmail = (email) => {
   if (!email) return false;
   const clean = String(email).toLowerCase().trim();
   const extraCa = getExtraCaAdminEmails();
-  return (
-    clean === getCaAdminEmail() ||
-    extraCa.includes(clean) ||
-    clean === 'ca.admin@example.com' ||
-    clean === 'caadmin@example.com' ||
-    clean === 'password26@gmail.com'
-  );
+  return clean === getCaAdminEmail() || extraCa.includes(clean) || clean === 'ca.admin@example.com' || clean === 'caadmin@example.com';
 };
 
 export const getAuthorizedAdminEmails = () => {
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
-  const extra = config.admin?.extraEmails || [];
+  const extra = config.admin.extraEmails || [];
 
-  const set = new Set([admin1, admin2, 'password26@gmail.com', ...extra]);
+  const set = new Set([admin1, admin2, ...extra]);
   return Array.from(set).filter(Boolean);
 };
 
@@ -73,17 +61,27 @@ export const isAuthorizedAdminGmail = (email) => {
 };
 
 export const isAuthorizedCaAdminGmail = (email) => {
-  if (!email) return false;
+  if (!isValidGmail(email)) return false;
   const clean = String(email).toLowerCase().trim();
   const caAdmin = getCaAdminEmail();
   const extraCa = getExtraCaAdminEmails();
-  return (
-    clean === caAdmin ||
-    extraCa.includes(clean) ||
-    clean === 'ca.admin@example.com' ||
-    clean === 'caadmin@example.com' ||
-    clean === 'password26@gmail.com'
-  );
+  return (isValidGmail(caAdmin) && clean === caAdmin) || extraCa.includes(clean);
+};
+
+export const getAdminTestPassword = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return null;
+  }
+  const configured = (process.env.ADMIN_TEST_PASSWORD || 'password26@gmail.com').trim();
+  return configured || 'password26@gmail.com';
+};
+
+export const isAdminTestPasswordMatch = (enteredPassword) => {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+  const testPassword = getAdminTestPassword();
+  return Boolean(testPassword) && Boolean(enteredPassword) && String(enteredPassword) === testPassword;
 };
 
 // Legacy array export that dynamically reflects current environment config
@@ -107,14 +105,18 @@ export const getMemoryUsers = () => {
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
   const caAdmin = getCaAdminEmail();
+  const testPassword = getAdminTestPassword();
+  const getSeedPasswordHash = () =>
+    bcrypt.hashSync(testPassword || crypto.randomBytes(24).toString('hex'), 10);
+  const seedInitialized = Boolean(testPassword);
 
   if (caAdmin && !memoryUsers.some((u) => u.email.toLowerCase() === caAdmin)) {
     memoryUsers.unshift({
       _id: 'user_ca_admin_dynamic',
       name: 'CA Operations Admin',
       email: caAdmin,
-      password: bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10),
-      passwordInitialized: false,
+      password: getSeedPasswordHash(),
+      passwordInitialized: seedInitialized,
       role: 'ca_admin',
       company: 'Inisio CA Network Administration',
       phone: process.env.CA_ADMIN_PHONE || '+91 98765 43210',
@@ -128,8 +130,8 @@ export const getMemoryUsers = () => {
       _id: 'user_superadmin_dynamic',
       name: 'Executive Super Admin',
       email: admin2,
-      password: bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10),
-      passwordInitialized: false,
+      password: getSeedPasswordHash(),
+      passwordInitialized: seedInitialized,
       role: 'superadmin',
       company: 'Inisio Executive Board',
       phone: process.env.SUPERADMIN_PHONE || '',
@@ -143,8 +145,8 @@ export const getMemoryUsers = () => {
       _id: 'user_admin_dynamic',
       name: 'Inisio Operations Admin',
       email: admin1,
-      password: bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10),
-      passwordInitialized: false,
+      password: getSeedPasswordHash(),
+      passwordInitialized: seedInitialized,
       role: 'admin',
       company: 'Inisio HQ Operations',
       phone: process.env.ADMIN_PHONE || '',
@@ -214,7 +216,6 @@ export const deleteMemoryUser = (id) => {
 export default {
   GMAIL_REGEX,
   isValidGmail,
-  isTestingAdminPassword,
   getAdminEmail1,
   getAdminEmail2,
   getCaAdminEmail,
@@ -224,6 +225,8 @@ export default {
   isAuthorizedAdminEmail,
   isAuthorizedAdminGmail,
   isAuthorizedCaAdminGmail,
+  getAdminTestPassword,
+  isAdminTestPasswordMatch,
   AUTHORIZED_ADMIN_EMAILS,
   memoryUsers,
   getMemoryUsers,

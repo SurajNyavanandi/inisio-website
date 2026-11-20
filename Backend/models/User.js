@@ -42,6 +42,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    membershipTier: {
+      type: String,
+      default: 'Free',
+      trim: true,
+    },
     isVerified: {
       type: Boolean,
       default: false,

@@ -2,10 +2,24 @@ import assessmentService from '../services/assessmentService.js';
 import { calculateUnderwritingMetrics } from '../utils/underwritingScorer.js';
 import { sendSuccess } from '../utils/responseHandler.js';
 
+export const getAssessmentQuota = async (req, res, next) => {
+  try {
+    const quota = await assessmentService.getAssessmentQuota({
+      user: req.user || null,
+      email: req.query?.email || '',
+      mobile: req.query?.mobile || '',
+      clientProjectId: req.query?.clientProjectId || '',
+      existingRecordId: req.query?.projectId || req.query?.existingRecordId || '',
+    });
+    return sendSuccess(res, quota, 'Assessment quota status retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const evaluateProject = async (req, res, next) => {
   try {
-    const userId = req.user ? req.user._id : null;
-    const result = await assessmentService.evaluateProject(req.body, userId);
+    const result = await assessmentService.evaluateProject(req.body, req.user || null);
     return sendSuccess(res, result, 'Bankability assessment evaluated successfully');
   } catch (error) {
     next(error);
@@ -40,6 +54,7 @@ export const getAllAssessments = async (req, res, next) => {
 };
 
 export default {
+  getAssessmentQuota,
   evaluateProject,
   calculateQuickMetrics,
   getUserAssessments,

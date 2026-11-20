@@ -5,8 +5,6 @@ import {
   ArrowRight,
   Calculator,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Sparkles,
   FileCheck,
   ShieldCheck,
@@ -31,8 +29,8 @@ export const Hero: React.FC<HeroProps> = ({
   onOpenAssessment,
   onOpenConsultation
 }) => {
+  const SLIDE_DURATION_MS = 6000;
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [direction, setDirection] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const industryScrollRef = useRef<HTMLDivElement>(null);
@@ -116,30 +114,26 @@ export const Hero: React.FC<HeroProps> = ({
     }
   ];
 
-  // Auto-play slider every 5 seconds
+  // Auto-play slider every 6 seconds
   useEffect(() => {
     if (isPaused) return;
 
     const timer = setInterval(() => {
-      setDirection(1);
       setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 5000);
+    }, SLIDE_DURATION_MS);
 
     return () => clearInterval(timer);
   }, [isPaused, slides.length, currentSlide]);
 
   const handlePrev = () => {
-    setDirection(-1);
     setCurrentSlide((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
   };
 
   const handleNext = () => {
-    setDirection(1);
     setCurrentSlide((prev) => (prev + 1) % slides.length);
   };
 
   const goToSlide = (index: number) => {
-    setDirection(index > currentSlide ? 1 : -1);
     setCurrentSlide(index);
   };
 
@@ -209,6 +203,12 @@ export const Hero: React.FC<HeroProps> = ({
         className="relative overflow-hidden bg-white pt-0 pb-2"
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
+        onFocus={() => setIsPaused(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+            setIsPaused(false);
+          }
+        }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -308,22 +308,31 @@ export const Hero: React.FC<HeroProps> = ({
             </AnimatePresence>
           </div>
 
-          {/* Side Bracket Navigation Arrows */}
-          <button
-            onClick={handlePrev}
-            className="absolute left-0 sm:left-1 lg:-left-2 top-1/2 -translate-y-1/2 z-20 p-1.5 text-slate-500 hover:text-blue-600 transition-all cursor-pointer hover:scale-110 active:scale-95"
-            aria-label="Previous Slide"
+          {/* Bottom Slide Indicator Bars */}
+          <div
+            className="mt-5 flex items-center justify-center gap-2"
+            role="tablist"
+            aria-label="Hero slide navigation"
           >
-            <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 stroke-2" />
-          </button>
-
-          <button
-            onClick={handleNext}
-            className="absolute right-0 sm:right-1 lg:-right-2 top-1/2 -translate-y-1/2 z-20 p-1.5 text-slate-500 hover:text-blue-600 transition-all cursor-pointer hover:scale-110 active:scale-95"
-            aria-label="Next Slide"
-          >
-            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 stroke-2" />
-          </button>
+            {slides.map((slide, idx) => {
+              const isActive = idx === currentSlide;
+              return (
+                <button
+                  key={slide.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-label={`Go to slide ${idx + 1}: ${slide.badge}`}
+                  onClick={() => goToSlide(idx)}
+                  className={`h-2 rounded-full transition-all duration-300 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+                    isActive
+                      ? 'w-8 bg-blue-600'
+                      : 'w-2.5 bg-slate-300 hover:bg-slate-400'
+                  }`}
+                />
+              );
+            })}
+          </div>
 
         </div>
       </section>

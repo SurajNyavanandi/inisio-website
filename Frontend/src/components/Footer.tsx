@@ -45,7 +45,7 @@ export const Footer: React.FC<FooterProps> = ({
               aria-label="Inisio Capital Home"
               className="inline-flex items-center gap-2.5 cursor-pointer text-left focus:outline-none group"
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform duration-200">
+              <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs group-hover:bg-blue-500 transition-colors duration-200 shrink-0">
                 <TrendingUp className="w-5 h-5 stroke-[2.5]" />
               </div>
               <div className="flex flex-col">
@@ -83,7 +83,7 @@ export const Footer: React.FC<FooterProps> = ({
             </h2>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <a href="/how-it-works" onClick={(e) => handleNav('how-it-works', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/#solutions" onClick={(e) => handleNav('solutions', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>6-Step Debt Syndication Process</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
@@ -101,7 +101,7 @@ export const Footer: React.FC<FooterProps> = ({
                 </a>
               </li>
               <li>
-                <a href="/how-it-works" onClick={(e) => handleNav('how-it-works', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/#solutions" onClick={(e) => handleNav('solutions', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>Bank-Grade DPR &amp; CMA Modeling</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
@@ -113,7 +113,7 @@ export const Footer: React.FC<FooterProps> = ({
                 </button>
               </li>
               <li>
-                <a href="/contact" onClick={(e) => handleNav('contact', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/#contact" onClick={(e) => handleNav('contact', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>Contact Hyderabad Advisory Desk</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
@@ -129,22 +129,22 @@ export const Footer: React.FC<FooterProps> = ({
             </h2>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Food Processing &amp; Agri
                 </a>
               </li>
               <li>
-                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Solar &amp; Clean Energy
                 </a>
               </li>
               <li>
-                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Hospitals &amp; Healthcare
                 </a>
               </li>
               <li>
-                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Warehousing &amp; Cold Storage
                 </a>
               </li>
@@ -154,7 +154,7 @@ export const Footer: React.FC<FooterProps> = ({
                 </a>
               </li>
               <li>
-                <a href="/faq" onClick={(e) => handleNav('faq', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
+                <a href="/#faqs" onClick={(e) => handleNav('faqs', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
                   Greenfield Funding FAQs
                 </a>
               </li>

@@ -7,6 +7,11 @@ const assessmentSchema = new mongoose.Schema(
       ref: 'User',
       required: false,
     },
+    clientProjectId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     promoterName: {
       type: String,
       default: 'Promoter',
@@ -96,6 +101,11 @@ const assessmentSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+assessmentSchema.index({ clientProjectId: 1 }, { sparse: true });
+assessmentSchema.index({ userId: 1 });
+assessmentSchema.index({ email: 1 });
+assessmentSchema.index({ mobile: 1 });
 
 const Assessment = mongoose.models.Assessment || mongoose.model('Assessment', assessmentSchema);
 export default Assessment;

@@ -36,9 +36,16 @@ export interface PdfRiskSummary {
   recommendations?: string[];
 }
 
-export interface PdfGenerationResult {
-  blobUrl: string;
-  filename: string;
+export interface ViabilityIndicatorRow {
+  metric: string;
+  value: string;
+  meaning: string;
+}
+
+export interface RiskMitigantRow {
+  area: string;
+  risk: string;
+  mitigant: string;
 }
 
 export interface TeaserPDFData {
@@ -155,7 +162,7 @@ export interface ResolvedDocumentData {
   // Itemized Schedules
   costRows: Array<{ label: string; amountCr: number }>;
   costBreakdownNote: string;
-  financeRows: Array<{ label: string; value: string }>;
+  financeRows: Array<{ label: string; sharePct: string; value: string }>;
 
   // Scores & Risk
   dscrNum: number | null;
@@ -169,6 +176,16 @@ export interface ResolvedDocumentData {
   riskHighlights: Array<[string, string]>;
   strengths: string[];
   recommendations: string[];
+
+  // Plain-English Narratives & Tables
+  executiveVerdict: string;
+  businessOverviewSummary: string;
+  nextStepsLines: string[];
+  readinessRows: Array<[string, string]>;
+  bankRows: Array<[string, string]>;
+  viabilityIndicators: ViabilityIndicatorRow[];
+  riskMitigants: RiskMitigantRow[];
+  setupMilestones: string[];
 
   // Profile & Banking
   overviewRows: Array<[string, string]>;
@@ -192,31 +209,69 @@ export interface ResolvedDocumentData {
   isFunded: boolean;
 }
 
+export interface PdfGenerationResult {
+  blobUrl: string;
+  blob: Blob;
+  filename: string;
+  resolved: ResolvedDocumentData;
+  documentType: 'teaser' | 'dpr';
+}
+
 const parseNum = (val: unknown): number | null => {
   if (val === undefined || val === null || val === '') return null;
   const parsed = typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const fmtCr = (val: number): string => `INR ${val.toFixed(2)} Cr`;
+export const fmtCr = (val: number): string => {
+  const safe = Number.isFinite(val) ? val : 0;
+  return `INR ${safe.toFixed(2)} Cr`;
+};
 
-const cleanText = (val: unknown, fallback = ''): string => {
+export const cleanAsciiText = (val: unknown, fallback = ''): string => {
   if (val === undefined || val === null) return fallback;
   const cleaned = String(val)
     .replace(/₹/g, 'INR ')
     .replace(/[•·]/g, '-')
     .replace(/[–—]/g, '-')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
     .replace(/[^\x20-\x7E]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   return cleaned || fallback;
 };
 
-const makeFileSlug = (name: string): string =>
-  name
+export const makeSafeFileSlug = (name: string): string =>
+  cleanAsciiText(name, 'Project')
     .replace(/[^a-zA-Z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 48) || 'Project';
+
+/**
+ * Reliable cross-browser Blob download helper (safe inside iframes and desktop/mobile browsers).
+ */
+export function triggerBlobDownload(blob: Blob, filename: string): void {
+  const blobUrl = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } finally {
+    window.setTimeout(() => {
+      try {
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // ignore cleanup error
+      }
+    }, 3000);
+  }
+}
 
 /**
  * Maps any saved MongoDB LeadRecord / Project record into a complete TeaserPDFData payload
@@ -260,10 +315,8 @@ export function mapLeadRecordToPdfData(lead: LeadRecord): TeaserPDFData {
     totalCostCr: fin.totalProjectCost || lead.totalCostCr || lead.projectCost,
     loanRequiredCr: fin.termLoanCr || mof.debtCr || lead.loanRequiredCr || lead.proposedLoan,
     termLoanCr: fin.termLoanCr || mof.debtCr || lead.loanRequiredCr || lead.proposedLoan,
-    promoterContribCr:
-      fin.promoterContributionCr || mof.equityCr || lead.promoterContribCr,
-    promoterContributionCr:
-      fin.promoterContributionCr || mof.equityCr || lead.promoterContribCr,
+    promoterContribCr: fin.promoterContributionCr || mof.equityCr || lead.promoterContribCr,
+    promoterContributionCr: fin.promoterContributionCr || mof.equityCr || lead.promoterContribCr,
     otherFinanceCr: fin.otherFinanceCr ?? mof.subsidyCr ?? mof.otherCr,
 
     machineryCostCr: fin.machineryCostCr,
@@ -314,32 +367,34 @@ export function mapLeadRecordToPdfData(lead: LeadRecord): TeaserPDFData {
 }
 
 /**
- * Reconciles and normalizes all entered/saved project data into a single clean view model
- * shared identically by Teaser PDF, DPR Executive Summary PDF, and Teaser DOCX.
+ * Reconciles and normalizes all entered/saved project data into one plain-English view model
+ * shared identically by Teaser PDF, DPR PDF, Teaser DOCX, and the in-app preview modal.
  */
 export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
-  const projectName = cleanText(data.projectName, 'Greenfield Industrial Project');
-  const sector = cleanText(data.industry, 'Industrial Sector');
-  const promoter = cleanText(data.fullName || data.companyName, 'Lead Promoter');
-  const companyName = cleanText(data.companyName, '');
-  const location = cleanText(data.location, 'India');
-  const contactEmail = cleanText(data.email, '');
-  const contactPhone = cleanText(data.mobile || data.phone, '');
+  const projectName = cleanAsciiText(data.projectName, 'Greenfield Industrial Project');
+  const sector = cleanAsciiText(data.industry, 'Industrial Sector');
+  const promoter = cleanAsciiText(data.fullName || data.companyName, 'Lead Promoter');
+  const companyName = cleanAsciiText(data.companyName, '');
+  const location = cleanAsciiText(data.location, 'India');
+  const contactEmail = cleanAsciiText(data.email, '');
+  const contactPhone = cleanAsciiText(data.mobile || data.phone, '');
 
   const dateObj = data.updatedAt ? new Date(data.updatedAt) : new Date();
   const validDate = Number.isNaN(dateObj.getTime()) ? new Date() : dateObj;
-  const dateStr = validDate.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+  const dateStr = cleanAsciiText(
+    validDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    })
+  );
 
-  const refCode = cleanText(
+  const refCode = cleanAsciiText(
     data.bankAppRefNumber,
     `INS-${validDate.getFullYear()}-${String(validDate.getTime()).slice(-4)}`
   );
 
-  // 1. Resolve Cost Breakdown (custom components first, then explicit standard breakdown)
+  // 1. Resolve Cost Breakdown (custom components first, then explicit standard items)
   const rawCustomCosts =
     Array.isArray(data.costComponents) && data.costComponents.length > 0
       ? data.costComponents
@@ -349,7 +404,7 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
 
   const parsedCustomCosts = rawCustomCosts
     .map((item) => ({
-      label: cleanText(item.category || item.name || item.label, ''),
+      label: cleanAsciiText(item.category || item.name || item.label, ''),
       amountCr: parseNum(item.amountCr ?? item.amount ?? item.value) ?? 0,
     }))
     .filter((item) => item.label && item.amountCr > 0);
@@ -361,16 +416,16 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
 
   const standardCostRows: Array<{ label: string; amountCr: number }> = [];
   if (machineryVal !== null && machineryVal > 0) {
-    standardCostRows.push({ label: 'Plant & Machinery', amountCr: machineryVal });
+    standardCostRows.push({ label: 'Plant and Machinery', amountCr: machineryVal });
   }
   if (civilVal !== null && civilVal > 0) {
-    standardCostRows.push({ label: 'Civil Works, Land & Building', amountCr: civilVal });
+    standardCostRows.push({ label: 'Land, Building and Civil Works', amountCr: civilVal });
   }
   if (consultancyVal !== null && consultancyVal > 0) {
-    standardCostRows.push({ label: 'Consultancy, Pre-Op & Contingencies', amountCr: consultancyVal });
+    standardCostRows.push({ label: 'Consultancy, Pre-Operative and Contingencies', amountCr: consultancyVal });
   }
   if (otherCostVal !== null && otherCostVal > 0) {
-    standardCostRows.push({ label: 'Working Capital Margin / Other Capex', amountCr: otherCostVal });
+    standardCostRows.push({ label: 'Working Capital Margin and Other Costs', amountCr: otherCostVal });
   }
 
   let costRows: Array<{ label: string; amountCr: number }> = [];
@@ -378,16 +433,16 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
 
   if (parsedCustomCosts.length > 0) {
     costRows = parsedCustomCosts;
-    costBreakdownNote = 'User-specified itemized project cost schedule';
+    costBreakdownNote = 'Itemized cost breakdown as provided by the promoter.';
   } else if (standardCostRows.length > 0) {
     costRows = standardCostRows;
     costBreakdownNote =
       data.hasExplicitBreakdown === false
-        ? 'Indicative benchmark allocation (subject to DPR quotations)'
-        : 'Itemized project cost schedule as entered';
+        ? 'Estimated cost split based on sector benchmarks; final amounts will follow vendor quotes.'
+        : 'Itemized project cost breakdown as entered.';
   }
 
-  const itemizedCostSum = costRows.reduce((sum, r) => sum + r.amountCr, 0);
+  const itemizedCostSum = Number(costRows.reduce((sum, r) => sum + r.amountCr, 0).toFixed(2));
   const explicitTotalCost = parseNum(data.totalCostCr ?? data.projectCost);
   const totalCostNum =
     explicitTotalCost !== null && explicitTotalCost > 0
@@ -396,10 +451,21 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
       ? itemizedCostSum
       : 0;
 
+  // If itemized entries exist and don't match explicit total cost, reconcile cleanly using itemized sum or add balancing note
   if (costRows.length === 0 && totalCostNum > 0) {
-    costRows = [{ label: 'Total Project Outlay (Consolidated)', amountCr: totalCostNum }];
-    costBreakdownNote = 'Consolidated project outlay (detailed capex split pending)';
+    costRows = [{ label: 'Total Estimated Project Cost (Consolidated)', amountCr: totalCostNum }];
+    costBreakdownNote = 'Consolidated project cost entered; detailed item-wise split will be finalized with quotes.';
+  } else if (costRows.length > 0 && explicitTotalCost !== null && explicitTotalCost > 0) {
+    const diff = Number((explicitTotalCost - itemizedCostSum).toFixed(2));
+    if (diff > 0.05) {
+      costRows.push({ label: 'Unallocated / Other Project Costs', amountCr: diff });
+    }
   }
+
+  const reconciledCostTotal =
+    costRows.length > 0
+      ? Number(costRows.reduce((sum, r) => sum + r.amountCr, 0).toFixed(2))
+      : totalCostNum;
 
   // 2. Resolve Means of Finance (exact values, hide zero optional rows)
   const rawLoan = parseNum(
@@ -416,26 +482,26 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
 
   const parsedCustomFinance = (Array.isArray(data.customFinanceComponents) ? data.customFinanceComponents : [])
     .map((item) => ({
-      label: cleanText(item.category || item.name || item.label, ''),
+      label: cleanAsciiText(item.category || item.name || item.label, ''),
       amountCr: parseNum(item.amountCr ?? item.amount ?? item.value) ?? 0,
     }))
     .filter((item) => item.label && item.amountCr > 0);
 
-  const customFinSum = parsedCustomFinance.reduce((sum, r) => sum + r.amountCr, 0);
+  const customFinSum = Number(parsedCustomFinance.reduce((sum, r) => sum + r.amountCr, 0).toFixed(2));
 
-  const termLoanNum = rawLoan !== null && rawLoan >= 0 ? rawLoan : 0;
+  const termLoanNum = rawLoan !== null && rawLoan > 0 ? rawLoan : 0;
   const promoterEquityNum =
-    rawEquity !== null && rawEquity >= 0
+    rawEquity !== null && rawEquity > 0
       ? rawEquity
-      : totalCostNum > 0 && termLoanNum > 0
-      ? Math.max(0, Number((totalCostNum - termLoanNum - rawOtherFin - customFinSum).toFixed(2)))
+      : reconciledCostTotal > 0 && termLoanNum > 0
+      ? Math.max(0, Number((reconciledCostTotal - termLoanNum - rawOtherFin - customFinSum).toFixed(2)))
       : 0;
   const otherFinanceNum = Math.max(0, rawOtherFin);
   const totalFundingNum = Number(
     (termLoanNum + promoterEquityNum + otherFinanceNum + customFinSum).toFixed(2)
   );
 
-  const effectiveTotalCost = totalCostNum > 0 ? totalCostNum : totalFundingNum;
+  const effectiveTotalCost = reconciledCostTotal > 0 ? reconciledCostTotal : totalFundingNum;
   const denom = totalFundingNum > 0 ? totalFundingNum : effectiveTotalCost;
 
   let debtPct: number | null = null;
@@ -451,11 +517,11 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
   let debtEquityRatioLabel = 'Not specified';
   if (termLoanNum > 0 && promoterEquityNum > 0) {
     const ratio = (termLoanNum / promoterEquityNum).toFixed(2);
-    debtEquityRatioLabel = `${ratio} : 1 (${debtPct}% Debt / ${eqPct}% Equity)`;
+    debtEquityRatioLabel = `${ratio} : 1 (${debtPct}% Loan / ${eqPct}% Equity)`;
   } else if (termLoanNum > 0 && promoterEquityNum === 0) {
-    debtEquityRatioLabel = '100% Debt Proposed';
+    debtEquityRatioLabel = '100% Loan Requested';
   } else if (promoterEquityNum > 0 && termLoanNum === 0) {
-    debtEquityRatioLabel = '100% Promoter Equity';
+    debtEquityRatioLabel = '100% Promoter Funded';
   }
 
   const isFundingBalanced =
@@ -463,53 +529,45 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
     totalFundingNum === 0 ||
     Math.abs(effectiveTotalCost - totalFundingNum) < 0.05;
 
-  const estRate = cleanText(data.estInterestRate, '');
+  const estRate = cleanAsciiText(data.estInterestRate, '');
 
-  const financeRows: Array<{ label: string; value: string }> = [];
+  const financeRows: Array<{ label: string; sharePct: string; value: string }> = [];
   if (termLoanNum > 0) {
     financeRows.push({
-      label: debtPct !== null ? `Proposed Term Loan (${debtPct}%)` : 'Proposed Term Loan',
+      label: 'Term Loan Requested from Bank',
+      sharePct: denom > 0 ? `${((termLoanNum / denom) * 100).toFixed(1)}%` : '-',
       value: fmtCr(termLoanNum),
     });
   }
   if (promoterEquityNum > 0) {
     financeRows.push({
-      label: eqPct !== null ? `Promoter Equity Contribution (${eqPct}%)` : 'Promoter Equity Contribution',
+      label: 'Promoter Contribution (Own Funds / Equity)',
+      sharePct: denom > 0 ? `${((promoterEquityNum / denom) * 100).toFixed(1)}%` : '-',
       value: fmtCr(promoterEquityNum),
     });
   }
   if (otherFinanceNum > 0) {
     financeRows.push({
-      label:
-        otherPct && otherPct > 0
-          ? `Subsidy / Other Finance (${otherPct}%)`
-          : 'Subsidy / Other Finance',
+      label: 'Government Subsidy / Other Funding',
+      sharePct: denom > 0 ? `${((otherFinanceNum / denom) * 100).toFixed(1)}%` : '-',
       value: fmtCr(otherFinanceNum),
     });
   }
   parsedCustomFinance.forEach((cf) => {
-    financeRows.push({ label: cf.label, value: fmtCr(cf.amountCr) });
+    financeRows.push({
+      label: cf.label,
+      sharePct: denom > 0 ? `${((cf.amountCr / denom) * 100).toFixed(1)}%` : '-',
+      value: fmtCr(cf.amountCr),
+    });
   });
-  if (estRate) {
-    financeRows.push({
-      label: 'Indicative Debt Pricing',
-      value: estRate.toLowerCase().includes('p.a') ? estRate : `${estRate} p.a.`,
-    });
-  }
-  if (termLoanNum > 0 || promoterEquityNum > 0) {
-    financeRows.push({
-      label: 'Debt : Equity Ratio',
-      value: debtEquityRatioLabel,
-    });
-  }
 
   // 3. Resolve Scores & Risk Profile
   const dscrNum = parseNum(data.dscrEstimate ?? data.dscr);
-  const dscrLabel = dscrNum !== null && dscrNum > 0 ? `${dscrNum.toFixed(2)}x` : 'Pending';
+  const dscrLabel = dscrNum !== null && dscrNum > 0 ? `${dscrNum.toFixed(2)}x` : 'To be calculated';
 
   const feasibilityNum = parseNum(data.feasibilityScore ?? data.bankabilityScore);
   const feasibilityLabel =
-    feasibilityNum !== null && feasibilityNum > 0 ? `${Math.round(feasibilityNum)} / 100` : 'Pending';
+    feasibilityNum !== null && feasibilityNum > 0 ? `${Math.round(feasibilityNum)} / 100` : 'Pending review';
 
   const rp = data.riskProfileData || data.riskProfile;
   const computedSummary =
@@ -526,89 +584,93 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
       ? explicitBankability
       : computedSummary?.scoreOutOf10 ?? null;
 
-  const ratingLetter = cleanText(computedSummary?.ratingLetter, '');
-  const riskLevel = cleanText(computedSummary?.riskLevel, '');
+  const ratingLetter = cleanAsciiText(computedSummary?.ratingLetter, '');
+  const riskLevel = cleanAsciiText(computedSummary?.riskLevel, '');
   const bankabilityLabel =
     bankabilityScoreNum !== null
       ? `${bankabilityScoreNum.toFixed(1)} / 10${ratingLetter ? ` (Grade ${ratingLetter})` : ''}`
-      : cleanText(data.bankabilityRating, 'Pending');
+      : cleanAsciiText(data.bankabilityRating, 'Pending review');
 
   const riskHighlights: Array<[string, string]> = [];
   if (rp) {
     if (rp.businessConstitution) {
-      riskHighlights.push(['Business Constitution', cleanText(rp.businessConstitution)]);
+      riskHighlights.push(['Business Structure', cleanAsciiText(rp.businessConstitution)]);
     }
     if (rp.businessVintage) {
-      riskHighlights.push(['Promoter Group Vintage', cleanText(rp.businessVintage)]);
+      riskHighlights.push(['Years in Business', cleanAsciiText(rp.businessVintage)]);
     }
     if (rp.isNewToCredit) {
-      riskHighlights.push(['Credit Bureau Profile', 'New to Commercial Credit (NTC)']);
+      riskHighlights.push(['Credit Score (CIBIL)', 'New to Commercial Credit (No prior score)']);
     } else if (rp.cibilScore !== undefined && rp.cibilScore !== null && rp.cibilScore !== '') {
-      riskHighlights.push(['Lead Promoter CIBIL / CMR', `${cleanText(rp.cibilScore)}`]);
+      riskHighlights.push(['Lead Promoter CIBIL Score', cleanAsciiText(rp.cibilScore)]);
     }
     if (rp.collateralCoveragePct !== undefined && rp.collateralCoveragePct !== null && rp.collateralCoveragePct !== '') {
       const covNum = parseNum(rp.collateralCoveragePct);
       riskHighlights.push([
-        'Collateral Coverage (% of Loan)',
-        covNum === 0 ? 'CGTMSE / Clean Lending (0%)' : `${cleanText(rp.collateralCoveragePct)}%`,
+        'Collateral Coverage',
+        covNum === 0 ? 'No collateral offered (CGTMSE / clean route)' : `${cleanAsciiText(rp.collateralCoveragePct)}% of loan value`,
       ]);
     }
     if (rp.offtakeSecurity) {
-      riskHighlights.push(['Offtake / Revenue Visibility', cleanText(rp.offtakeSecurity)]);
+      riskHighlights.push(['Customer / Sales Visibility', cleanAsciiText(rp.offtakeSecurity)]);
     }
     if (rp.managementTeamStrength) {
-      riskHighlights.push(['Management Depth', cleanText(rp.managementTeamStrength)]);
+      riskHighlights.push(['Management Team Depth', cleanAsciiText(rp.managementTeamStrength)]);
     }
     if (rp.educationalBackground) {
-      riskHighlights.push(['Promoter Qualification', cleanText(rp.educationalBackground)]);
+      riskHighlights.push(['Promoter Education', cleanAsciiText(rp.educationalBackground)]);
     }
   }
 
-  // 4. Resolve Profile & Banking Overview Rows (only populated fields)
+  // 4. Profile, Readiness & Banking Details (only populated fields)
+  const landStatus = cleanAsciiText(data.landStatus, '');
+  const collateralStatus = cleanAsciiText(data.collateralStatus, '');
+  const promoterExp = cleanAsciiText(data.promoterExp, '');
+  const bankName = cleanAsciiText(data.bankName, '');
+  const branchLocation = cleanAsciiText(data.branchLocation, '');
+  const bankIfscCode = cleanAsciiText(data.bankIfscCode, '');
+  const bankAppRefNumber = cleanAsciiText(data.bankAppRefNumber, '');
+  const projectBrief = cleanAsciiText(data.description || data.notes, '');
+
   const overviewRows: Array<[string, string]> = [
-    ['Lead Promoter / Signatory', promoter],
+    ['Project Name', projectName],
+    ['Industry / Sector', sector],
+    ['Project Location', location],
+    ['Lead Promoter', promoter],
   ];
   if (companyName && companyName.toLowerCase() !== promoter.toLowerCase()) {
-    overviewRows.push(['Company / Borrowing Entity', companyName]);
+    overviewRows.push(['Company / Entity Name', companyName]);
   }
-  overviewRows.push(['Industry / Sector', sector]);
-  overviewRows.push(['Project Location', location]);
-
   const contactLine = [contactPhone, contactEmail].filter(Boolean).join('  |  ');
   if (contactLine) {
     overviewRows.push(['Contact Details', contactLine]);
   }
-  if (cleanText(data.landStatus)) {
-    overviewRows.push(['Land & Site Status', cleanText(data.landStatus)]);
-  }
-  if (cleanText(data.collateralStatus)) {
-    overviewRows.push(['Collateral Security', cleanText(data.collateralStatus)]);
-  }
-  if (cleanText(data.promoterExp)) {
-    overviewRows.push(['Promoter Experience', cleanText(data.promoterExp)]);
-  }
-  if (cleanText(data.bankName)) {
-    const bankParts = [
-      cleanText(data.bankName),
-      cleanText(data.branchLocation),
-      cleanText(data.bankIfscCode) ? `IFSC: ${cleanText(data.bankIfscCode)}` : '',
-    ].filter(Boolean);
-    overviewRows.push(['Preferred Lending Bank', bankParts.join(' - ')]);
-  }
-  if (cleanText(data.bankAppRefNumber)) {
-    overviewRows.push(['Bank Application Ref.', cleanText(data.bankAppRefNumber)]);
+
+  const readinessRows: Array<[string, string]> = [];
+  if (landStatus) readinessRows.push(['Land & Site Readiness', landStatus]);
+  if (collateralStatus) readinessRows.push(['Collateral Security', collateralStatus]);
+  if (promoterExp) readinessRows.push(['Promoter Experience', promoterExp]);
+  if (estRate) {
+    readinessRows.push([
+      'Expected Interest Rate',
+      estRate.toLowerCase().includes('p.a') ? estRate : `${estRate} p.a.`,
+    ]);
   }
 
-  const projectBrief = cleanText(data.description || data.notes, '');
+  const bankRows: Array<[string, string]> = [];
+  if (bankName) bankRows.push(['Preferred Bank', bankName]);
+  if (branchLocation) bankRows.push(['Branch / City', branchLocation]);
+  if (bankIfscCode) bankRows.push(['IFSC Code', bankIfscCode]);
+  if (bankAppRefNumber) bankRows.push(['Application Reference', bankAppRefNumber]);
 
-  // 5. Resolve Promoters / Directors List
+  // 5. Promoters / Directors List
   const promoters: ResolvedDocumentData['promoters'] = [];
   if (Array.isArray(data.promotersList) && data.promotersList.length > 0) {
     data.promotersList.forEach((p, idx) => {
-      const name = cleanText(p.name, `Promoter ${idx + 1}`);
-      const role = cleanText(p.role, idx === 0 ? 'Lead Promoter' : 'Co-Promoter / Director');
-      const exp = cleanText(p.experienceYears || p.experience, '-');
-      const qual = cleanText(p.qualification, '-');
+      const name = cleanAsciiText(p.name, `Promoter ${idx + 1}`);
+      const role = cleanAsciiText(p.role, idx === 0 ? 'Lead Promoter' : 'Co-Promoter / Director');
+      const exp = cleanAsciiText(p.experienceYears || p.experience, 'Not provided');
+      const qual = cleanAsciiText(p.qualification, 'Not provided');
       const shareNum = parseNum(p.shareholdingPct);
       const share = shareNum !== null && shareNum > 0 ? `${shareNum}%` : '-';
       promoters.push({ name, role, experience: exp, qualification: qual, shareholding: share });
@@ -616,105 +678,298 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
   } else if (Array.isArray(data.directors) && data.directors.length > 0) {
     data.directors.forEach((d, idx) => {
       promoters.push({
-        name: cleanText(d.name, `Director ${idx + 1}`),
-        role: cleanText(d.title, idx === 0 ? 'Managing Director / Promoter' : 'Director'),
-        experience: idx === 0 ? cleanText(data.promoterExp, '-') : '-',
-        qualification: idx === 0 ? cleanText(rp?.educationalBackground, '-') : '-',
+        name: cleanAsciiText(d.name, `Director ${idx + 1}`),
+        role: cleanAsciiText(d.title, idx === 0 ? 'Managing Director' : 'Director'),
+        experience: idx === 0 ? cleanAsciiText(promoterExp, 'Not provided') : 'Not provided',
+        qualification: idx === 0 ? cleanAsciiText(rp?.educationalBackground, 'Not provided') : 'Not provided',
         shareholding: '-',
       });
     });
   } else {
     promoters.push({
       name: promoter,
-      role: 'Lead Promoter / Authorized Signatory',
-      experience: cleanText(data.promoterExp, '-'),
-      qualification: cleanText(rp?.educationalBackground, '-'),
+      role: 'Lead Promoter',
+      experience: cleanAsciiText(promoterExp, 'Not provided'),
+      qualification: cleanAsciiText(rp?.educationalBackground, 'Not provided'),
       shareholding: '100%',
     });
   }
 
-  // 6. Strengths & Recommendations (grounded in actual numbers)
+  // 6. Plain-English Summaries (Zero Jargon, Grounded in Actual Entered Data)
+  const costPhrase = effectiveTotalCost > 0 ? fmtCr(effectiveTotalCost) : 'an estimated outlay to be finalized';
+  const loanPhrase = termLoanNum > 0 ? fmtCr(termLoanNum) : 'term loan funding';
+  const eqPhrase =
+    promoterEquityNum > 0
+      ? `${fmtCr(promoterEquityNum)}${eqPct !== null ? ` (${eqPct}% of project cost)` : ''}`
+      : 'promoter contribution to be confirmed';
+
+  const viabilityVerdict =
+    dscrNum !== null && dscrNum >= 1.33 && (eqPct === null || eqPct >= 25)
+      ? 'Overall, the project shows comfortable loan repayment ability and meets standard bank funding norms.'
+      : dscrNum !== null && dscrNum > 0
+      ? 'The project is viable for bank review, with final loan terms subject to detailed financial projections and collateral verification.'
+      : 'Initial project inputs are captured below; final bank viability will be confirmed once full financial figures are completed.';
+
+  const executiveVerdict = cleanAsciiText(
+    `${projectName} is a ${sector} project planned in ${location} with a total estimated project cost of ${costPhrase}. ` +
+      `The promoter proposes to fund this with a bank term loan of ${loanPhrase} and own equity of ${eqPhrase}. ` +
+      (dscrNum !== null && dscrNum > 0
+        ? `At an estimated Debt Service Coverage Ratio (DSCR) of ${dscrNum.toFixed(2)}x, `
+        : '') +
+      viabilityVerdict
+  );
+
+  const businessOverviewSummary = cleanAsciiText(
+    projectBrief ||
+      `${projectName} is proposed as a ${sector} venture located in ${location}, led by ${promoter}. ` +
+        (landStatus ? `Land readiness is currently recorded as "${landStatus}". ` : '') +
+        (collateralStatus ? `Collateral status is "${collateralStatus}". ` : '') +
+        (promoterExp ? `The promoter brings ${promoterExp} of experience to project execution.` : 'The promoter team is preparing the project for bank financing.')
+  );
+
+  const nextStepsLines: string[] = [
+    `Funding Request: Seeking a bank term loan of ${loanPhrase}${effectiveTotalCost > 0 ? ` toward a total project cost of ${costPhrase}` : ''}${promoterEquityNum > 0 ? `, backed by ${fmtCr(promoterEquityNum)} in promoter funds` : ''}.`,
+    bankName
+      ? `Target Bank: Prepared for initial review with ${bankName}${branchLocation ? ` (${branchLocation})` : ''}${bankIfscCode ? `, IFSC ${bankIfscCode}` : ''}.`
+      : 'Target Bank: Ready to be shared with preferred commercial banks or NBFC lenders for initial in-principle feedback.',
+    'Next Step: Following initial lender interest, submit full KYC, land papers, vendor quotes, and a complete bank-format DPR / CMA projection file.',
+  ];
+
+  // 7. Plain-English Viability Indicators Table (DPR Section 6)
+  const viabilityIndicators: ViabilityIndicatorRow[] = [];
+  if (dscrNum !== null && dscrNum > 0) {
+    viabilityIndicators.push({
+      metric: 'Estimated DSCR (Repayment Comfort)',
+      value: `${dscrNum.toFixed(2)}x`,
+      meaning:
+        dscrNum >= 1.5
+          ? 'Strong cushion: expected business cash flows cover yearly loan EMIs more than 1.5 times.'
+          : dscrNum >= 1.33
+          ? 'Healthy cushion: meets standard bank comfort of at least 1.33x cash flow over loan EMIs.'
+          : 'Tight cushion: cash flows are close to loan EMIs; a longer repayment period or higher margin helps.',
+    });
+  } else {
+    viabilityIndicators.push({
+      metric: 'Estimated DSCR (Repayment Comfort)',
+      value: 'Pending',
+      meaning: 'Shows how many times yearly business profit covers bank loan EMIs; banks usually prefer 1.33x or higher.',
+    });
+  }
+
+  viabilityIndicators.push({
+    metric: 'Debt-to-Equity Ratio',
+    value: debtEquityRatioLabel,
+    meaning:
+      termLoanNum > 0 && promoterEquityNum > 0
+        ? termLoanNum / promoterEquityNum <= 2.5
+          ? 'Balanced funding mix: loan amount is within typical bank comfort compared to promoter equity.'
+          : 'Higher loan share: banks may ask for stronger collateral or slightly more promoter margin.'
+        : 'Compares borrowed bank loan against the promoter own money invested in the project.',
+  });
+
+  if (eqPct !== null && promoterEquityNum > 0) {
+    viabilityIndicators.push({
+      metric: 'Promoter Margin (Own Investment)',
+      value: `${eqPct}% (${fmtCr(promoterEquityNum)})`,
+      meaning:
+        eqPct >= 25
+          ? 'Meets standard bank rule requiring promoters to bring at least 25% of total project cost.'
+          : 'Below the usual 25% bank margin; lender may request additional promoter funds or subsidy proof.',
+    });
+  }
+
+  viabilityIndicators.push({
+    metric: 'Feasibility Score',
+    value: feasibilityLabel,
+    meaning:
+      feasibilityNum !== null && feasibilityNum >= 75
+        ? 'High readiness across project cost, promoter profile, and site fundamentals.'
+        : feasibilityNum !== null && feasibilityNum > 0
+        ? 'Moderate readiness; completing pending site or financial details will strengthen bank approval chances.'
+        : 'Overall readiness score summarizing project strength for bank screening.',
+  });
+
+  viabilityIndicators.push({
+    metric: 'Bankability & Risk Rating',
+    value: riskLevel ? `${bankabilityLabel} - ${riskLevel}` : bankabilityLabel,
+    meaning: 'Summarizes overall lending comfort based on promoter background, credit profile, collateral, and funding structure.',
+  });
+
+  // 8. Key Risks & Mitigants (4-5 project-grounded points for DPR Section 7)
+  const riskMitigants: RiskMitigantRow[] = [];
+
+  // Land / Site risk
+  const landLower = landStatus.toLowerCase();
+  riskMitigants.push({
+    area: 'Land & Site Readiness',
+    risk: landLower.includes('owned')
+      ? 'Low site acquisition delay risk since land is already owned.'
+      : landStatus
+      ? `Site status is "${landStatus}", which requires clear title or lease continuity before loan release.`
+      : 'Land ownership or lease arrangement is not yet finalized.',
+    mitigant: landLower.includes('owned')
+      ? 'Keep registered sale deed, land conversion, and local approvals ready for bank legal verification.'
+      : 'Complete lease agreement or land allotment letter early so project setup stays on schedule.',
+  });
+
+  // Collateral risk
+  const collLower = collateralStatus.toLowerCase();
+  const covNum = parseNum(rp?.collateralCoveragePct);
+  riskMitigants.push({
+    area: 'Collateral & Loan Security',
+    risk:
+      collLower.includes('available') || collLower.includes('yes') || (covNum !== null && covNum >= 50)
+        ? 'Standard property valuation and title verification required by the lending bank.'
+        : 'Limited collateral coverage may increase lender caution for larger loan amounts.',
+    mitigant:
+      collLower.includes('available') || collLower.includes('yes') || (covNum !== null && covNum >= 50)
+        ? 'Provide updated property documents for quick bank valuation alongside primary plant and machinery hypothecation.'
+        : 'Explore CGTMSE credit guarantee coverage (for eligible MSME loans) or offer additional promoter margin.',
+  });
+
+  // Promoter experience risk
+  riskMitigants.push({
+    area: 'Execution & Management',
+    risk: promoterExp
+      ? `Project delivery depends on timely machinery installation and team hiring (Promoter experience: ${promoterExp}).`
+      : 'Execution timelines can slip if key technical and operations roles are not lined up early.',
+    mitigant:
+      'Use fixed-price vendor quotations, stage-wise milestone tracking, and experienced plant/operations supervisors.',
+  });
+
+  // Credit / CIBIL risk
+  const cibilVal = parseNum(rp?.cibilScore);
+  riskMitigants.push({
+    area: 'Credit Track Record',
+    risk: rp?.isNewToCredit
+      ? 'Promoter is new to commercial borrowing, so banks have limited past repayment history to review.'
+      : cibilVal !== null && cibilVal >= 750
+      ? `Strong CIBIL score (${cibilVal}) supports smooth credit clearance.`
+      : cibilVal !== null
+      ? `CIBIL score of ${cibilVal} may draw closer review of existing loans or repayment track record.`
+      : 'Promoter credit bureau report (CIBIL) will be verified by the bank during appraisal.',
+    mitigant:
+      cibilVal !== null && cibilVal >= 750
+        ? 'Maintain clean repayment history on all existing accounts during the loan appraisal window.'
+        : 'Keep all existing EMIs and tax filings up to date and document promoter net worth clearly.',
+  });
+
+  // Leverage / Cash flow risk
+  riskMitigants.push({
+    area: 'Debt & Cash Flow Comfort',
+    risk:
+      eqPct !== null && eqPct < 25
+        ? `Higher loan share (${debtPct}% loan vs ${eqPct}% equity) increases fixed monthly EMI pressure in early months.`
+        : 'Initial ramp-up period after launch can tighten working capital if sales scale slower than planned.',
+    mitigant:
+      'Request an appropriate construction/moratorium period from the bank and keep a working capital buffer for initial operations.',
+  });
+
+  // 9. Setup Readiness Milestones (DPR Section 3)
+  const setupMilestones: string[] = [
+    `Site & Land: ${landStatus || 'Land ownership or lease arrangement to be confirmed before bank sanction.'}`,
+    `Security & Collateral: ${collateralStatus || 'Primary security on project assets; collateral details to be confirmed with bank.'}`,
+    `Promoter Readiness: ${promoterExp ? `${promoterExp} experience on record` : 'Promoter track record and KYC documentation under compilation'}.`,
+    bankName
+      ? `Banking Alignment: Preferred lender identified as ${bankName}${branchLocation ? ` (${branchLocation})` : ''}.`
+      : 'Banking Alignment: Lender shortlist to be finalized based on loan size and sector preference.',
+  ];
+
+  // 10. Strengths & Recommendations (grounded in real data)
   const strengths: string[] = [];
   const recommendations: string[] = [];
 
   if (dscrNum !== null && dscrNum > 0) {
     if (dscrNum >= 1.33) {
       strengths.push(
-        `Modeled DSCR of ${dscrNum.toFixed(2)}x exceeds commercial bank greenfield benchmark norms (1.33x).`
+        `Estimated DSCR of ${dscrNum.toFixed(2)}x meets the standard bank comfort level (1.33x or above).`
       );
     } else {
       recommendations.push(
-        `Modeled DSCR of ${dscrNum.toFixed(2)}x is below 1.33x; consider elongating debt tenor or strengthening operating margins.`
+        `Estimated DSCR of ${dscrNum.toFixed(2)}x is below 1.33x; consider a slightly longer loan tenure or higher promoter margin.`
       );
     }
   }
   if (eqPct !== null && eqPct >= 25) {
     strengths.push(
-      `Promoter equity contribution of ${eqPct}% (${fmtCr(promoterEquityNum)}) provides a healthy bank margin buffer.`
+      `Promoter contribution of ${eqPct}% (${fmtCr(promoterEquityNum)}) provides a healthy own-funds margin.`
     );
   } else if (eqPct !== null && eqPct > 0 && eqPct < 25) {
     recommendations.push(
-      `Promoter equity at ${eqPct}% is below standard 25-30% greenfield margin; lender may seek additional margin or collateral.`
+      `Promoter contribution is ${eqPct}%; most banks prefer 25% to 30% own investment for new projects.`
     );
   }
-  if (cleanText(data.landStatus).toLowerCase().includes('owned')) {
-    strengths.push(`Project land is ${cleanText(data.landStatus)}, lowering site execution risk.`);
+  if (landLower.includes('owned')) {
+    strengths.push(`Project land is ${landStatus}, which reduces setup delay risk.`);
   }
-  if (rp && !rp.isNewToCredit && parseNum(rp.cibilScore) !== null && Number(rp.cibilScore) >= 750) {
-    strengths.push(`Strong promoter credit bureau standing (CIBIL ${cleanText(rp.cibilScore)}).`);
+  if (rp && !rp.isNewToCredit && cibilVal !== null && cibilVal >= 750) {
+    strengths.push(`Strong promoter credit score (CIBIL ${cibilVal}).`);
   }
   if (Array.isArray(computedSummary?.strengths)) {
     computedSummary.strengths.forEach((s) => {
-      const t = cleanText(s);
-      if (t && strengths.length < 4 && !strengths.some((existing) => existing.toLowerCase() === t.toLowerCase())) {
+      const t = cleanAsciiText(s);
+      if (t && strengths.length < 4 && !strengths.some((ex) => ex.toLowerCase() === t.toLowerCase())) {
         strengths.push(t);
       }
     });
   }
   if (Array.isArray(computedSummary?.recommendations)) {
-    computedSummary.recommendations.forEach((r) => {
-      const t = cleanText(r);
-      if (t && recommendations.length < 4 && !recommendations.some((existing) => existing.toLowerCase() === t.toLowerCase())) {
+    computedSummary.recommendations.forEach((rec) => {
+      const t = cleanAsciiText(rec);
+      if (t && recommendations.length < 4 && !recommendations.some((ex) => ex.toLowerCase() === t.toLowerCase())) {
         recommendations.push(t);
       }
     });
   }
 
-  // 7. DPR & Document Readiness
-  const status = cleanText(data.status, 'Under Appraisal');
-  const stage = cleanText(data.stage, 'Initial Feasibility');
-  const assignedCA = cleanText(data.assignedCA, 'Pending Assignment');
-  const dprAssignedTo = cleanText(data.dprAssignedTo, 'Pending Assignment');
-  const caReviewNotes = cleanText(data.caReviewNotes, '');
+  // 11. DPR & Bank Submission Checklist
+  const status = cleanAsciiText(data.status, 'In Review');
+  const stage = cleanAsciiText(data.stage, 'Initial Assessment');
+  const assignedCA = cleanAsciiText(data.assignedCA, 'Not assigned yet');
+  const dprAssignedTo = cleanAsciiText(data.dprAssignedTo, 'Not assigned yet');
+  const caReviewNotes = cleanAsciiText(data.caReviewNotes, '');
   const checklistStatus = data.checklistUploaded
-    ? `Uploaded${cleanText(data.checklistFileName) ? ` (${cleanText(data.checklistFileName)})` : ''}`
-    : 'Pending Submission';
+    ? `Uploaded${cleanAsciiText(data.checklistFileName) ? ` (${cleanAsciiText(data.checklistFileName)})` : ''}`
+    : 'To be submitted';
 
   const docsObj = data.documents || {};
   const documentRows: Array<[string, string]> = [
-    ['Pre-Appraisal Checklist', checklistStatus],
-    ['Company KYC & Incorporation', cleanText(docsObj.companyKyc) ? `On File (${cleanText(docsObj.companyKyc)})` : 'Pending'],
-    ['Promoter KYC & Net Worth', cleanText(docsObj.promoterKyc) ? `On File (${cleanText(docsObj.promoterKyc)})` : 'Pending'],
     [
-      'Detailed Project Report (DPR)',
-      cleanText(data.dprFile || docsObj.dpr)
-        ? `Uploaded (${cleanText(data.dprFile || docsObj.dpr)})`
-        : 'In Preparation',
+      'Company KYC (PAN, GST, Registration / COI)',
+      cleanAsciiText(docsObj.companyKyc) ? `Uploaded (${cleanAsciiText(docsObj.companyKyc)})` : 'Required for bank submission',
     ],
     [
-      'CMA / Financial Projections',
-      cleanText(data.cmaFile || docsObj.financialModel)
-        ? `Uploaded (${cleanText(data.cmaFile || docsObj.financialModel)})`
-        : 'In Preparation',
+      'Promoter KYC (PAN, Aadhaar, Net Worth Statement)',
+      cleanAsciiText(docsObj.promoterKyc) ? `Uploaded (${cleanAsciiText(docsObj.promoterKyc)})` : 'Required for bank submission',
+    ],
+    [
+      'Land / Lease Papers & Local Approvals',
+      landLower.includes('owned') ? 'Land owned - attach title deed & tax receipts' : 'Attach lease / allotment agreement',
+    ],
+    [
+      'Machinery & Civil Cost Quotations',
+      checklistStatus,
+    ],
+    [
+      'Detailed Project Report (DPR)',
+      cleanAsciiText(data.dprFile || docsObj.dpr)
+        ? `Uploaded (${cleanAsciiText(data.dprFile || docsObj.dpr)})`
+        : 'In preparation',
+    ],
+    [
+      'Financial Statements, ITRs & CMA Projections',
+      cleanAsciiText(data.cmaFile || docsObj.financialModel)
+        ? `Uploaded (${cleanAsciiText(data.cmaFile || docsObj.financialModel)})`
+        : 'In preparation',
     ],
   ];
 
-  if (cleanText(docsObj.otherDocs)) {
-    documentRows.push(['Supporting Annexures', `On File (${cleanText(docsObj.otherDocs)})`]);
+  if (cleanAsciiText(docsObj.otherDocs)) {
+    documentRows.push(['Supporting Documents', `Uploaded (${cleanAsciiText(docsObj.otherDocs)})`]);
   }
   if (Array.isArray(data.uploadedDocuments) && data.uploadedDocuments.length > 0) {
     const extraNames = data.uploadedDocuments
-      .map((item) => (typeof item === 'string' ? cleanText(item) : cleanText(item?.name || item?.label)))
+      .map((item) => (typeof item === 'string' ? cleanAsciiText(item) : cleanAsciiText(item?.name || item?.label)))
       .filter(Boolean);
     if (extraNames.length > 0) {
       documentRows.push(['Additional Uploaded Files', extraNames.join(', ')]);
@@ -756,6 +1011,14 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
     riskHighlights,
     strengths,
     recommendations,
+    executiveVerdict,
+    businessOverviewSummary,
+    nextStepsLines,
+    readinessRows,
+    bankRows,
+    viabilityIndicators,
+    riskMitigants,
+    setupMilestones,
     overviewRows,
     projectBrief,
     promoters,
@@ -771,7 +1034,7 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
 }
 
 // ============================================================================
-// Shared Institutional A4 PDF Builder (Automatic Pagination + Clean Typography)
+// Shared Minimalist Institutional A4 PDF Builder
 // ============================================================================
 
 class InstitutionalPdfBuilder {
@@ -780,7 +1043,7 @@ class InstitutionalPdfBuilder {
   pageH = 297;
   margin = 16;
   contentW = 178;
-  footerLimitY = 269;
+  footerLimitY = 270;
   y = 16;
   docTitle: string;
   projectName: string;
@@ -795,33 +1058,40 @@ class InstitutionalPdfBuilder {
     dateStr: string;
     footerLabel: string;
   }) {
-    this.doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    this.docTitle = opts.docTitle;
-    this.projectName = opts.projectName;
-    this.refCode = opts.refCode;
-    this.dateStr = opts.dateStr;
-    this.footerLabel = opts.footerLabel;
+    this.doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+    this.doc.setProperties({
+      title: `${opts.projectName} - ${opts.docTitle}`,
+      subject: opts.docTitle,
+      author: 'Inisio Advisory',
+      creator: 'Inisio Greenfield Advisory Platform',
+    });
+    this.docTitle = cleanAsciiText(opts.docTitle);
+    this.projectName = cleanAsciiText(opts.projectName);
+    this.refCode = cleanAsciiText(opts.refCode);
+    this.dateStr = cleanAsciiText(opts.dateStr);
+    this.footerLabel = cleanAsciiText(opts.footerLabel);
     this.drawTopAccentBar();
   }
 
   drawTopAccentBar(): void {
     this.doc.setFillColor(37, 99, 235);
-    this.doc.rect(0, 0, this.pageW, 2.5, 'F');
+    this.doc.rect(0, 0, this.pageW, 2.2, 'F');
   }
 
   addContinuationPage(): void {
     this.doc.addPage();
     this.drawTopAccentBar();
+
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFontSize(8);
     this.doc.setTextColor(15, 23, 42);
     this.doc.text('INISIO ADVISORY', this.margin, 11);
 
     this.doc.setFont('helvetica', 'normal');
-    this.doc.setFontSize(7.8);
+    this.doc.setFontSize(7.6);
     this.doc.setTextColor(100, 116, 139);
     const shortTitle =
-      this.projectName.length > 52 ? `${this.projectName.slice(0, 50)}...` : this.projectName;
+      this.projectName.length > 48 ? `${this.projectName.slice(0, 46)}...` : this.projectName;
     this.doc.text(`${shortTitle}  |  ${this.docTitle}`, this.pageW - this.margin, 11, {
       align: 'right',
     });
@@ -838,31 +1108,31 @@ class InstitutionalPdfBuilder {
     }
   }
 
-  drawMainHeader(subtitleLine: string): void {
-    this.y = 15;
+  drawMainHeader(subtitleLine: string, badgeLine: string): void {
+    this.y = 14.5;
     this.doc.setFont('helvetica', 'bold');
-    this.doc.setFontSize(16);
+    this.doc.setFontSize(15);
     this.doc.setTextColor(15, 23, 42);
     this.doc.text('INISIO', this.margin, this.y);
 
     this.doc.setFont('helvetica', 'normal');
-    this.doc.setFontSize(7.8);
+    this.doc.setFontSize(7.5);
     this.doc.setTextColor(37, 99, 235);
-    this.doc.text('GREENFIELD ADVISORY & DEBT SYNDICATION', this.margin, this.y + 4.6);
+    this.doc.text('PROJECT ADVISORY & BANK FUNDING', this.margin, this.y + 4.4);
 
     this.doc.setFont('helvetica', 'bold');
-    this.doc.setFontSize(9.5);
+    this.doc.setFontSize(9);
     this.doc.setTextColor(15, 23, 42);
-    this.doc.text(this.docTitle, this.pageW - this.margin, this.y, { align: 'right' });
+    this.doc.text(cleanAsciiText(badgeLine), this.pageW - this.margin, this.y, { align: 'right' });
 
     this.doc.setFont('helvetica', 'normal');
-    this.doc.setFontSize(7.8);
+    this.doc.setFontSize(7.5);
     this.doc.setTextColor(100, 116, 139);
-    this.doc.text(`Ref: ${this.refCode}  |  Date: ${this.dateStr}`, this.pageW - this.margin, this.y + 4.6, {
+    this.doc.text(`Ref: ${this.refCode}  |  Date: ${this.dateStr}`, this.pageW - this.margin, this.y + 4.4, {
       align: 'right',
     });
 
-    this.y += 9;
+    this.y += 8.8;
     this.doc.setDrawColor(226, 232, 240);
     this.doc.setLineWidth(0.3);
     this.doc.line(this.margin, this.y, this.pageW - this.margin, this.y);
@@ -878,14 +1148,14 @@ class InstitutionalPdfBuilder {
     this.doc.setFont('helvetica', 'normal');
     this.doc.setFontSize(8.8);
     this.doc.setTextColor(71, 85, 105);
-    const subLines = this.doc.splitTextToSize(subtitleLine, this.contentW);
+    const subLines = this.doc.splitTextToSize(cleanAsciiText(subtitleLine), this.contentW);
     this.doc.text(subLines, this.margin, this.y);
-    this.y += subLines.length * 4.5 + 3.5;
+    this.y += subLines.length * 4.4 + 4;
   }
 
   drawKpiRow(items: Array<{ label: string; value: string; sub?: string }>): void {
     const cardH = 19.5;
-    this.ensureSpace(cardH + 6);
+    this.ensureSpace(cardH + 5);
     const gap = 3.5;
     const cardW = (this.contentW - gap * (items.length - 1)) / items.length;
 
@@ -899,84 +1169,94 @@ class InstitutionalPdfBuilder {
       this.doc.setFont('helvetica', 'bold');
       this.doc.setFontSize(6.5);
       this.doc.setTextColor(100, 116, 139);
-      this.doc.text(kpi.label, x + 3, this.y + 5.5);
+      this.doc.text(cleanAsciiText(kpi.label), x + 3, this.y + 5.2);
 
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(9.5);
+      this.doc.setFontSize(9.4);
       this.doc.setTextColor(15, 23, 42);
-      const valLines = this.doc.splitTextToSize(kpi.value, cardW - 6);
-      this.doc.text(valLines[0] || kpi.value, x + 3, this.y + 11.8);
+      const valLines = this.doc.splitTextToSize(cleanAsciiText(kpi.value), cardW - 6);
+      this.doc.text(valLines[0] || cleanAsciiText(kpi.value), x + 3, this.y + 11.4);
 
       if (kpi.sub) {
         this.doc.setFont('helvetica', 'normal');
-        this.doc.setFontSize(6.8);
+        this.doc.setFontSize(6.7);
         this.doc.setTextColor(71, 85, 105);
-        this.doc.text(kpi.sub, x + 3, this.y + 16.5);
+        const subLines = this.doc.splitTextToSize(cleanAsciiText(kpi.sub), cardW - 6);
+        this.doc.text(subLines[0] || '', x + 3, this.y + 16.2);
       }
     });
 
-    this.y += cardH + 8;
+    this.y += cardH + 7;
   }
 
   drawSectionHeading(title: string): void {
     this.ensureSpace(16);
     this.doc.setFont('helvetica', 'bold');
-    this.doc.setFontSize(9.5);
+    this.doc.setFontSize(9.4);
     this.doc.setTextColor(37, 99, 235);
-    this.doc.text(title, this.margin, this.y);
+    this.doc.text(cleanAsciiText(title), this.margin, this.y);
     this.y += 2.2;
     this.doc.setDrawColor(226, 232, 240);
     this.doc.setLineWidth(0.3);
     this.doc.line(this.margin, this.y, this.pageW - this.margin, this.y);
-    this.y += 5.5;
+    this.y += 5.4;
   }
 
   drawKeyValueList(rows: Array<[string, string]>, labelColW = 54): void {
+    if (!rows.length) return;
     const valColW = this.contentW - labelColW - 2;
     rows.forEach(([label, value]) => {
-      const wrapped = this.doc.splitTextToSize(value, valColW);
-      const rowH = Math.max(5.5, wrapped.length * 4.3 + 1.5);
+      const safeVal = cleanAsciiText(value, '-');
+      const wrapped = this.doc.splitTextToSize(safeVal, valColW);
+      const rowH = Math.max(5.4, wrapped.length * 4.2 + 1.5);
       this.ensureSpace(rowH + 1);
 
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(8.3);
+      this.doc.setFontSize(8.2);
       this.doc.setTextColor(71, 85, 105);
-      this.doc.text(label, this.margin, this.y);
+      this.doc.text(cleanAsciiText(label), this.margin, this.y);
 
       this.doc.setFont('helvetica', 'normal');
-      this.doc.setFontSize(8.3);
+      this.doc.setFontSize(8.2);
       this.doc.setTextColor(15, 23, 42);
       this.doc.text(wrapped, this.margin + labelColW, this.y);
 
       this.y += rowH;
     });
-    this.y += 2;
+    this.y += 2.5;
+  }
+
+  drawParagraph(text: string): void {
+    const safe = cleanAsciiText(text);
+    if (!safe) return;
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(8.4);
+    this.doc.setTextColor(51, 65, 85);
+    const lines = this.doc.splitTextToSize(safe, this.contentW);
+    lines.forEach((line: string) => {
+      this.ensureSpace(5);
+      this.doc.text(line, this.margin, this.y);
+      this.y += 4.3;
+    });
+    this.y += 3;
   }
 
   drawParagraphBox(label: string, text: string): void {
-    if (!text) return;
+    const safe = cleanAsciiText(text);
+    if (!safe) return;
     this.doc.setFont('helvetica', 'normal');
     this.doc.setFontSize(8.3);
-    const lines = this.doc.splitTextToSize(text, this.contentW - 6);
-    const boxH = lines.length * 4.3 + 9.5;
+    const lines = this.doc.splitTextToSize(safe, this.contentW - 6);
+    const boxH = lines.length * 4.3 + 9.2;
 
-    // If paragraph is very long, render line-by-line with clean page breaks instead of an oversized single box
-    if (boxH > 95) {
+    if (boxH > 90) {
       this.ensureSpace(12);
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(8);
+      this.doc.setFontSize(7.8);
       this.doc.setTextColor(71, 85, 105);
-      this.doc.text(label.toUpperCase(), this.margin, this.y);
-      this.y += 4.5;
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.setFontSize(8.3);
-      this.doc.setTextColor(51, 65, 85);
-      lines.forEach((line: string) => {
-        this.ensureSpace(5);
-        this.doc.text(line, this.margin, this.y);
-        this.y += 4.3;
-      });
-      this.y += 3;
+      this.doc.text(cleanAsciiText(label).toUpperCase(), this.margin, this.y);
+      this.y += 4.4;
+      this.drawParagraph(safe);
       return;
     }
 
@@ -987,16 +1267,16 @@ class InstitutionalPdfBuilder {
     this.doc.roundedRect(this.margin, this.y, this.contentW, boxH, 1.5, 1.5, 'FD');
 
     this.doc.setFont('helvetica', 'bold');
-    this.doc.setFontSize(7.4);
+    this.doc.setFontSize(7.3);
     this.doc.setTextColor(71, 85, 105);
-    this.doc.text(label.toUpperCase(), this.margin + 3, this.y + 4.8);
+    this.doc.text(cleanAsciiText(label).toUpperCase(), this.margin + 3, this.y + 4.7);
 
     this.doc.setFont('helvetica', 'normal');
     this.doc.setFontSize(8.2);
     this.doc.setTextColor(30, 41, 59);
-    this.doc.text(lines, this.margin + 3, this.y + 9.5);
+    this.doc.text(lines, this.margin + 3, this.y + 9.2);
 
-    this.y += boxH + 5;
+    this.y += boxH + 4.5;
   }
 
   drawTable(opts: {
@@ -1004,6 +1284,7 @@ class InstitutionalPdfBuilder {
     rows: Array<{ cells: string[]; isTotal?: boolean }>;
     caption?: string;
   }): void {
+    if (!opts.rows.length) return;
     const headerH = 7;
 
     const renderHeader = () => {
@@ -1014,15 +1295,15 @@ class InstitutionalPdfBuilder {
       this.doc.line(this.margin, this.y + headerH, this.margin + this.contentW, this.y + headerH);
 
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(7.6);
+      this.doc.setFontSize(7.5);
       this.doc.setTextColor(30, 41, 59);
 
       let cx = this.margin;
       opts.headers.forEach((h) => {
         if (h.align === 'right') {
-          this.doc.text(h.label, cx + h.width - 2.5, this.y + 4.7, { align: 'right' });
+          this.doc.text(cleanAsciiText(h.label), cx + h.width - 2.5, this.y + 4.7, { align: 'right' });
         } else {
-          this.doc.text(h.label, cx + 2.5, this.y + 4.7);
+          this.doc.text(cleanAsciiText(h.label), cx + 2.5, this.y + 4.7);
         }
         cx += h.width;
       });
@@ -1034,14 +1315,14 @@ class InstitutionalPdfBuilder {
 
     opts.rows.forEach((row) => {
       this.doc.setFont('helvetica', row.isTotal ? 'bold' : 'normal');
-      this.doc.setFontSize(8.1);
+      this.doc.setFontSize(8);
 
       const wrappedCells = row.cells.map((cell, idx) => {
         const colW = opts.headers[idx]?.width ?? 30;
-        return this.doc.splitTextToSize(cell || '-', Math.max(10, colW - 5));
+        return this.doc.splitTextToSize(cleanAsciiText(cell, '-'), Math.max(10, colW - 5));
       });
       const maxLines = Math.max(...wrappedCells.map((l) => l.length), 1);
-      const rowH = Math.max(6.8, maxLines * 4.1 + 2.6);
+      const rowH = Math.max(6.6, maxLines * 4.0 + 2.6);
 
       if (this.y + rowH > this.footerLimitY) {
         this.addContinuationPage();
@@ -1058,7 +1339,7 @@ class InstitutionalPdfBuilder {
       this.doc.line(this.margin, this.y + rowH, this.margin + this.contentW, this.y + rowH);
 
       this.doc.setFont('helvetica', row.isTotal ? 'bold' : 'normal');
-      this.doc.setFontSize(8.1);
+      this.doc.setFontSize(8);
       this.doc.setTextColor(row.isTotal ? 15 : 51, row.isTotal ? 23 : 65, row.isTotal ? 42 : 85);
 
       let cx = this.margin;
@@ -1066,9 +1347,9 @@ class InstitutionalPdfBuilder {
         const h = opts.headers[idx];
         const colW = h?.width ?? 30;
         if (h?.align === 'right') {
-          this.doc.text(lines, cx + colW - 2.5, this.y + 4.6, { align: 'right' });
+          this.doc.text(lines, cx + colW - 2.5, this.y + 4.5, { align: 'right' });
         } else {
-          this.doc.text(lines, cx + 2.5, this.y + 4.6);
+          this.doc.text(lines, cx + 2.5, this.y + 4.5);
         }
         cx += colW;
       });
@@ -1081,29 +1362,32 @@ class InstitutionalPdfBuilder {
       this.doc.setFont('helvetica', 'italic');
       this.doc.setFontSize(7.2);
       this.doc.setTextColor(100, 116, 139);
-      this.doc.text(opts.caption, this.margin, this.y + 3.8);
-      this.y += 5.5;
+      this.doc.text(cleanAsciiText(opts.caption), this.margin, this.y + 3.6);
+      this.y += 5.2;
     }
 
-    this.y += 4.5;
+    this.y += 4;
   }
 
-  drawBulletGroup(heading: string, bullets: string[]): void {
-    if (!bullets.length) return;
-    this.ensureSpace(12);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.setFontSize(8.2);
-    this.doc.setTextColor(30, 41, 59);
-    this.doc.text(heading, this.margin, this.y);
-    this.y += 4.6;
+  drawBulletGroup(heading: string | null, bullets: string[]): void {
+    const cleanBullets = bullets.map((b) => cleanAsciiText(b)).filter(Boolean);
+    if (!cleanBullets.length) return;
+    if (heading) {
+      this.ensureSpace(12);
+      this.doc.setFont('helvetica', 'bold');
+      this.doc.setFontSize(8.2);
+      this.doc.setTextColor(30, 41, 59);
+      this.doc.text(cleanAsciiText(heading), this.margin, this.y);
+      this.y += 4.5;
+    }
 
     this.doc.setFont('helvetica', 'normal');
     this.doc.setFontSize(8.2);
     this.doc.setTextColor(51, 65, 85);
 
-    bullets.forEach((bullet) => {
+    cleanBullets.forEach((bullet) => {
       const lines = this.doc.splitTextToSize(`-  ${bullet}`, this.contentW - 2);
-      const h = lines.length * 4.3 + 1.4;
+      const h = lines.length * 4.2 + 1.4;
       this.ensureSpace(h + 1);
       this.doc.text(lines, this.margin + 1, this.y);
       this.y += h;
@@ -1117,90 +1401,123 @@ class InstitutionalPdfBuilder {
       this.doc.setPage(page);
       this.doc.setDrawColor(226, 232, 240);
       this.doc.setLineWidth(0.25);
-      this.doc.line(this.margin, 278, this.pageW - this.margin, 278);
+      this.doc.line(this.margin, 279, this.pageW - this.margin, 279);
 
       this.doc.setFont('helvetica', 'normal');
-      this.doc.setFontSize(7.5);
+      this.doc.setFontSize(7.4);
       this.doc.setTextColor(148, 163, 184);
-      this.doc.text(this.footerLabel, this.margin, 283.5);
-      this.doc.text(`Page ${page} of ${totalPages}`, this.pageW - this.margin, 283.5, {
+      this.doc.text(this.footerLabel, this.margin, 284.5);
+      this.doc.text(`Page ${page} of ${totalPages}`, this.pageW - this.margin, 284.5, {
         align: 'right',
       });
     }
   }
 
-  output(action: 'download' | 'preview', filename: string): PdfGenerationResult | void {
+  output(
+    action: 'download' | 'preview',
+    filename: string,
+    resolved: ResolvedDocumentData,
+    documentType: 'teaser' | 'dpr'
+  ): PdfGenerationResult {
     this.finalizeFooters();
+    const arrayBuffer = this.doc.output('arraybuffer');
+    const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+
     if (action === 'download') {
-      this.doc.save(filename);
-      return;
+      triggerBlobDownload(blob, filename);
+      return { blobUrl: '', blob, filename, resolved, documentType };
     }
-    const blob = this.doc.output('blob');
+
     const blobUrl = URL.createObjectURL(blob);
-    return { blobUrl, filename };
+    return { blobUrl, blob, filename, resolved, documentType };
   }
 }
 
 // ============================================================================
-// 1. Project Teaser PDF (Clean, Minimal Institutional Teaser)
+// 1. Project Teaser PDF (Clean, Simple-English 1-2 Page Lender Summary)
 // ============================================================================
 
 export function generateProjectTeaserPDF(
   data: TeaserPDFData,
   action: 'download' | 'preview' = 'download'
-): PdfGenerationResult | void {
+): PdfGenerationResult {
   const r = resolveDocumentData(data);
 
   const builder = new InstitutionalPdfBuilder({
-    docTitle: 'EXECUTIVE PROJECT TEASER',
+    docTitle: 'Project Teaser',
     projectName: r.projectName,
     refCode: r.refCode,
     dateStr: r.dateStr,
-    footerLabel: 'Inisio Greenfield Advisory Platform  |  Confidential Commercial Project Teaser',
+    footerLabel: 'Inisio Advisory  |  Confidential - Project Teaser',
   });
 
-  builder.drawMainHeader(`${r.sector}  |  ${r.location}`);
+  builder.drawMainHeader(
+    `${r.sector}  |  ${r.location}`,
+    'CONFIDENTIAL - PROJECT TEASER'
+  );
 
+  // Section 1: Project Snapshot (At a Glance)
+  builder.drawSectionHeading('1. PROJECT SNAPSHOT (AT A GLANCE)');
   builder.drawKpiRow([
     {
       label: 'TOTAL PROJECT COST',
-      value: r.totalCostNum > 0 ? fmtCr(r.totalCostNum) : 'Pending',
-      sub: r.costRows.length > 1 ? `${r.costRows.length} cost heads` : 'Consolidated outlay',
+      value: r.totalCostNum > 0 ? fmtCr(r.totalCostNum) : 'To be finalized',
+      sub: r.costRows.length > 1 ? `${r.costRows.length} cost items` : 'Consolidated total',
     },
     {
-      label: 'PROPOSED TERM DEBT',
-      value: r.termLoanNum > 0 ? fmtCr(r.termLoanNum) : 'Pending',
-      sub: r.debtPct !== null ? `${r.debtPct}% of funding` : undefined,
+      label: 'TERM LOAN REQUESTED',
+      value: r.termLoanNum > 0 ? fmtCr(r.termLoanNum) : 'To be finalized',
+      sub: r.debtPct !== null ? `${r.debtPct}% of total funding` : undefined,
     },
     {
-      label: 'PROMOTER EQUITY',
-      value: r.promoterEquityNum > 0 ? fmtCr(r.promoterEquityNum) : 'Pending',
-      sub: r.eqPct !== null ? `${r.eqPct}% margin` : undefined,
+      label: 'PROMOTER CONTRIBUTION',
+      value: r.promoterEquityNum > 0 ? fmtCr(r.promoterEquityNum) : 'To be finalized',
+      sub: r.eqPct !== null ? `${r.eqPct}% own equity` : undefined,
     },
     {
-      label: 'DSCR / BANKABILITY',
-      value: `${r.dscrLabel}`,
-      sub: r.bankabilityScoreNum !== null ? `Rating: ${r.bankabilityLabel}` : `Feasibility: ${r.feasibilityLabel}`,
+      label: 'REPAYMENT & SCORE',
+      value: `${r.dscrLabel} DSCR`,
+      sub:
+        r.bankabilityScoreNum !== null
+          ? `Rating: ${r.bankabilityLabel}`
+          : `Feasibility: ${r.feasibilityLabel}`,
     },
   ]);
 
-  // Section 1: Project & Banking Overview
-  builder.drawSectionHeading('1. PROJECT & MANDATE OVERVIEW');
-  builder.drawKeyValueList(r.overviewRows);
-  if (r.projectBrief) {
-    builder.drawParagraphBox('Project Brief & Scope', r.projectBrief);
+  const snapshotRows: Array<[string, string]> = [
+    ['Debt-to-Equity Ratio', r.debtEquityRatioLabel],
+    ['Feasibility Score', r.feasibilityLabel],
+    ['Bankability Rating', r.riskLevel ? `${r.bankabilityLabel} (${r.riskLevel})` : r.bankabilityLabel],
+  ];
+  builder.drawKeyValueList(snapshotRows, 54);
+
+  // Section 2: Business Overview & Readiness
+  builder.drawSectionHeading('2. BUSINESS OVERVIEW & READINESS');
+  builder.drawParagraphBox('What This Project Does', r.businessOverviewSummary);
+  if (r.readinessRows.length > 0) {
+    builder.drawKeyValueList(r.readinessRows, 54);
   }
 
-  // Section 2: Promoters & Management
+  // Section 3: Promoter & Company Details
+  builder.drawSectionHeading('3. PROMOTER & COMPANY DETAILS');
+  const entityRows: Array<[string, string]> = [['Lead Promoter', r.promoter]];
+  if (r.companyName && r.companyName.toLowerCase() !== r.promoter.toLowerCase()) {
+    entityRows.push(['Company / Borrowing Entity', r.companyName]);
+  }
+  const contactSummary = [r.contactPhone, r.contactEmail].filter(Boolean).join('  |  ');
+  if (contactSummary) {
+    entityRows.push(['Verified Contact Details', contactSummary]);
+  }
+  builder.drawKeyValueList(entityRows, 54);
+
   if (r.promoters.length > 0) {
-    builder.drawSectionHeading('2. PROMOTER & MANAGEMENT PROFILE');
     builder.drawTable({
       headers: [
         { label: 'Promoter / Director', width: 46 },
-        { label: 'Role', width: 42 },
+        { label: 'Role', width: 40 },
         { label: 'Experience', width: 28 },
-        { label: 'Qualification', width: 42 },
-        { label: 'Holding', width: 20, align: 'right' },
+        { label: 'Qualification', width: 44 },
+        { label: 'Share %', width: 20, align: 'right' },
       ],
       rows: r.promoters.map((p) => ({
         cells: [p.name, p.role, p.experience, p.qualification, p.shareholding],
@@ -1208,24 +1525,24 @@ export function generateProjectTeaserPDF(
     });
   }
 
-  // Section 3: Cost of Project & Means of Finance
-  builder.drawSectionHeading('3. COST OF PROJECT & MEANS OF FINANCE');
+  // Section 4: Cost of Project & Means of Finance
+  builder.drawSectionHeading('4. COST OF PROJECT & MEANS OF FINANCE');
 
   if (r.costRows.length > 0) {
     builder.drawTable({
       headers: [
-        { label: 'Cost Component', width: 112 },
+        { label: 'Project Cost Item (CAPEX)', width: 112 },
         { label: 'Share (%)', width: 26, align: 'right' },
         { label: 'Amount (INR Cr)', width: 40, align: 'right' },
       ],
       rows: [
-        ...r.costRows.map((row) => {
-          const share =
-            r.totalCostNum > 0 ? `${((row.amountCr / r.totalCostNum) * 100).toFixed(1)}%` : '-';
-          return {
-            cells: [row.label, share, fmtCr(row.amountCr)],
-          };
-        }),
+        ...r.costRows.map((row) => ({
+          cells: [
+            row.label,
+            r.totalCostNum > 0 ? `${((row.amountCr / r.totalCostNum) * 100).toFixed(1)}%` : '-',
+            fmtCr(row.amountCr),
+          ],
+        })),
         {
           cells: ['Total Project Cost', r.totalCostNum > 0 ? '100.0%' : '-', fmtCr(r.totalCostNum)],
           isTotal: true,
@@ -1238,122 +1555,132 @@ export function generateProjectTeaserPDF(
   if (r.financeRows.length > 0) {
     builder.drawTable({
       headers: [
-        { label: 'Means of Finance / Capital Structure', width: 122 },
-        { label: 'Proposed Structure', width: 56, align: 'right' },
+        { label: 'Source of Funds (Means of Finance)', width: 112 },
+        { label: 'Share (%)', width: 26, align: 'right' },
+        { label: 'Amount (INR Cr)', width: 40, align: 'right' },
       ],
       rows: [
-        ...r.financeRows.map((row) => ({ cells: [row.label, row.value] })),
-        ...(r.totalFundingNum > 0
-          ? [
-              {
-                cells: [
-                  r.isFundingBalanced ? 'Total Means of Finance (Reconciled)' : 'Total Means of Finance',
-                  fmtCr(r.totalFundingNum),
-                ],
-                isTotal: true,
-              },
-            ]
-          : []),
+        ...r.financeRows.map((row) => ({
+          cells: [row.label, row.sharePct, row.value],
+        })),
+        {
+          cells: [
+            r.isFundingBalanced ? 'Total Means of Finance (Matched)' : 'Total Means of Finance',
+            r.totalFundingNum > 0 ? '100.0%' : '-',
+            fmtCr(r.totalFundingNum),
+          ],
+          isTotal: true,
+        },
       ],
+      caption: `Debt-to-Equity Ratio: ${r.debtEquityRatioLabel}`,
     });
   }
 
-  // Section 4: Credit Risk Profile & Institutional Underwriting Summary
-  builder.drawSectionHeading('4. CREDIT RISK PROFILE & UNDERWRITING SUMMARY');
-
-  const summaryRows: Array<[string, string]> = [
-    ['Feasibility Score', r.feasibilityLabel],
-    ['Bankability Rating', r.bankabilityLabel],
-    ['Modeled DSCR', r.dscrLabel],
-  ];
-  if (r.riskLevel) {
-    summaryRows.push(['Credit Risk Classification', r.riskLevel]);
+  // Section 5: Preferred Bank & Next Steps
+  builder.drawSectionHeading('5. PREFERRED BANK & NEXT STEPS');
+  if (r.bankRows.length > 0) {
+    builder.drawKeyValueList(r.bankRows, 54);
   }
-  r.riskHighlights.forEach((row) => summaryRows.push(row));
-  builder.drawKeyValueList(summaryRows, 62);
+  builder.drawBulletGroup('Summary of Funding Request', r.nextStepsLines);
 
-  builder.drawBulletGroup('Key Credit Strengths', r.strengths);
-  builder.drawBulletGroup('Recommended Pre-Sanction Actions', r.recommendations);
-
-  const filename = `Inisio_Teaser_${makeFileSlug(r.projectName)}_${new Date().toISOString().slice(0, 10)}.pdf`;
-  return builder.output(action, filename);
+  const filename = `${makeSafeFileSlug(r.projectName)}_Teaser.pdf`;
+  return builder.output(action, filename, r, 'teaser');
 }
 
 // ============================================================================
-// 2. DPR Executive Summary PDF (Comprehensive Institutional DPR Brief)
+// 2. Detailed Project Report (DPR) Executive Summary PDF (8 Clear Sections)
 // ============================================================================
 
 export function generateDprExecutiveSummaryPDF(
   data: TeaserPDFData,
   action: 'download' | 'preview' = 'download'
-): PdfGenerationResult | void {
+): PdfGenerationResult {
   const r = resolveDocumentData(data);
 
   const builder = new InstitutionalPdfBuilder({
-    docTitle: 'DPR EXECUTIVE SUMMARY',
+    docTitle: 'Detailed Project Report (DPR)',
     projectName: r.projectName,
     refCode: r.refCode,
     dateStr: r.dateStr,
-    footerLabel: 'Inisio Greenfield Advisory  |  Detailed Project Report (DPR) Executive Summary',
+    footerLabel: 'Inisio Advisory  |  Detailed Project Report (DPR) Executive Summary',
   });
 
   builder.drawMainHeader(
-    `${r.sector}  |  ${r.location}  |  Status: ${r.status}`
+    `${r.sector}  |  ${r.location}  |  Promoter: ${r.companyName || r.promoter}`,
+    'DETAILED PROJECT REPORT (DPR)'
   );
 
+  // Section 1: Executive Summary
+  builder.drawSectionHeading('1. EXECUTIVE SUMMARY');
   builder.drawKpiRow([
     {
-      label: 'PROJECT OUTLAY',
-      value: r.totalCostNum > 0 ? fmtCr(r.totalCostNum) : 'Pending',
-      sub: r.isFundingBalanced ? 'Reconciled capex' : 'Review funding gap',
+      label: 'TOTAL PROJECT COST',
+      value: r.totalCostNum > 0 ? fmtCr(r.totalCostNum) : 'To be finalized',
+      sub: r.isFundingBalanced ? 'Cost & funding matched' : 'Check funding balance',
     },
     {
-      label: 'TERM LOAN REQUEST',
-      value: r.termLoanNum > 0 ? fmtCr(r.termLoanNum) : 'Pending',
-      sub: r.debtPct !== null ? `${r.debtPct}% Debt Share` : undefined,
+      label: 'TERM LOAN REQUESTED',
+      value: r.termLoanNum > 0 ? fmtCr(r.termLoanNum) : 'To be finalized',
+      sub: r.debtPct !== null ? `${r.debtPct}% loan share` : undefined,
     },
     {
       label: 'PROMOTER MARGIN',
-      value: r.promoterEquityNum > 0 ? fmtCr(r.promoterEquityNum) : 'Pending',
-      sub: r.eqPct !== null ? `${r.eqPct}% Equity Share` : undefined,
+      value: r.promoterEquityNum > 0 ? fmtCr(r.promoterEquityNum) : 'To be finalized',
+      sub: r.eqPct !== null ? `${r.eqPct}% own funds` : undefined,
     },
     {
-      label: 'APPRAISAL METRICS',
+      label: 'REPAYMENT COMFORT',
       value: `${r.dscrLabel} DSCR`,
       sub: `Feasibility: ${r.feasibilityLabel}`,
     },
   ]);
-
-  // Section 1: Project Identification, Site & Banking Mandate
-  builder.drawSectionHeading('1. PROJECT IDENTIFICATION & BANKING MANDATE');
-  builder.drawKeyValueList(r.overviewRows);
-  if (r.projectBrief) {
-    builder.drawParagraphBox('Technical & Commercial Project Brief', r.projectBrief);
-  }
+  builder.drawParagraphBox('Executive Overview & Viability Verdict', r.executiveVerdict);
 
   // Section 2: Promoter & Management Profile
   builder.drawSectionHeading('2. PROMOTER & MANAGEMENT PROFILE');
+  const promoterMeta: Array<[string, string]> = [['Lead Promoter', r.promoter]];
+  if (r.companyName && r.companyName.toLowerCase() !== r.promoter.toLowerCase()) {
+    promoterMeta.push(['Company / Borrowing Entity', r.companyName]);
+  }
+  const contactLine = [r.contactPhone, r.contactEmail].filter(Boolean).join('  |  ');
+  if (contactLine) promoterMeta.push(['Contact Details', contactLine]);
+  builder.drawKeyValueList(promoterMeta, 56);
+
   builder.drawTable({
     headers: [
       { label: 'Promoter / Director', width: 46 },
-      { label: 'Role / Designation', width: 42 },
+      { label: 'Role', width: 40 },
       { label: 'Experience', width: 28 },
-      { label: 'Qualification', width: 42 },
-      { label: 'Holding', width: 20, align: 'right' },
+      { label: 'Qualification', width: 44 },
+      { label: 'Share %', width: 20, align: 'right' },
     ],
     rows: r.promoters.map((p) => ({
       cells: [p.name, p.role, p.experience, p.qualification, p.shareholding],
     })),
   });
 
-  // Section 3: Reconciled Cost of Project & Means of Finance
-  builder.drawSectionHeading('3. PROJECT COST SCHEDULE & MEANS OF FINANCE');
+  if (r.riskHighlights.length > 0) {
+    builder.drawKeyValueList(r.riskHighlights, 62);
+  }
 
+  // Section 3: Project Details & Implementation Readiness
+  builder.drawSectionHeading('3. PROJECT DETAILS & IMPLEMENTATION READINESS');
+  const projectDetailRows: Array<[string, string]> = [
+    ['Industry / Sector', r.sector],
+    ['Project Location', r.location],
+    ...r.readinessRows,
+  ];
+  builder.drawKeyValueList(projectDetailRows, 56);
+  builder.drawParagraphBox('Business Description & Scope', r.businessOverviewSummary);
+  builder.drawBulletGroup('Key Setup & Readiness Milestones', r.setupMilestones);
+
+  // Section 4: Project Cost Breakdown (CAPEX)
+  builder.drawSectionHeading('4. PROJECT COST BREAKDOWN (CAPEX)');
   if (r.costRows.length > 0) {
     builder.drawTable({
       headers: [
-        { label: 'Project Cost Head', width: 112 },
-        { label: '% of Outlay', width: 26, align: 'right' },
+        { label: 'Cost Component', width: 112 },
+        { label: 'Share (%)', width: 26, align: 'right' },
         { label: 'Amount (INR Cr)', width: 40, align: 'right' },
       ],
       rows: [
@@ -1365,7 +1692,7 @@ export function generateDprExecutiveSummaryPDF(
           ],
         })),
         {
-          cells: ['Total Project Outlay', r.totalCostNum > 0 ? '100.0%' : '-', fmtCr(r.totalCostNum)],
+          cells: ['Total Project Cost', r.totalCostNum > 0 ? '100.0%' : '-', fmtCr(r.totalCostNum)],
           isTotal: true,
         },
       ],
@@ -1373,67 +1700,94 @@ export function generateDprExecutiveSummaryPDF(
     });
   }
 
+  // Section 5: Means of Finance & Capital Structure
+  builder.drawSectionHeading('5. MEANS OF FINANCE & CAPITAL STRUCTURE');
   if (r.financeRows.length > 0) {
     builder.drawTable({
       headers: [
-        { label: 'Funding Source / Financial Metric', width: 122 },
-        { label: 'Amount / Ratio', width: 56, align: 'right' },
+        { label: 'Funding Source', width: 112 },
+        { label: 'Share (%)', width: 26, align: 'right' },
+        { label: 'Amount (INR Cr)', width: 40, align: 'right' },
       ],
       rows: [
-        ...r.financeRows.map((row) => ({ cells: [row.label, row.value] })),
-        ...(r.totalFundingNum > 0
-          ? [
-              {
-                cells: ['Total Means of Finance', fmtCr(r.totalFundingNum)],
-                isTotal: true,
-              },
-            ]
-          : []),
+        ...r.financeRows.map((row) => ({
+          cells: [row.label, row.sharePct, row.value],
+        })),
+        {
+          cells: [
+            r.isFundingBalanced ? 'Total Means of Finance (Matched)' : 'Total Means of Finance',
+            r.totalFundingNum > 0 ? '100.0%' : '-',
+            fmtCr(r.totalFundingNum),
+          ],
+          isTotal: true,
+        },
       ],
+      caption: `Calculated Debt-to-Equity Ratio: ${r.debtEquityRatioLabel}`,
     });
+  } else {
+    builder.drawParagraph('Funding split (Term Loan vs. Promoter Equity) is yet to be finalized.');
   }
 
-  // Section 4: Credit Risk & Bankability Assessment
-  builder.drawSectionHeading('4. CREDIT RISK PROFILE & BANKABILITY ASSESSMENT');
-  const creditRows: Array<[string, string]> = [
-    ['Feasibility Score', r.feasibilityLabel],
-    ['Institutional Bankability Rating', r.bankabilityLabel],
-    ['Modeled Average DSCR', r.dscrLabel],
-  ];
-  if (r.riskLevel) {
-    creditRows.push(['Risk Classification', r.riskLevel]);
+  // Section 6: Financial Viability & Repayment Comfort
+  builder.drawSectionHeading('6. FINANCIAL VIABILITY & REPAYMENT COMFORT');
+  builder.drawTable({
+    headers: [
+      { label: 'Bankability Indicator', width: 48 },
+      { label: 'Project Figure', width: 38 },
+      { label: 'What This Means for Loan Safety', width: 92 },
+    ],
+    rows: r.viabilityIndicators.map((v) => ({
+      cells: [v.metric, v.value, v.meaning],
+    })),
+  });
+  builder.drawBulletGroup('Key Project Strengths', r.strengths);
+  builder.drawBulletGroup('Points to Strengthen Before Sanction', r.recommendations);
+
+  // Section 7: Key Risks & Mitigants
+  builder.drawSectionHeading('7. KEY RISKS & MITIGANTS');
+  builder.drawTable({
+    headers: [
+      { label: 'Risk Area', width: 36 },
+      { label: 'Key Risk', width: 66 },
+      { label: 'How It Is Managed', width: 76 },
+    ],
+    rows: r.riskMitigants.map((rm) => ({
+      cells: [rm.area, rm.risk, rm.mitigant],
+    })),
+  });
+
+  // Section 8: Bank Details & Submission Checklist
+  builder.drawSectionHeading('8. BANK DETAILS & SUBMISSION CHECKLIST');
+  if (r.bankRows.length > 0) {
+    builder.drawKeyValueList(r.bankRows, 56);
   }
-  r.riskHighlights.forEach((row) => creditRows.push(row));
-  builder.drawKeyValueList(creditRows, 62);
-
-  builder.drawBulletGroup('Identified Viability Strengths', r.strengths);
-  builder.drawBulletGroup('DPR & Pre-Disbursement Action Items', r.recommendations);
-
-  // Section 5: DPR Readiness, Document Checklist & Execution Status
-  builder.drawSectionHeading('5. DPR READINESS, CHECKLIST & EXECUTION STATUS');
-  const execRows: Array<[string, string]> = [
-    ['Current Appraisal Status', r.status],
+  const trackingRows: Array<[string, string]> = [
+    ['Current Status', r.status],
     ['Workflow Stage', r.stage],
-    ['Assigned CA Appraiser', r.assignedCA],
-    ['Assigned DPR Consultant', r.dprAssignedTo],
-    ['Mandate Funding Status', r.isFunded ? 'Funded / Sanctioned' : 'Under Appraisal / Syndication'],
   ];
-  builder.drawKeyValueList(execRows, 62);
+  if (r.assignedCA && r.assignedCA !== 'Not assigned yet') {
+    trackingRows.push(['Assigned CA Reviewer', r.assignedCA]);
+  }
+  if (r.dprAssignedTo && r.dprAssignedTo !== 'Not assigned yet') {
+    trackingRows.push(['Assigned DPR Consultant', r.dprAssignedTo]);
+  }
+  builder.drawKeyValueList(trackingRows, 56);
 
   builder.drawTable({
     headers: [
-      { label: 'DPR & Appraisal Deliverable', width: 76 },
-      { label: 'Current Record Status', width: 102 },
+      { label: 'Standard Bank Submission Document', width: 88 },
+      { label: 'Current Status / Action', width: 90 },
     ],
     rows: r.documentRows.map(([docLabel, docStatus]) => ({
       cells: [docLabel, docStatus],
     })),
+    caption: 'Note: Exact document requirements may vary slightly depending on the lending bank and loan scheme.',
   });
 
   if (r.caReviewNotes) {
-    builder.drawParagraphBox('Chartered Accountant / Reviewer Notes', r.caReviewNotes);
+    builder.drawParagraphBox('Reviewer Notes', r.caReviewNotes);
   }
 
-  const filename = `Inisio_DPR_Summary_${makeFileSlug(r.projectName)}_${new Date().toISOString().slice(0, 10)}.pdf`;
-  return builder.output(action, filename);
+  const filename = `${makeSafeFileSlug(r.projectName)}_DPR.pdf`;
+  return builder.output(action, filename, r, 'dpr');
 }

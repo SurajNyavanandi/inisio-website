@@ -8,6 +8,11 @@ const leadSchema = new mongoose.Schema(
       required: false,
       index: true,
     },
+    clientProjectId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     fullName: {
       type: String,
       required: [true, 'Please add promoter full name'],
@@ -271,6 +276,7 @@ const leadSchema = new mongoose.Schema(
 );
 
 // Indexes for filters, sorts, and fast lookups in production
+leadSchema.index({ clientProjectId: 1 }, { sparse: true });
 leadSchema.index({ email: 1 });
 leadSchema.index({ mobile: 1 });
 leadSchema.index({ assignedCA: 1 });

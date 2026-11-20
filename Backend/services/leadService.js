@@ -8,6 +8,14 @@ import { sendLeadAssessmentConfirmationEmail, sendDprStatusEmail } from '../util
 import config from '../config/env.js';
 import { getMemoryProjects } from './projectService.js';
 import notificationService from './notificationService.js';
+import {
+  checkUserAssessmentQuota,
+  createQuotaExceededError,
+  isAssessmentLeadRecord,
+  normalizeEmail,
+  normalizeMobile10,
+  normalizeProjectName,
+} from '../utils/assessmentQuota.js';
 
 let memoryLeads = [];
 
@@ -139,6 +147,7 @@ const canAccessLead = (lead, requester) => {
 const mapProjectToLead = (p) => ({
   _id: p._id,
   userId: p.userId || null,
+  clientProjectId: p.clientProjectId || '',
   fullName: p.promoterName || 'Promoter',
   mobile: p.mobile || '',
   email: p.email || '',
@@ -378,8 +387,16 @@ export const getAllLeads = async (query = {}, requester = null) => {
   return finalResults.slice(skip, skip + limit);
 };
 
-export const createLead = async (rawLeadData, userId = null) => {
+export const createLead = async (rawLeadData, userOrId = null) => {
+  const userObj =
+    userOrId && typeof userOrId === 'object' && (userOrId._id || userOrId.email || userOrId.role)
+      ? userOrId
+      : null;
+  const userId = userObj ? userObj._id : userOrId || null;
+
   const leadData = { ...rawLeadData };
+  const clientProjectId = String(leadData.clientProjectId || '').trim();
+  const existingRecordId = String(leadData._id || leadData.id || '').trim();
   delete leadData._id;
   delete leadData.id;
   delete leadData.assignedCA;
@@ -388,6 +405,121 @@ export const createLead = async (rawLeadData, userId = null) => {
   delete leadData.dprAssignedTo;
   delete leadData.consultationAssignedTo;
   delete leadData.adminVisibilityConfirmed;
+
+  const cleanEmail = normalizeEmail(leadData.email || userObj?.email);
+  const cleanMobile = String(leadData.mobile || userObj?.phone || '').trim();
+  const cleanMobile10 = normalizeMobile10(cleanMobile);
+  const cleanProjectName = normalizeProjectName(leadData.projectName);
+
+  if (cleanEmail) leadData.email = cleanEmail;
+  if (cleanMobile) leadData.mobile = cleanMobile;
+  if (clientProjectId) leadData.clientProjectId = clientProjectId;
+
+  const isAssessmentSubmission = isAssessmentLeadRecord(leadData);
+
+  // 1. Idempotent upsert check (prevent duplicate rows on Back/Edit/Re-submit/PDF download)
+  if (isDBConnected()) {
+    try {
+      let existingLead = null;
+
+      if (clientProjectId) {
+        existingLead = await Lead.findOne({ clientProjectId });
+      }
+
+      if (!existingLead && existingRecordId && mongoose.Types.ObjectId.isValid(existingRecordId)) {
+        const candidate = await Lead.findById(existingRecordId);
+        if (
+          candidate &&
+          ((userId && String(candidate.userId || '') === String(userId)) ||
+            (cleanEmail && normalizeEmail(candidate.email) === cleanEmail) ||
+            (cleanMobile10 && normalizeMobile10(candidate.mobile) === cleanMobile10))
+        ) {
+          existingLead = candidate;
+        }
+      }
+
+      // Secondary deduplication for assessment submissions with the exact same project name & owner
+      if (!existingLead && isAssessmentSubmission && cleanProjectName && (userId || cleanEmail || cleanMobile10)) {
+        const ownerOr = [];
+        if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
+          ownerOr.push({ userId });
+        }
+        if (cleanEmail) {
+          ownerOr.push({ email: new RegExp(`^${escapeRegex(cleanEmail)}$`, 'i') });
+        }
+        if (cleanMobile10) {
+          ownerOr.push({ mobile: new RegExp(`${escapeRegex(cleanMobile10)}$`) });
+        }
+        if (ownerOr.length > 0) {
+          const candidates = await Lead.find({ $or: ownerOr }).sort({ updatedAt: -1 }).limit(10);
+          existingLead = candidates.find(
+            (c) => isAssessmentLeadRecord(c) && normalizeProjectName(c.projectName) === cleanProjectName
+          );
+        }
+      }
+
+      if (existingLead) {
+        Object.assign(existingLead, {
+          ...leadData,
+          userId: userId || existingLead.userId || null,
+          clientProjectId: clientProjectId || existingLead.clientProjectId || '',
+          timestamp: new Date(),
+        });
+        await existingLead.save();
+        return existingLead;
+      }
+    } catch (err) {
+      if (err.statusCode) throw err;
+      console.warn('MongoDB upsert check warning in createLead:', err.message);
+    }
+  } else {
+    // In-memory idempotent upsert check
+    const existingMemIdx = memoryLeads.findIndex((item) => {
+      if (clientProjectId && item.clientProjectId === clientProjectId) return true;
+      if (existingRecordId && String(item._id) === existingRecordId) return true;
+      if (
+        isAssessmentSubmission &&
+        cleanProjectName &&
+        isAssessmentLeadRecord(item) &&
+        normalizeProjectName(item.projectName) === cleanProjectName &&
+        ((userId && String(item.userId || '') === String(userId)) ||
+          (cleanEmail && normalizeEmail(item.email) === cleanEmail) ||
+          (cleanMobile10 && normalizeMobile10(item.mobile) === cleanMobile10))
+      ) {
+        return true;
+      }
+      return false;
+    });
+
+    if (existingMemIdx !== -1) {
+      memoryLeads[existingMemIdx] = {
+        ...memoryLeads[existingMemIdx],
+        ...leadData,
+        userId: userId || memoryLeads[existingMemIdx].userId || null,
+        clientProjectId: clientProjectId || memoryLeads[existingMemIdx].clientProjectId || '',
+        updatedAt: new Date(),
+      };
+      return memoryLeads[existingMemIdx];
+    }
+  }
+
+  // 2. Enforce 1-free-assessment-per-user quota ONLY for assessment/teaser project leads
+  // (Never block Contact Us form submissions or general CA consultation inquiries)
+  if (isAssessmentSubmission) {
+    const quota = await checkUserAssessmentQuota({
+      user: userObj,
+      email: cleanEmail,
+      mobile: cleanMobile10,
+      clientProjectId,
+      existingRecordId,
+      memoryLeads,
+      memoryProjects: getMemoryProjects(),
+    });
+
+    if (!quota.allowed) {
+      throw createQuotaExceededError(quota);
+    }
+  }
 
   if (isDBConnected()) {
     try {
@@ -411,6 +543,7 @@ export const createLead = async (rawLeadData, userId = null) => {
       sendLeadAssessmentConfirmationEmail(lead).catch(() => {});
       return lead;
     } catch (err) {
+      if (err.statusCode) throw err;
       console.warn('MongoDB create failed in createLead, storing in memory fallback:', err.message);
     }
   }

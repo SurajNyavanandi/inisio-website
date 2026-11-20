@@ -21,7 +21,9 @@ import {
   EyeOff,
   KeyRound,
   RotateCw,
-  ArrowRight
+  ArrowRight,
+  Download,
+  FileCode
 } from 'lucide-react';
 import {
   AdminRole,
@@ -38,6 +40,8 @@ import {
   LeadRecord
 } from '../utils/leadStore';
 import { UISelect } from './ui/Select';
+import { useToast } from './ui/Toast';
+import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import { DashboardLayout, DashboardNavItem } from './dashboard/DashboardLayout';
 import {
   DASHBOARD_TABLE,
@@ -305,9 +309,115 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
   // Live Backend Collections State
   const [projects, setProjects] = useState<ProjectEntity[]>([]);
+  const [rawLeadsById, setRawLeadsById] = useState<Record<string, LeadRecord>>({});
   const [dprRequests, setDprRequests] = useState<DprRequest[]>([]);
   const [consultations, setConsultations] = useState<ConsultationItem[]>([]);
   const [visitors, setVisitors] = useState<VisitorSessionRecord[]>([]);
+  const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
+  const { toast: showToast } = useToast();
+
+  const buildAdminPdfPayload = useCallback(
+    async (projectId: string, overrideProject?: ProjectEntity) => {
+      const { mapLeadRecordToPdfData } = await import('../utils/pdfGenerator');
+      const rawLead = rawLeadsById[projectId];
+      const entity = overrideProject || projects.find((p) => p.id === projectId);
+      const base = rawLead ? mapLeadRecordToPdfData(rawLead) : {};
+      if (!entity) return base;
+      const totalCost = entity.costComponents.reduce((sum, c) => sum + Number(c.amountCr || 0), 0);
+      return {
+        ...base,
+        projectName: entity.name || base.projectName,
+        industry: entity.industry || base.industry,
+        location: entity.location || base.location,
+        fullName: entity.promoterName || base.fullName,
+        email: entity.email || base.email,
+        mobile: entity.mobile || base.mobile,
+        status: entity.status || base.status,
+        isFunded: entity.isFunded,
+        dprAssignedTo: entity.dprAssignedTo || base.dprAssignedTo,
+        checklistUploaded: entity.checklistUploaded,
+        checklistFileName: entity.checklistFileName,
+        documents: entity.documents,
+        promotersList: entity.promoters.map((p) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+          experience: p.experience,
+          qualification: p.qualification,
+          shareholdingPct: p.shareholdingPct,
+        })),
+        costComponents: entity.costComponents,
+        totalCostCr: totalCost > 0 ? totalCost : base.totalCostCr,
+        meansOfFinance: entity.meansOfFinance,
+        termLoanCr: entity.meansOfFinance.debtCr || base.termLoanCr,
+        promoterContributionCr: entity.meansOfFinance.equityCr || base.promoterContributionCr,
+        otherFinanceCr: entity.meansOfFinance.subsidyCr ?? base.otherFinanceCr,
+      };
+    },
+    [projects, rawLeadsById]
+  );
+
+  const handleAdminDownloadDocx = useCallback(
+    async (projectId: string, overrideProject?: ProjectEntity) => {
+      try {
+        const [payload, { generateProjectTeaserDOCX }] = await Promise.all([
+          buildAdminPdfPayload(projectId, overrideProject),
+          import('../utils/docxGenerator'),
+        ]);
+        const filename = await generateProjectTeaserDOCX(payload);
+        showToast(`Downloaded ${filename}`, { type: 'success' });
+      } catch (err) {
+        console.error('Admin Teaser DOCX error:', err);
+        showToast('Could not download Project Teaser DOCX. Please try again.', { type: 'error' });
+      }
+    },
+    [buildAdminPdfPayload, showToast]
+  );
+
+  const handleAdminProjectDocument = useCallback(
+    async (
+      projectId: string,
+      type: 'teaser' | 'dpr',
+      action: 'preview' | 'download' = 'preview',
+      overrideProject?: ProjectEntity
+    ) => {
+      try {
+        const [payload, { generateProjectTeaserPDF, generateDprExecutiveSummaryPDF }] = await Promise.all([
+          buildAdminPdfPayload(projectId, overrideProject),
+          import('../utils/pdfGenerator'),
+        ]);
+        const res =
+          type === 'teaser'
+            ? generateProjectTeaserPDF(payload, action)
+            : generateDprExecutiveSummaryPDF(payload, action);
+        if (action === 'preview' && res) {
+          setPdfPreview({
+            blobUrl: res.blobUrl,
+            filename: res.filename,
+            title:
+              type === 'teaser'
+                ? `${res.resolved.projectName} - Project Teaser`
+                : `${res.resolved.projectName} - Detailed Project Report (DPR)`,
+            subtitle: `${res.resolved.sector} · ${res.resolved.location}`,
+            resolved: res.resolved,
+            documentType: type,
+            onDownloadDocx:
+              type === 'teaser'
+                ? () => {
+                    handleAdminDownloadDocx(projectId, overrideProject);
+                  }
+                : undefined,
+          });
+        } else if (res) {
+          showToast(`Downloaded ${res.filename}`, { type: 'success' });
+        }
+      } catch (err) {
+        console.error('Admin PDF generation error:', err);
+        showToast('Could not generate the document. Please try again.', { type: 'error' });
+      }
+    },
+    [buildAdminPdfPayload, handleAdminDownloadDocx, showToast]
+  );
 
   const loadAllAdminData = useCallback(async () => {
     if (!activeRole) return;
@@ -319,6 +429,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
         api.consultations.getAll().catch(() => []),
         api.get('/visitors').catch(() => []),
       ]);
+
+      const leadsLookup: Record<string, LeadRecord> = {};
+      leadsList.forEach((l) => {
+        leadsLookup[String(l.id || l._id)] = l;
+      });
+      setRawLeadsById(leadsLookup);
 
       const mappedProjects = leadsList.map(mapLeadRecordToProjectEntity);
       setProjects(mappedProjects);
@@ -1614,6 +1730,55 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         style={{ width: `${currentProbability}%` }}
                       />
                     </div>
+
+                    {/* Quick Document Preview & Offline Download Actions */}
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        Project Teaser &amp; DPR Documents
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAdminProjectDocument(currentProject.id, 'teaser', 'preview', currentProject)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Preview Teaser</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAdminProjectDocument(currentProject.id, 'teaser', 'download', currentProject)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Teaser PDF</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAdminDownloadDocx(currentProject.id, currentProject)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <FileCode className="w-3.5 h-3.5" />
+                          <span>Teaser DOCX</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAdminProjectDocument(currentProject.id, 'dpr', 'preview', currentProject)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Preview DPR</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAdminProjectDocument(currentProject.id, 'dpr', 'download', currentProject)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>DPR PDF</span>
+                        </button>
+                      </div>
+                    </div>
                   </DashboardCard>
 
                   {/* Promoters */}
@@ -2000,6 +2165,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                         <th className={DASHBOARD_TABLE.th}>Status</th>
                         <th className={DASHBOARD_TABLE.th}>Date</th>
                         <th className={DASHBOARD_TABLE.th}>Assigned Consultant</th>
+                        <th className={`${DASHBOARD_TABLE.th} text-right`}>Documents</th>
                       </tr>
                     </thead>
                     <tbody className={DASHBOARD_TABLE.tbody}>
@@ -2039,6 +2205,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 {req.assignedConsultant || 'Unassigned'}
                               </span>
                             )}
+                          </td>
+                          <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'preview')}
+                                title="Preview DPR PDF"
+                                className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>DPR</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'download')}
+                                title="Download DPR PDF"
+                                className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2369,6 +2556,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
       )}
+
+      {/* In-App Document Preview Modal (Teaser PDF & DPR PDF) */}
+      <PdfPreviewModal preview={pdfPreview} onClose={() => setPdfPreview(null)} />
     </div>
   );
 };

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { fetchLeadsFromDatabase, getStoredLeads, LeadRecord } from '../utils/leadStore';
 import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
+import { useToast } from './ui/Toast';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
   DashboardCard,
@@ -47,6 +48,7 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
+  const { toast: showToast } = useToast();
 
   const handleDprSummaryPdf = async (lead: LeadRecord, action: 'preview' | 'download') => {
     try {
@@ -59,12 +61,17 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
         setPdfPreview({
           blobUrl: res.blobUrl,
           filename: res.filename,
-          title: `${payload.projectName || 'Project'} — DPR Executive Summary`,
-          subtitle: `Promoter: ${payload.fullName || 'Lead Promoter'} · ${payload.industry || 'Manufacturing'}`,
+          title: `${res.resolved.projectName} - Detailed Project Report (DPR)`,
+          subtitle: `Promoter: ${res.resolved.promoter} · ${res.resolved.sector}`,
+          resolved: res.resolved,
+          documentType: 'dpr',
         });
+      } else if (res) {
+        showToast(`Downloaded ${res.filename}`, { type: 'success' });
       }
     } catch (err) {
       console.error('Failed to generate DPR Summary PDF:', err);
+      showToast('Could not generate DPR PDF. Please try again.', { type: 'error' });
     }
   };
 

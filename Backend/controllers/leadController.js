@@ -12,7 +12,7 @@ export const getLeads = async (req, res, next) => {
 
 export const createLead = async (req, res, next) => {
   try {
-    const lead = await leadService.createLead(req.body, req.user?._id || null);
+    const lead = await leadService.createLead(req.body, req.user || null);
     return sendSuccess(res, lead, 'Lead captured successfully', 201);
   } catch (error) {
     next(error);

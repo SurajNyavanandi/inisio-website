@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  getAssessmentQuota,
   evaluateProject,
   calculateQuickMetrics,
   getUserAssessments,
@@ -9,6 +10,9 @@ import { authenticateUser, authorizeRoles, optionalAuth } from '../middleware/au
 import { validateBody } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
+
+// Server-side 1-free-assessment quota check
+router.get('/quota', optionalAuth, getAssessmentQuota);
 
 // Public / User evaluate endpoint
 router.post('/evaluate', optionalAuth, validateBody(['industry', 'projectCostCr']), evaluateProject);

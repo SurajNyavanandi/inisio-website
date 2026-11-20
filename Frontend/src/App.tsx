@@ -4,20 +4,12 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { TrustNumbers } from './components/TrustNumbers';
 import { BankLogosCarousel } from './components/BankLogosCarousel';
-import { Testimonials } from './components/Testimonials';
-import { ProjectActionCards } from './components/ProjectActionCards';
-import { IndustriesSection } from './components/IndustriesSection';
-import { ContactSection } from './components/ContactSection';
-import { WhyChooseInisio } from './components/WhyChooseInisio';
-import { HowItWorks } from './components/HowItWorks';
-import { FAQSection } from './components/FAQSection';
-import { FinalCTA } from './components/FinalCTA';
 import { Footer } from './components/Footer';
 import { FloatingContactButtons } from './components/FloatingContactButtons';
 import { DashboardSkeleton, LoadingSpinner } from './components/common';
 import { SEOHead } from './components/SEOHead';
 import { Shield } from 'lucide-react';
-import { canUserStartAssessment } from './utils/membershipStore';
+import { canUserStartAssessment, fetchServerAssessmentQuota } from './utils/membershipStore';
 import { getStoredLeads } from './utils/leadStore';
 import { recordPageView } from './utils/visitorStore';
 import { recordUserLogin } from './utils/userStore';
@@ -67,6 +59,14 @@ const ProsyncDashboard = lazyWithRetry(() => import('./components/ProsyncDashboa
 const DPRConsultantDashboard = lazyWithRetry(() => import('./components/DPRConsultantDashboard').then(m => ({ default: m.DPRConsultantDashboard })));
 const CAAdminDashboard = lazyWithRetry(() => import('./components/CAAdminDashboard').then(m => ({ default: m.CAAdminDashboard })));
 const ProjectAssessmentPage = lazyWithRetry(() => import('./components/ProjectAssessmentPage').then(m => ({ default: m.ProjectAssessmentPage })));
+const HowItWorks = lazyWithRetry(() => import('./components/HowItWorks').then(m => ({ default: m.HowItWorks })));
+const WhyChooseInisio = lazyWithRetry(() => import('./components/WhyChooseInisio').then(m => ({ default: m.WhyChooseInisio })));
+const ProjectActionCards = lazyWithRetry(() => import('./components/ProjectActionCards').then(m => ({ default: m.ProjectActionCards })));
+const IndustriesSection = lazyWithRetry(() => import('./components/IndustriesSection').then(m => ({ default: m.IndustriesSection })));
+const Testimonials = lazyWithRetry(() => import('./components/Testimonials').then(m => ({ default: m.Testimonials })));
+const FAQSection = lazyWithRetry(() => import('./components/FAQSection').then(m => ({ default: m.FAQSection })));
+const ContactSection = lazyWithRetry(() => import('./components/ContactSection').then(m => ({ default: m.ContactSection })));
+const FinalCTA = lazyWithRetry(() => import('./components/FinalCTA').then(m => ({ default: m.FinalCTA })));
 const LatestBlogs = lazyWithRetry(() => import('./components/LatestBlogs').then(m => ({ default: m.LatestBlogs })));
 const BlogsPage = lazyWithRetry(() => import('./components/BlogsPage').then(m => ({ default: m.BlogsPage })));
 
@@ -101,12 +101,22 @@ export default function App() {
       return 'blogs';
     }
     if (path === '/assessment') return 'assessment';
-    if (path === '/how-it-works') return 'how-it-works';
     if (path === '/about') return 'about';
-    if (path === '/industries') return 'industries';
-    if (path === '/contact') return 'contact';
-    if (path === '/faq') return 'faq';
     return 'home';
+  });
+
+  const [activeHomeSection, setActiveHomeSection] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const hash = window.location.hash.replace('#', '');
+    if (['solutions', 'industries', 'faqs', 'contact'].includes(hash)) return hash;
+    if (hash === 'how-it-works') return 'solutions';
+    if (hash === 'faq') return 'faqs';
+    const path = window.location.pathname;
+    if (path === '/how-it-works') return 'solutions';
+    if (path === '/industries') return 'industries';
+    if (path === '/faq') return 'faqs';
+    if (path === '/contact') return 'contact';
+    return '';
   });
 
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
@@ -197,10 +207,29 @@ export default function App() {
       if (window.location.hash === '#admin' || window.location.search.includes('admin') || path === '/admin' || path === '/admin-panel') {
         setIsAdminPanelOpen(true);
       }
-      const anchor = window.location.hash.replace('#', '');
-      if (['solutions', 'industries', 'faqs', 'contact'].includes(anchor)) {
+      const hashAnchor = window.location.hash.replace('#', '');
+      const pathAnchor =
+        path === '/how-it-works'
+          ? 'solutions'
+          : path === '/industries'
+          ? 'industries'
+          : path === '/faq'
+          ? 'faqs'
+          : path === '/contact'
+          ? 'contact'
+          : '';
+      const rawAnchor = hashAnchor || pathAnchor;
+      const normalizedAnchor =
+        rawAnchor === 'how-it-works' ? 'solutions' : rawAnchor === 'faq' ? 'faqs' : rawAnchor;
+      if (['solutions', 'industries', 'faqs', 'contact'].includes(normalizedAnchor)) {
+        setActiveTab('home');
+        setActiveHomeSection(normalizedAnchor);
         setTimeout(() => {
-          document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const el = document.getElementById(normalizedAnchor);
+          if (el) {
+            const top = el.getBoundingClientRect().top + window.scrollY - 72;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+          }
         }, 150);
       }
     };
@@ -264,17 +293,34 @@ export default function App() {
       } else if (path === '/assessment') {
         setActiveTab('assessment');
       } else if (path === '/how-it-works') {
-        setActiveTab('how-it-works');
+        setActiveTab('home');
+        setActiveHomeSection('solutions');
+        setTimeout(() => scrollToAnchor('solutions'), 80);
       } else if (path === '/about') {
         setActiveTab('about');
       } else if (path === '/industries') {
-        setActiveTab('industries');
+        setActiveTab('home');
+        setActiveHomeSection('industries');
+        setTimeout(() => scrollToAnchor('industries'), 80);
       } else if (path === '/contact') {
-        setActiveTab('contact');
+        setActiveTab('home');
+        setActiveHomeSection('contact');
+        setTimeout(() => scrollToAnchor('contact'), 80);
       } else if (path === '/faq') {
-        setActiveTab('faq');
+        setActiveTab('home');
+        setActiveHomeSection('faqs');
+        setTimeout(() => scrollToAnchor('faqs'), 80);
       } else if (path === '/' || path === '') {
         setActiveTab('home');
+        const hashAnchor = window.location.hash.replace('#', '');
+        const normalizedHash =
+          hashAnchor === 'how-it-works' ? 'solutions' : hashAnchor === 'faq' ? 'faqs' : hashAnchor;
+        if (['solutions', 'industries', 'faqs', 'contact'].includes(normalizedHash)) {
+          setActiveHomeSection(normalizedHash);
+          setTimeout(() => scrollToAnchor(normalizedHash), 80);
+        } else {
+          setActiveHomeSection('');
+        }
       }
     };
 
@@ -311,6 +357,30 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [currentUser?.email]);
+
+  // Track which home page section is currently in view to highlight active Navbar link
+  useEffect(() => {
+    if (activeTab !== 'home') return;
+
+    const sectionIds = ['solutions', 'industries', 'faqs', 'contact'] as const;
+    const handleScrollSpy = () => {
+      const scrollPos = window.scrollY + 130;
+      let currentSection = '';
+      for (const id of sectionIds) {
+        const el = document.getElementById(id);
+        if (el) {
+          const top = el.getBoundingClientRect().top + window.scrollY;
+          if (scrollPos >= top) {
+            currentSection = id;
+          }
+        }
+      }
+      setActiveHomeSection(currentSection);
+    };
+
+    window.addEventListener('scroll', handleScrollSpy, { passive: true });
+    return () => window.removeEventListener('scroll', handleScrollSpy);
+  }, [activeTab]);
 
   // Track page transitions
   useEffect(() => {
@@ -350,8 +420,8 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleOpenAssessment = (industryName?: string, projectToEdit?: any) => {
-    // If editing an existing project, always allow
+  const handleOpenAssessment = async (industryName?: string, projectToEdit?: any) => {
+    // If editing an existing project, always allow viewing, editing & re-downloading
     if (projectToEdit) {
       setSelectedIndustryForAssessment(industryName || '');
       setEditingProjectForAssessment(projectToEdit);
@@ -360,15 +430,38 @@ export default function App() {
       return;
     }
 
-    // Check if user has already completed one free assessment
-    const storedLeads = currentUser?.email ? getStoredLeads(currentUser.email) : getStoredLeads();
-    const submittedAssessmentCount = storedLeads.filter((lead) => lead.assessmentCompleted === true).length;
-    const eligibility = canUserStartAssessment(currentUser?.email, submittedAssessmentCount);
+    // For logged-in users starting a NEW assessment, enforce the 1-free-assessment quota (local + authoritative server check)
+    if (currentUser?.email) {
+      const storedLeads = getStoredLeads(currentUser.email);
+      const submittedAssessmentCount = storedLeads.filter(
+        (lead) => lead.assessmentCompleted === true || lead.downloadedPDF === true
+      ).length;
+      const localEligibility = canUserStartAssessment(currentUser, submittedAssessmentCount);
 
-    if (!eligibility.allowed) {
-      setMembershipModalReason("You've completed your 1 free project assessment! Upgrade to Inisio Membership to evaluate additional greenfield projects.");
-      setMembershipModalOpen(true);
-      return;
+      if (!localEligibility.allowed) {
+        setMembershipModalReason(
+          localEligibility.reason ||
+            "You've already used your 1 free project assessment! You can view, edit, or re-download your existing project from your Dashboard, or upgrade to assess additional projects."
+        );
+        setMembershipModalOpen(true);
+        return;
+      }
+
+      const serverQuota = await fetchServerAssessmentQuota({
+        user: currentUser,
+        email: currentUser.email,
+        mobile: currentUser.phone,
+        localCompletedCount: submittedAssessmentCount,
+      });
+
+      if (!serverQuota.allowed) {
+        setMembershipModalReason(
+          serverQuota.reason ||
+            "You've already used your 1 free project assessment! You can view, edit, or re-download your existing project from your Dashboard, or upgrade to assess additional projects."
+        );
+        setMembershipModalOpen(true);
+        return;
+      }
     }
 
     setSelectedIndustryForAssessment(industryName || '');
@@ -381,8 +474,19 @@ export default function App() {
   const scrollToAnchor = (anchorId: string) => {
     const el = document.getElementById(anchorId);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const stickyOffset = 72;
+      const targetTop = Math.max(0, el.getBoundingClientRect().top + window.scrollY - stickyOffset);
+      window.scrollTo({ top: targetTop, behavior: 'smooth' });
     }
+  };
+
+  const HOME_ANCHOR_MAP: Record<string, string> = {
+    solutions: 'solutions',
+    'how-it-works': 'solutions',
+    industries: 'industries',
+    faqs: 'faqs',
+    faq: 'faqs',
+    contact: 'contact',
   };
 
   const handleSelectTab = (tab: string, blogSlug?: string) => {
@@ -391,17 +495,21 @@ export default function App() {
       return;
     }
 
-    // Single-page anchor navigation for home-only section links
-    const singlePageAnchors = ['solutions', 'faqs'];
-    if (singlePageAnchors.includes(tab)) {
+    // Single-page smooth-scroll navigation for Home page sections
+    const anchorTarget = HOME_ANCHOR_MAP[tab];
+    if (anchorTarget) {
       setEditingProjectForAssessment(null);
+      setActiveBlogSlug('');
+      setActiveBlogData(null);
+      setActiveHomeSection(anchorTarget);
+      window.history.pushState({}, '', `/#${anchorTarget}`);
       if (activeTab !== 'home') {
         setActiveTab('home');
-        window.history.pushState({}, '', `/#${tab}`);
-        setTimeout(() => scrollToAnchor(tab), 80);
+        requestAnimationFrame(() => {
+          setTimeout(() => scrollToAnchor(anchorTarget), 90);
+        });
       } else {
-        window.history.pushState({}, '', `/#${tab}`);
-        scrollToAnchor(tab);
+        scrollToAnchor(anchorTarget);
       }
       return;
     }
@@ -410,6 +518,7 @@ export default function App() {
       setActiveBlogSlug('');
       setActiveBlogData(null);
       setEditingProjectForAssessment(null);
+      setActiveHomeSection('');
       if (activeTab !== 'home') {
         setActiveTab('home');
       }
@@ -419,6 +528,7 @@ export default function App() {
     }
 
     setEditingProjectForAssessment(null);
+    setActiveHomeSection('');
     setActiveTab(tab);
 
     if (tab === 'blogs') {
@@ -441,9 +551,7 @@ export default function App() {
 
   const handleSelectIndustryFromNav = (industryName: string) => {
     setSelectedIndustryForAssessment(industryName);
-    setActiveTab('industries');
-    window.history.pushState({}, '', '/industries');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    handleSelectTab('industries');
   };
 
   const getDashboardTabForRole = (role?: string) => {
@@ -495,7 +603,7 @@ export default function App() {
   const isFullScreenMode = isDashboardView;
 
   return (
-    <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isFullScreenMode ? 'h-screen overflow-hidden' : 'justify-between overflow-x-hidden'}`}>
+    <div className={`min-h-screen w-full bg-white text-slate-900 font-sans antialiased selection:bg-blue-100 selection:text-blue-800 flex flex-col ${isFullScreenMode ? 'h-screen overflow-hidden' : 'justify-between overflow-x-clip'}`}>
       {/* Dynamic SEO Meta, Titles & Structured Data */}
       <SEOHead activeTab={activeTab} activeBlogSlug={activeBlogSlug} activeBlog={activeBlogData} />
 
@@ -504,6 +612,7 @@ export default function App() {
         {!isFullScreenMode && (
           <Navbar
             activeTab={activeTab}
+            activeSection={activeHomeSection}
             onSelectTab={handleSelectTab}
             onOpenAssessment={() => handleOpenAssessment()}
             onOpenConsultation={() => setConsultationModalOpen(true)}
@@ -516,7 +625,7 @@ export default function App() {
         )}
 
         {/* View Switcher */}
-        <main className={isFullScreenMode ? "w-full h-full overflow-y-auto p-0 m-0" : "transition-all duration-300 pt-2 sm:pt-4"}>
+        <main className={isFullScreenMode ? "w-full h-full overflow-y-auto p-0 m-0" : "transition-all duration-300 pt-16"}>
           {activeTab === 'home' && (
             <div className="animate-in fade-in duration-300 pt-0 font-sans space-y-0">
               <div id="hero">
@@ -532,37 +641,43 @@ export default function App() {
 
               {/* Solutions & How It Works Anchor Section */}
               <div id="solutions" className="scroll-mt-20">
-                <HowItWorks
-                  onOpenConsultation={() => setConsultationModalOpen(true)}
-                  onOpenAssessment={() => handleOpenAssessment()}
-                  onNavigateToContact={() => handleSelectTab('contact')}
-                />
-                <WhyChooseInisio
-                  onOpenAssessment={() => handleOpenAssessment()}
-                  onOpenConsultation={() => setConsultationModalOpen(true)}
-                />
-                <ProjectActionCards
-                  onNavigateToAbout={() => handleSelectTab('about')}
-                  onNavigateToContact={() => handleSelectTab('contact')}
-                />
+                <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                  <HowItWorks
+                    onOpenConsultation={() => setConsultationModalOpen(true)}
+                    onOpenAssessment={() => handleOpenAssessment()}
+                    onNavigateToContact={() => handleSelectTab('contact')}
+                  />
+                  <WhyChooseInisio
+                    onOpenAssessment={() => handleOpenAssessment()}
+                    onOpenConsultation={() => setConsultationModalOpen(true)}
+                  />
+                  <ProjectActionCards
+                    onNavigateToAbout={() => handleSelectTab('about')}
+                    onNavigateToContact={() => handleSelectTab('contact')}
+                  />
+                </Suspense>
               </div>
 
               {/* Industries & Sectors Anchor Section */}
               <div id="industries" className="scroll-mt-20">
-                <IndustriesSection
-                  onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
-                  onOpenAssessment={() => handleOpenAssessment()}
-                  onOpenConsultation={() => setConsultationModalOpen(true)}
-                  selectedIndustryName={selectedIndustryForAssessment}
-                />
+                <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                  <IndustriesSection
+                    onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
+                    onOpenAssessment={() => handleOpenAssessment()}
+                    onOpenConsultation={() => setConsultationModalOpen(true)}
+                    selectedIndustryName={selectedIndustryForAssessment}
+                  />
+                </Suspense>
               </div>
 
-              <Testimonials />
+              <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                <Testimonials />
+              </Suspense>
 
               {/* FAQs & Insights / Blogs Anchor Section */}
               <div id="faqs" className="scroll-mt-20">
-                <FAQSection onOpenConsultation={() => setConsultationModalOpen(true)} />
-                <Suspense fallback={<div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                  <FAQSection onOpenConsultation={() => setConsultationModalOpen(true)} />
                   <LatestBlogs
                     onOpenAssessment={() => handleOpenAssessment()}
                     onOpenConsultation={() => setConsultationModalOpen(true)}
@@ -573,14 +688,18 @@ export default function App() {
 
               {/* Contact Us Anchor Section */}
               <div id="contact" className="scroll-mt-20">
-                <ContactSection />
+                <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                  <ContactSection />
+                </Suspense>
               </div>
 
               {/* Final Conversion CTA */}
-              <FinalCTA
-                onOpenAssessment={() => handleOpenAssessment()}
-                onOpenConsultation={() => setConsultationModalOpen(true)}
-              />
+              <Suspense fallback={<div className="py-12 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                <FinalCTA
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                />
+              </Suspense>
             </div>
           )}
 
@@ -761,6 +880,11 @@ export default function App() {
                   onOpenAuth={handleOpenAuth}
                   onLoginSuccess={handleLoginSuccess}
                   onOpenConsultation={() => setConsultationModalOpen(true)}
+                  onOpenMembership={(reason) => {
+                    setMembershipModalReason(reason || '');
+                    setMembershipModalOpen(true);
+                  }}
+                  onNavigateHome={() => handleSelectTab('home')}
                   defaultIndustry={selectedIndustryForAssessment}
                   editingProject={editingProjectForAssessment}
                   onFinishEditing={() => {
@@ -779,36 +903,42 @@ export default function App() {
           )}
 
           {activeTab === 'how-it-works' && (
-            <div className="animate-in fade-in duration-300">
-              <HowItWorks
-                isStandalone
-                onOpenConsultation={() => setConsultationModalOpen(true)}
-                onOpenAssessment={() => handleOpenAssessment()}
-                onNavigateToContact={() => handleSelectTab('contact')}
-              />
-            </div>
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <HowItWorks
+                  isStandalone
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onNavigateToContact={() => handleSelectTab('contact')}
+                />
+              </div>
+            </Suspense>
           )}
 
           {activeTab === 'about' && (
-            <div className="animate-in fade-in duration-300">
-              <WhyChooseInisio
-                isStandalone
-                onOpenAssessment={() => handleOpenAssessment()}
-                onOpenConsultation={() => setConsultationModalOpen(true)}
-              />
-            </div>
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <WhyChooseInisio
+                  isStandalone
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                />
+              </div>
+            </Suspense>
           )}
 
           {activeTab === 'industries' && (
-            <div className="animate-in fade-in duration-300">
-              <IndustriesSection
-                isStandalone
-                onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
-                onOpenAssessment={() => handleOpenAssessment()}
-                onOpenConsultation={() => setConsultationModalOpen(true)}
-                selectedIndustryName={selectedIndustryForAssessment}
-              />
-            </div>
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <IndustriesSection
+                  isStandalone
+                  onSelectIndustryForAssessment={(indName) => handleOpenAssessment(indName)}
+                  onOpenAssessment={() => handleOpenAssessment()}
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                  selectedIndustryName={selectedIndustryForAssessment}
+                />
+              </div>
+            </Suspense>
           )}
 
           {activeTab === 'blogs' && (
@@ -838,15 +968,19 @@ export default function App() {
           )}
 
           {activeTab === 'contact' && (
-            <div className="animate-in fade-in duration-300">
-              <ContactSection isStandalone />
-            </div>
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <ContactSection isStandalone />
+              </div>
+            </Suspense>
           )}
 
           {activeTab === 'faq' && (
-            <div className="animate-in fade-in duration-300">
-              <FAQSection isStandalone onOpenConsultation={() => setConsultationModalOpen(true)} />
-            </div>
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <FAQSection isStandalone onOpenConsultation={() => setConsultationModalOpen(true)} />
+              </div>
+            </Suspense>
           )}
         </main>
       </div>

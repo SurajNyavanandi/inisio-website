@@ -28,6 +28,21 @@ import {
 } from 'lucide-react';
 import { resolveApiUrl } from '../utils/apiClient';
 import { isValidGmail, validateCaAdminEmail } from '../config/adminAccess';
+import {
+  scanBusinessCardLocally,
+  rotateImageDataUrl,
+  terminateCardOcrWorker,
+  OcrProgressUpdate,
+  CardOcrMode,
+} from '../utils/cardOcrScanner';
+import {
+  sanitizeIndianPhoneInput,
+  sanitizePersonNameInput,
+  validateEmailAddress,
+  validateIndianMobileNumber,
+  validatePersonName,
+  validateRequiredText,
+} from '../utils/validation';
 import { CaActivationModal } from './CaActivationModal';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
@@ -107,7 +122,22 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
     ocrRawText: '',
   });
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState<OcrProgressUpdate>({ status: '', progress: 0 });
+  const [ocrError, setOcrError] = useState<string>('');
+  const [ocrNotice, setOcrNotice] = useState<string>('');
+  const [scanMode, setScanMode] = useState<CardOcrMode>('auto');
+  const [alternatePhones, setAlternatePhones] = useState<string[]>([]);
+  const [showRawOcrText, setShowRawOcrText] = useState(false);
+  const [cardTouched, setCardTouched] = useState<Record<string, boolean>>({});
+  const [cardSubmitted, setCardSubmitted] = useState(false);
+  const [profileSubmitError, setProfileSubmitError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      void terminateCardOcrWorker();
+    };
+  }, []);
 
   const [createdProfile, setCreatedProfile] = useState<any>(null);
 
@@ -327,102 +357,257 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setCardFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        setCardImagePreview(result);
-        triggerOcrExtraction(result, file.name);
-      };
-      reader.readAsDataURL(file);
+    // Reset input value so re-selecting the same file always triggers onChange
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setOcrError('Please select a valid image file (JPG, PNG, or WEBP).');
+      return;
     }
+
+    setOcrError('');
+    setOcrNotice('');
+    setProfileSubmitError('');
+    setCardFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setOcrError('Could not read the selected image file. Please try another photo or fill the form manually.');
+    };
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (!result) {
+        setOcrError('Image could not be loaded. Please try again or fill the form manually.');
+        return;
+      }
+      setCardImagePreview(result);
+      setScanMode('auto');
+      setAlternatePhones([]);
+      triggerOcrExtraction(result, 'auto');
+    };
+    reader.readAsDataURL(file);
   };
 
-  const triggerOcrExtraction = async (imageData: string, fileName: string) => {
+  const triggerOcrExtraction = async (imageData: string, modeOverride?: CardOcrMode) => {
+    const activeMode = modeOverride ?? scanMode;
     setOcrLoading(true);
+    setOcrError('');
+    setOcrNotice('');
+    setProfileSubmitError('');
     setDuplicateWarning(null);
+    setCardTouched({});
+    setCardSubmitted(false);
+    setOcrProgress({ status: 'Preparing image...', progress: 5 });
+
     try {
-      const res = await fetch(resolveApiUrl('/ca-admin/cards/scan'), {
-        method: 'POST',
-        headers: getAuthHeaders(true),
-        body: JSON.stringify({
-          cardImage: imageData,
-          fileName,
-        }),
-      });
-      const data = await res.json();
-      if (data.success && data.data) {
-        const ocr = data.data;
-        setCardFormData({
-          name: ocr.name || '',
-          email: ocr.email || '',
-          phone: ocr.phone || '',
-          firmName: ocr.firmName || '',
-          membershipNumber: ocr.membershipNumber || '',
-          city: ocr.city || '',
-          state: ocr.state || '',
-          sourceTag: 'WOFA-2026',
-          notes: 'Captured via business card scanner.',
-          ocrRawText: ocr.ocrRawText || '',
-        });
-        setRegistrationStep(2);
-        checkDuplicates(ocr.email, ocr.phone, ocr.membershipNumber);
+      const parsed = await scanBusinessCardLocally(
+        imageData,
+        (update) => {
+          setOcrProgress(update);
+        },
+        { mode: activeMode }
+      );
+
+      const noteSegments: string[] = [];
+      if (parsed.designation) noteSegments.push(`Designation: ${parsed.designation}`);
+      if (parsed.website) noteSegments.push(`Website: ${parsed.website}`);
+      if (parsed.address) noteSegments.push(`Address: ${parsed.address}`);
+      const notesText =
+        noteSegments.length > 0
+          ? noteSegments.join(' | ')
+          : 'Captured via client-side business card OCR.';
+
+      const cleanEmail = parsed.email.trim().toLowerCase();
+      const cleanPhone = sanitizeIndianPhoneInput(parsed.phone);
+      const cleanAltPhones = (parsed.alternatePhones || [])
+        .map((p) => sanitizeIndianPhoneInput(p))
+        .filter((p) => p.length === 10 && p !== cleanPhone);
+      const cleanName = sanitizePersonNameInput(parsed.name).trim();
+      const cleanFirm = parsed.firmName.trim().slice(0, 100);
+      const cleanMbr = parsed.membershipNumber.trim().slice(0, 24);
+      const cleanCity = sanitizePersonNameInput(parsed.city, 60).trim();
+      const cleanState = sanitizePersonNameInput(parsed.state, 60).trim();
+
+      setAlternatePhones(cleanAltPhones);
+      setCardFormData((prev) => ({
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone,
+        firmName: cleanFirm,
+        membershipNumber: cleanMbr,
+        city: cleanCity,
+        state: cleanState,
+        sourceTag: prev.sourceTag || 'WOFA-2026',
+        notes: notesText,
+        ocrRawText: parsed.ocrRawText || '',
+      }));
+
+      const detectedCount = [cleanName, cleanFirm, cleanEmail, cleanPhone, cleanMbr, cleanCity].filter(Boolean).length;
+      if (detectedCount === 0) {
+        setOcrNotice(
+          'Could not read clear text from this photo. Try rotating the card, switching to High Contrast or Dark Card mode, or edit the fields manually below.'
+        );
+      } else if (parsed.source === 'qr') {
+        setOcrNotice('QR contact code detected and fields prefilled. Please review before saving.');
+      } else if (detectedCount < 3) {
+        setOcrNotice(
+          'Partial details extracted from the card. Try Rotate 90° or High Contrast / Dark Card re-scan if needed, or complete missing fields below.'
+        );
+      } else {
+        setOcrNotice(
+          `Extracted ${detectedCount} fields locally in your browser${
+            typeof parsed.confidence === 'number' ? ` (${Math.round(parsed.confidence)}% OCR confidence)` : ''
+          }. Review and edit before saving.`
+        );
       }
-    } catch (err) {
-      console.warn('OCR processing error:', err);
+
+      setRegistrationStep(2);
+      if (cleanEmail || cleanPhone || cleanMbr) {
+        checkDuplicates(cleanEmail, cleanPhone, cleanMbr);
+      }
+    } catch (err: any) {
+      console.warn('Client-side OCR processing error:', err);
+      setOcrError(
+        err?.message
+          ? `Card scan failed: ${err.message} You can retry with a clearer photo or fill the form manually.`
+          : 'Card OCR failed to read this image. Please retry with a clearer photo or enter details manually.'
+      );
     } finally {
       setOcrLoading(false);
     }
   };
 
+  const handleRotateAndRescan = async () => {
+    if (!cardImagePreview || ocrLoading) return;
+    try {
+      const rotated = await rotateImageDataUrl(cardImagePreview, 90);
+      setCardImagePreview(rotated);
+      await triggerOcrExtraction(rotated, scanMode);
+    } catch {
+      setOcrError('Could not rotate the card preview. Please upload the image again.');
+    }
+  };
+
+  const handleScanModeChange = async (nextMode: CardOcrMode) => {
+    setScanMode(nextMode);
+    if (cardImagePreview && !ocrLoading) {
+      await triggerOcrExtraction(cardImagePreview, nextMode);
+    }
+  };
+
   const checkDuplicates = async (emailToCheck: string, phoneToCheck: string, regToCheck?: string) => {
-    if (!emailToCheck && !phoneToCheck && !regToCheck) return;
+    const cleanEmail = (emailToCheck || '').trim().toLowerCase();
+    const cleanPhone = sanitizeIndianPhoneInput(phoneToCheck || '');
+    const cleanReg = (regToCheck || '').trim();
+    if (!cleanEmail && cleanPhone.length < 10 && !cleanReg) {
+      setDuplicateWarning(null);
+      return;
+    }
     try {
       const res = await fetch(resolveApiUrl('/ca-admin/cards/check-duplicate'), {
         method: 'POST',
         headers: getAuthHeaders(true),
         body: JSON.stringify({
-          email: emailToCheck,
-          phone: phoneToCheck,
-          membershipNumber: regToCheck,
+          email: cleanEmail,
+          phone: cleanPhone,
+          membershipNumber: cleanReg,
         }),
       });
       const data = await res.json();
       if (data.success && data.data?.duplicate) {
         setDuplicateWarning(
-          `Duplicate Warning: A CA profile with matching ${data.data.field} (${data.data.existingProfile?.name || emailToCheck}) is already registered in the system.`
+          `Duplicate Warning: A CA profile with matching ${data.data.field} (${data.data.existingProfile?.name || cleanEmail || cleanPhone}) is already registered in the system.`
         );
       } else {
         setDuplicateWarning(null);
       }
     } catch {
-      // ignore
+      // ignore network glitches during advisory duplicate check
     }
   };
 
+  const getCardFieldErrors = (data = cardFormData) => {
+    const errors: Record<string, string> = {};
+
+    const nameRes = validatePersonName(data.name, 'CA Full Name', true);
+    if (!nameRes.isValid && nameRes.error) errors.name = nameRes.error;
+
+    const firmRes = validateRequiredText(data.firmName, 'CA Firm Name', 100);
+    if (!firmRes.isValid && firmRes.error) errors.firmName = firmRes.error;
+
+    const emailRes = validateEmailAddress(data.email, true);
+    if (!emailRes.isValid && emailRes.error) errors.email = emailRes.error;
+
+    const phoneRes = validateIndianMobileNumber(data.phone);
+    if (!phoneRes.isValid && phoneRes.error) errors.phone = phoneRes.error;
+
+    const tagRes = validateRequiredText(data.sourceTag, 'Conference Source Tag', 40);
+    if (!tagRes.isValid && tagRes.error) errors.sourceTag = tagRes.error;
+
+    if (data.city.trim()) {
+      const cityRes = validatePersonName(data.city, 'City', false);
+      if (!cityRes.isValid && cityRes.error) errors.city = cityRes.error;
+    }
+
+    if (data.state.trim()) {
+      const stateRes = validatePersonName(data.state, 'State', false);
+      if (!stateRes.isValid && stateRes.error) errors.state = stateRes.error;
+    }
+
+    return errors;
+  };
+
+  const cardFieldErrors = getCardFieldErrors();
+  const shouldShowCardError = (field: string) =>
+    Boolean((cardTouched[field] || cardSubmitted) && cardFieldErrors[field]);
+
   const handleCreatePendingProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCardSubmitted(true);
+    setProfileSubmitError('');
+
+    const trimmedData = {
+      ...cardFormData,
+      name: sanitizePersonNameInput(cardFormData.name).trim(),
+      firmName: cardFormData.firmName.trim(),
+      email: cardFormData.email.trim().toLowerCase(),
+      phone: sanitizeIndianPhoneInput(cardFormData.phone),
+      membershipNumber: cardFormData.membershipNumber.trim().toUpperCase(),
+      sourceTag: cardFormData.sourceTag.trim(),
+      city: sanitizePersonNameInput(cardFormData.city, 60).trim(),
+      state: sanitizePersonNameInput(cardFormData.state, 60).trim(),
+      notes: cardFormData.notes.trim(),
+    };
+    setCardFormData(trimmedData);
+
+    const errors = getCardFieldErrors(trimmedData);
+    if (Object.keys(errors).length > 0) {
+      setProfileSubmitError('Please fix the highlighted fields before saving the CA profile.');
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch(resolveApiUrl('/ca-admin/profiles'), {
         method: 'POST',
         headers: getAuthHeaders(true),
         body: JSON.stringify({
-          ...cardFormData,
+          ...trimmedData,
           cardImageUrl: cardImagePreview,
         }),
       });
       const data = await res.json();
-      if (data.success && data.data) {
+      if (res.ok && data.success && data.data) {
         setCreatedProfile(data.data);
+        setProfileSubmitError('');
         setRegistrationStep(3);
         fetchDashboardData();
       } else {
-        setLoginError(data.message || 'Failed to create profile. Please check duplicates.');
+        setProfileSubmitError(data.message || 'Failed to create profile. Please check duplicates and try again.');
       }
     } catch (err: any) {
-      setLoginError(err.message || 'Error creating pending profile');
+      setProfileSubmitError(err?.message || 'Network error while creating pending profile.');
     } finally {
       setLoading(false);
     }
@@ -871,11 +1056,45 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       <img src={cardImagePreview} alt="Scanned Card Preview" className="max-h-56 object-contain" />
                     </div>
                     <div className="text-xs text-slate-500 font-medium">{cardFileName}</div>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        disabled={ocrLoading}
+                        onClick={handleRotateAndRescan}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                        <span>Rotate 90&deg;</span>
+                      </button>
+                      {(
+                        [
+                          { id: 'auto', label: 'Auto' },
+                          { id: 'high-contrast', label: 'High Contrast' },
+                          { id: 'dark-card', label: 'Dark Card' },
+                        ] as { id: CardOcrMode; label: string }[]
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={ocrLoading}
+                          onClick={() => handleScanModeChange(opt.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
+                            scanMode === opt.id
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         setCardImagePreview('');
                         setCardFileName('');
+                        setAlternatePhones([]);
+                        setScanMode('auto');
                       }}
                       className="text-xs text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
                     >
@@ -922,9 +1141,59 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                 )}
 
                 {ocrLoading && (
-                  <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 flex items-center justify-center gap-2 text-xs font-semibold">
-                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                    <span>Extracting card text via OCR parser...</span>
+                  <div className="max-w-md mx-auto p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 space-y-2 text-left">
+                    <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                      <span className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                        <span>{ocrProgress.status || 'Running browser OCR...'}</span>
+                      </span>
+                      <span className="tabular-nums text-blue-700">{ocrProgress.progress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-blue-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-600 transition-all duration-300"
+                        style={{ width: `${Math.max(5, ocrProgress.progress)}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-blue-700/80">
+                      Processed privately in your browser — image is never sent to external OCR services.
+                    </p>
+                  </div>
+                )}
+
+                {ocrError && (
+                  <div className="max-w-md mx-auto p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs text-left space-y-2">
+                    <div className="flex items-start gap-2 font-semibold">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <span>{ocrError}</span>
+                    </div>
+                    <div className="pl-6 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOcrError('');
+                          setRegistrationStep(2);
+                        }}
+                        className="text-xs font-semibold text-blue-700 hover:underline cursor-pointer"
+                      >
+                        Enter details manually &rarr;
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!ocrLoading && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOcrError('');
+                        setRegistrationStep(2);
+                      }}
+                      className="text-xs font-semibold text-slate-600 hover:text-blue-700 hover:underline cursor-pointer"
+                    >
+                      Or skip scan and enter CA details manually
+                    </button>
                   </div>
                 )}
               </DashboardCard>
@@ -932,23 +1201,109 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
 
             {registrationStep === 2 && (
               <DashboardCard className="p-6 sm:p-8 space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
                   <div>
                     <h2 className="text-lg font-bold text-slate-900 font-manrope">
                       Admin Review &amp; Field Verification
                     </h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Verify and correct OCR extracted details. The system checks in real time for duplicate email, phone, or ICAI registration numbers.
+                      Verify and edit extracted details before saving. All fields remain editable and are never auto-submitted.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setRegistrationStep(1)}
-                    className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer shrink-0 whitespace-nowrap"
-                  >
-                    Re-scan Card
-                  </button>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {cardFormData.ocrRawText && (
+                      <button
+                        type="button"
+                        onClick={() => setShowRawOcrText((prev) => !prev)}
+                        className="text-xs text-slate-600 hover:text-slate-900 font-semibold cursor-pointer whitespace-nowrap"
+                      >
+                        {showRawOcrText ? 'Hide Raw OCR' : 'View Raw OCR'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOcrError('');
+                        setRegistrationStep(1);
+                      }}
+                      className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer whitespace-nowrap"
+                    >
+                      Re-scan Card
+                    </button>
+                  </div>
                 </div>
+
+                {cardImagePreview && (
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img
+                        src={cardImagePreview}
+                        alt="Card thumbnail"
+                        className="w-16 h-11 rounded-lg object-cover border border-slate-200 bg-slate-900 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-800 truncate">
+                          {cardFileName || 'Uploaded Visiting Card'}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          {ocrLoading
+                            ? `${ocrProgress.status || 'Re-scanning...'} (${ocrProgress.progress}%)`
+                            : 'Need clearer digits? Rotate or switch OCR contrast mode.'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        disabled={ocrLoading}
+                        onClick={handleRotateAndRescan}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                      >
+                        <RotateCw className="w-3 h-3" />
+                        <span>Rotate 90&deg;</span>
+                      </button>
+                      {(
+                        [
+                          { id: 'auto', label: 'Auto' },
+                          { id: 'high-contrast', label: 'High Contrast' },
+                          { id: 'dark-card', label: 'Dark Card' },
+                        ] as { id: CardOcrMode; label: string }[]
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={ocrLoading}
+                          onClick={() => handleScanModeChange(opt.id)}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
+                            scanMode === opt.id
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {ocrNotice && (
+                  <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span>{ocrNotice}</span>
+                  </div>
+                )}
+
+                {showRawOcrText && cardFormData.ocrRawText && (
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-left space-y-1.5">
+                    <div className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                      Raw Extracted Text
+                    </div>
+                    <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-40 overflow-y-auto">
+                      {cardFormData.ocrRawText}
+                    </pre>
+                  </div>
+                )}
 
                 {duplicateWarning && (
                   <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-medium flex items-start gap-3">
@@ -960,17 +1315,40 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                   </div>
                 )}
 
-                <form onSubmit={handleCreatePendingProfile} className="space-y-4">
+                {profileSubmitError && (
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>{profileSubmitError}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleCreatePendingProfile} noValidate className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">CA Full Name *</label>
                       <input
                         type="text"
                         required
+                        maxLength={80}
                         value={cardFormData.name}
-                        onChange={(e) => setCardFormData({ ...cardFormData, name: e.target.value })}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                        onChange={(e) => {
+                          const sanitized = sanitizePersonNameInput(e.target.value, 80);
+                          setCardFormData((prev) => ({ ...prev, name: sanitized }));
+                        }}
+                        onBlur={() => {
+                          setCardFormData((prev) => ({ ...prev, name: prev.name.trim() }));
+                          setCardTouched((prev) => ({ ...prev, name: true }));
+                        }}
+                        placeholder="e.g. Rajesh Kulkarni"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                          shouldShowCardError('name')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('name') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.name}</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
@@ -978,10 +1356,23 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       <input
                         type="text"
                         required
+                        maxLength={100}
                         value={cardFormData.firmName}
-                        onChange={(e) => setCardFormData({ ...cardFormData, firmName: e.target.value })}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                        onChange={(e) => setCardFormData((prev) => ({ ...prev, firmName: e.target.value }))}
+                        onBlur={() => {
+                          setCardFormData((prev) => ({ ...prev, firmName: prev.firmName.trim() }));
+                          setCardTouched((prev) => ({ ...prev, firmName: true }));
+                        }}
+                        placeholder="e.g. Kulkarni & Associates"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                          shouldShowCardError('firmName')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('firmName') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.firmName}</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
@@ -989,37 +1380,105 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       <input
                         type="email"
                         required
+                        maxLength={120}
+                        autoComplete="email"
                         value={cardFormData.email}
-                        onChange={(e) => {
-                          setCardFormData({ ...cardFormData, email: e.target.value });
-                          checkDuplicates(e.target.value, cardFormData.phone, cardFormData.membershipNumber);
+                        onChange={(e) => setCardFormData((prev) => ({ ...prev, email: e.target.value }))}
+                        onBlur={() => {
+                          const normalizedEmail = cardFormData.email.trim().toLowerCase();
+                          setCardFormData((prev) => ({ ...prev, email: normalizedEmail }));
+                          setCardTouched((prev) => ({ ...prev, email: true }));
+                          if (validateEmailAddress(normalizedEmail).isValid) {
+                            checkDuplicates(normalizedEmail, cardFormData.phone, cardFormData.membershipNumber);
+                          }
                         }}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                        placeholder="ca.name@firm.in"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                          shouldShowCardError('email')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('email') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.email}</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">Mobile / Contact Phone *</label>
                       <input
-                        type="text"
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="tel"
                         required
                         value={cardFormData.phone}
                         onChange={(e) => {
-                          setCardFormData({ ...cardFormData, phone: e.target.value });
-                          checkDuplicates(cardFormData.email, e.target.value, cardFormData.membershipNumber);
+                          const cleaned = sanitizeIndianPhoneInput(e.target.value);
+                          setCardFormData((prev) => ({ ...prev, phone: cleaned }));
                         }}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                        onBlur={() => {
+                          const cleaned = sanitizeIndianPhoneInput(cardFormData.phone);
+                          setCardFormData((prev) => ({ ...prev, phone: cleaned }));
+                          setCardTouched((prev) => ({ ...prev, phone: true }));
+                          if (validateIndianMobileNumber(cleaned).isValid) {
+                            checkDuplicates(cardFormData.email, cleaned, cardFormData.membershipNumber);
+                          }
+                        }}
+                        placeholder="10-digit Indian mobile (e.g. 9876543210)"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white tabular-nums ${
+                          shouldShowCardError('phone')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('phone') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.phone}</p>
+                      )}
+                      {alternatePhones.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[11px] text-slate-500 font-medium">Also detected:</span>
+                          {alternatePhones.map((altPhone) => (
+                            <button
+                              key={altPhone}
+                              type="button"
+                              onClick={() => {
+                                const prevPhone = sanitizeIndianPhoneInput(cardFormData.phone);
+                                setCardFormData((prev) => ({ ...prev, phone: altPhone }));
+                                setAlternatePhones((prev) => {
+                                  const next = prev.filter((p) => p !== altPhone);
+                                  if (prevPhone.length === 10 && prevPhone !== altPhone && !next.includes(prevPhone)) {
+                                    next.push(prevPhone);
+                                  }
+                                  return next;
+                                });
+                                if (validateIndianMobileNumber(altPhone).isValid) {
+                                  checkDuplicates(cardFormData.email, altPhone, cardFormData.membershipNumber);
+                                }
+                              }}
+                              className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-[11px] font-semibold tabular-nums cursor-pointer transition-colors"
+                            >
+                              {altPhone}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">ICAI Registration / Membership No.</label>
                       <input
                         type="text"
+                        maxLength={24}
                         value={cardFormData.membershipNumber}
-                        onChange={(e) => {
-                          setCardFormData({ ...cardFormData, membershipNumber: e.target.value });
-                          checkDuplicates(cardFormData.email, cardFormData.phone, e.target.value);
+                        onChange={(e) =>
+                          setCardFormData((prev) => ({ ...prev, membershipNumber: e.target.value.toUpperCase() }))
+                        }
+                        onBlur={() => {
+                          const cleanReg = cardFormData.membershipNumber.trim().toUpperCase();
+                          setCardFormData((prev) => ({ ...prev, membershipNumber: cleanReg }));
+                          if (cleanReg) {
+                            checkDuplicates(cardFormData.email, cardFormData.phone, cleanReg);
+                          }
                         }}
                         placeholder="e.g. FCA-048291"
                         className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white font-mono"
@@ -1031,31 +1490,73 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       <input
                         type="text"
                         required
+                        maxLength={40}
                         value={cardFormData.sourceTag}
-                        onChange={(e) => setCardFormData({ ...cardFormData, sourceTag: e.target.value })}
+                        onChange={(e) => setCardFormData((prev) => ({ ...prev, sourceTag: e.target.value }))}
+                        onBlur={() => {
+                          setCardFormData((prev) => ({ ...prev, sourceTag: prev.sourceTag.trim() }));
+                          setCardTouched((prev) => ({ ...prev, sourceTag: true }));
+                        }}
                         placeholder="e.g. WOFA-2026, ICAI-SUMMIT-2026"
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white font-mono"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white font-mono ${
+                          shouldShowCardError('sourceTag')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('sourceTag') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.sourceTag}</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">City</label>
                       <input
                         type="text"
+                        maxLength={60}
                         value={cardFormData.city}
-                        onChange={(e) => setCardFormData({ ...cardFormData, city: e.target.value })}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                        onChange={(e) =>
+                          setCardFormData((prev) => ({ ...prev, city: sanitizePersonNameInput(e.target.value, 60) }))
+                        }
+                        onBlur={() => {
+                          setCardFormData((prev) => ({ ...prev, city: prev.city.trim() }));
+                          setCardTouched((prev) => ({ ...prev, city: true }));
+                        }}
+                        placeholder="e.g. Hyderabad"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                          shouldShowCardError('city')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('city') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.city}</p>
+                      )}
                     </div>
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">State</label>
                       <input
                         type="text"
+                        maxLength={60}
                         value={cardFormData.state}
-                        onChange={(e) => setCardFormData({ ...cardFormData, state: e.target.value })}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                        onChange={(e) =>
+                          setCardFormData((prev) => ({ ...prev, state: sanitizePersonNameInput(e.target.value, 60) }))
+                        }
+                        onBlur={() => {
+                          setCardFormData((prev) => ({ ...prev, state: prev.state.trim() }));
+                          setCardTouched((prev) => ({ ...prev, state: true }));
+                        }}
+                        placeholder="e.g. Telangana"
+                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                          shouldShowCardError('state')
+                            ? 'border-rose-400 focus:ring-rose-500'
+                            : 'border-slate-200 focus:ring-blue-600'
+                        }`}
                       />
+                      {shouldShowCardError('state') && (
+                        <p className="text-[11px] text-rose-600 font-medium">{cardFieldErrors.state}</p>
+                      )}
                     </div>
                   </div>
 
@@ -1185,6 +1686,8 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       setRegistrationStep(1);
                       setCardImagePreview('');
                       setCardFileName('');
+                      setAlternatePhones([]);
+                      setScanMode('auto');
                       setCreatedProfile(null);
                       setClaimDispatchResult(null);
                     }}

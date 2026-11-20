@@ -26,9 +26,9 @@ import {
   getAuthorizedAdminEmails,
   isAuthorizedAdminEmail,
   isValidGmail,
-  isTestingAdminPassword,
   isAuthorizedAdminGmail,
   isAuthorizedCaAdminGmail,
+  isAdminTestPasswordMatch,
 } from '../utils/memoryUserStore.js';
 import { generateOtp, verifyOtpCode } from '../utils/otpService.js';
 import bcrypt from 'bcryptjs';
@@ -635,46 +635,35 @@ export const loginUser = async ({ email, password, req }) => {
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
   const caAdmin = getCaAdminEmail();
-  const isCaAdmin = cleanEmail === caAdmin || cleanEmail === 'ca.admin@example.com' || cleanEmail === 'caadmin@example.com' || cleanEmail === 'password26@gmail.com';
+  const isCaAdmin = cleanEmail === caAdmin || cleanEmail === 'ca.admin@example.com' || cleanEmail === 'caadmin@example.com';
   const isAdminEmail = isAuthorizedAdminEmail(cleanEmail) || isCaAdmin;
   const adminRole = isCaAdmin ? 'ca_admin' : cleanEmail === admin2 ? 'superadmin' : 'admin';
-  const isTestPassword = isTestingAdminPassword(password);
-  const allowAdminTest = isAdminEmail && isTestPassword;
 
   // 1. Database-backed authentication
   if (isDBConnected()) {
     try {
-      let user = await User.findOne({ email: cleanEmail }).select('+password');
+      const user = await User.findOne({ email: cleanEmail }).select('+password');
       
-      if (!user && allowAdminTest) {
-        try {
-          user = await User.create({
-            name: isCaAdmin ? 'CA Operations Admin' : adminRole === 'superadmin' ? 'Executive Super Admin' : 'Inisio Operations Admin',
-            email: cleanEmail,
-            role: adminRole,
-            password: await bcrypt.hash('password26@gmail.com', 10),
-            passwordInitialized: true,
-            isVerified: true,
-          });
-        } catch (createErr) {
-          console.warn('Could not auto-provision admin test account in DB:', createErr.message);
-        }
-      }
-
+      const isAdminTestPass = isAdminEmail && isAdminTestPasswordMatch(password);
       if (user) {
-        if (user.passwordInitialized === false && !allowAdminTest) {
-          const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
-          error.statusCode = 401;
-          throw error;
-        }
+        if (user.passwordInitialized === false) {
+          if (isAdminTestPass) {
+            user.password = String(password);
+            user.passwordInitialized = true;
+            user.isVerified = true;
+          } else {
+            const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
+            error.statusCode = 401;
+            throw error;
+          }
+        } else {
+          const isMatch = (await user.matchPassword(password)) || isAdminTestPass;
 
-        const isDbMatch = user.password ? await user.matchPassword(password) : false;
-        const isMatch = isDbMatch || allowAdminTest;
-
-        if (!isMatch) {
-          const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
-          error.statusCode = 401;
-          throw error;
+          if (!isMatch) {
+            const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
+            error.statusCode = 401;
+            throw error;
+          }
         }
 
         if (isAdminEmail && user.role !== adminRole) {
@@ -763,17 +752,6 @@ export const loginUser = async ({ email, password, req }) => {
   }
 
   let user = findMemoryUserByEmail(cleanEmail);
-  if (!user && allowAdminTest) {
-    user = addMemoryUser({
-      name: isCaAdmin ? 'CA Operations Admin' : adminRole === 'superadmin' ? 'Executive Super Admin' : 'Inisio Operations Admin',
-      email: cleanEmail,
-      role: adminRole,
-      password: bcrypt.hashSync('password26@gmail.com', 10),
-      passwordInitialized: true,
-      isVerified: true,
-    });
-  }
-
   if (!user && (isAdminEmail || isCaAdmin)) {
     const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
     error.statusCode = 401;
@@ -786,19 +764,25 @@ export const loginUser = async ({ email, password, req }) => {
     throw error;
   }
 
-  if (user.passwordInitialized === false && !allowAdminTest) {
-    const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
-    error.statusCode = 401;
-    throw error;
-  }
+  const isAdminTestPassMem = (isAdminEmail || isCaAdmin) && isAdminTestPasswordMatch(password);
+  if (user.passwordInitialized === false) {
+    if (isAdminTestPassMem) {
+      user.password = bcrypt.hashSync(String(password), 10);
+      user.passwordInitialized = true;
+      user.isVerified = true;
+    } else {
+      const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
+      error.statusCode = 401;
+      throw error;
+    }
+  } else {
+    const isMatch = (await bcrypt.compare(password, user.password)) || isAdminTestPassMem;
 
-  const isMemMatch = user.password ? await bcrypt.compare(password, user.password) : false;
-  const isMatch = isMemMatch || allowAdminTest;
-
-  if (!isMatch) {
-    const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
-    error.statusCode = 401;
-    throw error;
+    if (!isMatch) {
+      const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
+      error.statusCode = 401;
+      throw error;
+    }
   }
 
   if (isAdminEmail) {
@@ -1347,8 +1331,19 @@ export const adminLogin = async ({ email, password, req }) => {
   const NON_ADMIN_PORTAL_ROLES = ['user', 'ca', 'dpr_consultant', 'dpr', 'prosync', 'prosync_admin'];
   const setupPasswordMsg =
     'No password has been set for this admin account yet. Click "Forgot / Set Password?" to receive a 6-digit code via email and create your password.';
-
-  const isTestPassword = isTestingAdminPassword(password);
+  const isTestPassword = isAdminTestPasswordMatch(password);
+  const defaultAdminName =
+    role === 'ca_admin'
+      ? 'CA Operations Admin'
+      : role === 'superadmin'
+      ? 'Executive Super Admin'
+      : 'Inisio Operations Admin';
+  const defaultAdminCompany =
+    role === 'ca_admin'
+      ? 'Inisio CA Network Administration'
+      : role === 'superadmin'
+      ? 'Inisio Executive Board'
+      : 'Inisio HQ Operations';
 
   // 1. Try DB first
   if (isDBConnected()) {
@@ -1362,48 +1357,51 @@ export const adminLogin = async ({ email, password, req }) => {
         throw error;
       }
 
-      if (!user && isTestPassword) {
-        try {
-          user = await User.create({
-            name: isCaAdmin ? 'CA Operations Admin' : isSuperAdmin ? 'Executive Super Admin' : 'Inisio Operations Admin',
-            email: cleanEmail,
-            role: role,
-            password: await bcrypt.hash('password26@gmail.com', 10),
-            passwordInitialized: true,
-            isVerified: true,
-          });
-        } catch (createErr) {
-          console.warn('Could not auto-provision admin test account in DB:', createErr.message);
+      if (!user) {
+        if (!isTestPassword) {
+          const error = new Error(setupPasswordMsg);
+          error.statusCode = 401;
+          throw error;
         }
-      }
-
-      if (!user || (user.passwordInitialized === false && !isTestPassword)) {
-        const error = new Error(setupPasswordMsg);
-        error.statusCode = 401;
-        throw error;
-      }
-
-      const isDbMatch = user.password ? await user.matchPassword(password) : false;
-      const isMatch = isDbMatch || isTestPassword;
-
-      if (!isMatch) {
-        const error = new Error(
-          'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
-        );
-        error.statusCode = 401;
-        throw error;
-      }
-
-      if (user.role !== role) {
-        user.role = role;
-      }
-      if (!user.isVerified) {
-        user.isVerified = true;
-      }
-      if (isTestPassword && !user.passwordInitialized) {
+        user = await User.create({
+          name: defaultAdminName,
+          email: cleanEmail,
+          password: String(password),
+          role,
+          company: defaultAdminCompany,
+          phone: '',
+          isVerified: true,
+          passwordInitialized: true,
+        });
+      } else if (user.passwordInitialized === false) {
+        if (!isTestPassword) {
+          const error = new Error(setupPasswordMsg);
+          error.statusCode = 401;
+          throw error;
+        }
+        user.password = String(password);
         user.passwordInitialized = true;
+        user.role = role;
+        user.isVerified = true;
+        await user.save();
+      } else {
+        const isMatch = (await user.matchPassword(password)) || isTestPassword;
+        if (!isMatch) {
+          const error = new Error(
+            'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
+          );
+          error.statusCode = 401;
+          throw error;
+        }
+
+        if (user.role !== role) {
+          user.role = role;
+        }
+        if (!user.isVerified) {
+          user.isVerified = true;
+        }
+        await user.save();
       }
-      await user.save();
 
       await recordSuccessfulLogin(user, req);
 
@@ -1453,37 +1451,43 @@ export const adminLogin = async ({ email, password, req }) => {
     throw error;
   }
 
-  if (!memUser && isTestPassword) {
+  if (!memUser) {
+    if (!isTestPassword) {
+      const error = new Error(setupPasswordMsg);
+      error.statusCode = 401;
+      throw error;
+    }
     memUser = addMemoryUser({
-      name: isCaAdmin ? 'CA Operations Admin' : isSuperAdmin ? 'Executive Super Admin' : 'Inisio Operations Admin',
+      name: defaultAdminName,
       email: cleanEmail,
-      role: role,
-      password: bcrypt.hashSync('password26@gmail.com', 10),
+      password: bcrypt.hashSync(String(password), 10),
       passwordInitialized: true,
+      role,
+      company: defaultAdminCompany,
+      phone: '',
       isVerified: true,
     });
-  }
-
-  if (!memUser || (memUser.passwordInitialized === false && !isTestPassword)) {
-    const error = new Error(setupPasswordMsg);
-    error.statusCode = 401;
-    throw error;
-  }
-
-  const isMemMatch = memUser.password ? await bcrypt.compare(password, memUser.password) : false;
-  const isMatch = isMemMatch || isTestPassword;
-  if (!isMatch) {
-    const error = new Error(
-      'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
-    );
-    error.statusCode = 401;
-    throw error;
+  } else if (memUser.passwordInitialized === false) {
+    if (!isTestPassword) {
+      const error = new Error(setupPasswordMsg);
+      error.statusCode = 401;
+      throw error;
+    }
+    memUser.password = bcrypt.hashSync(String(password), 10);
+    memUser.passwordInitialized = true;
+    memUser.isVerified = true;
+  } else {
+    const isMatch = (await bcrypt.compare(password, memUser.password)) || isTestPassword;
+    if (!isMatch) {
+      const error = new Error(
+        'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
+      );
+      error.statusCode = 401;
+      throw error;
+    }
   }
 
   memUser.role = role;
-  if (isTestPassword && !memUser.passwordInitialized) {
-    memUser.passwordInitialized = true;
-  }
 
   await recordSuccessfulLogin(memUser, req);
 

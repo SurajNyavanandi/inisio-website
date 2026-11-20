@@ -4,6 +4,12 @@ import { isDBConnected } from '../config/db.js';
 import config from '../config/env.js';
 import { escapeRegex } from '../middleware/validateMiddleware.js';
 import { sendDprStatusEmail } from '../utils/emailService.js';
+import {
+  checkUserAssessmentQuota,
+  createQuotaExceededError,
+  normalizeEmail,
+  normalizeMobile10,
+} from '../utils/assessmentQuota.js';
 
 let memoryProjects = [];
 
@@ -186,9 +192,21 @@ export const getProjects = async (filter = {}, userRole = 'admin', userId = null
     .slice(skip, skip + limit);
 };
 
-export const createProject = async (rawProjectData, userId = null, userRole = 'user') => {
+export const createProject = async (rawProjectData, userOrId = null, explicitRole = null) => {
+  const userObj =
+    userOrId && typeof userOrId === 'object' && (userOrId._id || userOrId.email || userOrId.role)
+      ? userOrId
+      : null;
+  const userId = userObj ? userObj._id : userOrId || null;
+  const userRole = explicitRole || userObj?.role || 'user';
+
   const projectData = { ...rawProjectData };
-  const isPrivileged = ['admin', 'admin1', 'admin2', 'admin3'].includes(userRole);
+  const clientProjectId = String(projectData.clientProjectId || '').trim();
+  const existingRecordId = String(projectData._id || projectData.id || '').trim();
+  delete projectData._id;
+  delete projectData.id;
+
+  const isPrivileged = ['admin', 'admin1', 'admin2', 'admin3', 'superadmin'].includes(userRole);
   if (!isPrivileged) {
     delete projectData.status;
     delete projectData.assignedCA;
@@ -197,6 +215,23 @@ export const createProject = async (rawProjectData, userId = null, userRole = 'u
     delete projectData.dprAssignedTo;
     delete projectData.consultationAssignedTo;
     delete projectData.isFunded;
+  }
+
+  const cleanEmail = normalizeEmail(userObj?.email || projectData.email);
+  const cleanMobile = projectData.mobile || userObj?.phone || '';
+
+  // Server-side 1-free-assessment quota enforcement
+  const quota = await checkUserAssessmentQuota({
+    user: userObj,
+    email: cleanEmail,
+    mobile: normalizeMobile10(cleanMobile),
+    clientProjectId,
+    existingRecordId,
+    memoryProjects,
+  });
+
+  if (!quota.allowed) {
+    throw createQuotaExceededError(quota);
   }
 
   const normalizedPayload = {
@@ -222,11 +257,30 @@ export const createProject = async (rawProjectData, userId = null, userRole = 'u
     documents: {},
     isFunded: false,
     ...projectData,
+    clientProjectId,
+    email: cleanEmail || projectData.email || '',
+    mobile: cleanMobile,
     userId: userId || null,
   };
 
   if (isDBConnected()) {
     try {
+      // Idempotent upsert by clientProjectId so re-saves never duplicate rows
+      if (clientProjectId) {
+        const existingProject = await Project.findOne({ clientProjectId });
+        if (existingProject) {
+          Object.assign(existingProject, {
+            ...projectData,
+            clientProjectId,
+            email: cleanEmail || existingProject.email,
+            mobile: cleanMobile || existingProject.mobile,
+            ...(userId ? { userId } : {}),
+          });
+          await existingProject.save();
+          return existingProject;
+        }
+      }
+
       const project = await Project.create(normalizedPayload);
 
       await notificationService.createNotification({
@@ -241,7 +295,27 @@ export const createProject = async (rawProjectData, userId = null, userRole = 'u
 
       return project;
     } catch (err) {
+      if (err.statusCode) throw err;
       console.warn('MongoDB create failed in createProject, using memory fallback:', err.message);
+    }
+  }
+
+  // Memory fallback idempotent upsert
+  if (clientProjectId) {
+    const existingIdx = memoryProjects.findIndex(
+      (p) => p.clientProjectId && p.clientProjectId === clientProjectId
+    );
+    if (existingIdx !== -1) {
+      memoryProjects[existingIdx] = {
+        ...memoryProjects[existingIdx],
+        ...projectData,
+        clientProjectId,
+        email: cleanEmail || memoryProjects[existingIdx].email,
+        mobile: cleanMobile || memoryProjects[existingIdx].mobile,
+        ...(userId ? { userId } : {}),
+        updatedAt: new Date(),
+      };
+      return memoryProjects[existingIdx];
     }
   }
 

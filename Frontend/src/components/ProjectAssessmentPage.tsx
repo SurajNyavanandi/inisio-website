@@ -2,7 +2,19 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { TeaserPDFData } from '../utils/pdfGenerator';
 import { getFeasibilityTerm, AuthUser, UserRole, PromoterDetail } from '../types';
 import { LocationDropdowns } from './LocationDropdowns';
-import { validateIndianMobileNumber } from '../utils/validation';
+import {
+  blockInvalidNumberKeys,
+  sanitizeDecimalInput,
+  sanitizeIfscInput,
+  sanitizeIndianPhoneInput,
+  sanitizePersonNameInput,
+  validateEmailAddress,
+  validateIfscCode,
+  validateIndianMobileNumber,
+  validatePersonName,
+  validatePositiveNumber,
+  validateRequiredText,
+} from '../utils/validation';
 import { DetailedRiskProfileForm, DetailedRiskProfileData } from './DetailedRiskProfileForm';
 import { calculateComprehensiveRiskScore } from '../utils/underwritingScorer';
 import { updateLeadRecord, saveLeadRecord } from '../utils/leadStore';
@@ -12,7 +24,17 @@ import { DPRRequestModal } from './DPRRequestModal';
 import { FundingRequestModal } from './FundingRequestModal';
 import { PromoterFundAssistanceModal } from './PromoterFundAssistanceModal';
 import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
-import { recordAssessmentCompletion } from '../utils/membershipStore';
+import {
+  recordAssessmentCompletion,
+  fetchServerAssessmentQuota,
+  AssessmentQuotaStatus,
+  generateClientProjectId,
+  saveAssessmentDraft,
+  loadAssessmentDraft,
+  migrateGuestDraftToUser,
+  clearAssessmentDraft,
+  FREE_ASSESSMENT_LIMIT_CODE,
+} from '../utils/membershipStore';
 import { UISelect } from './ui/Select';
 import { Input } from './ui/Input';
 import { Checkbox } from './ui/Checkbox';
@@ -71,6 +93,8 @@ interface ProjectAssessmentPageProps {
   editingProject?: any;
   onFinishEditing?: () => void;
   onNavigateToDashboard?: () => void;
+  onNavigateHome?: () => void;
+  onOpenMembership?: (reason?: string) => void;
   currentUser?: AuthUser | null;
   onOpenAuth?: (mode?: 'login' | 'signup' | 'forgot-password', prefill?: { email?: string; name?: string; phone?: string }) => void;
   onLoginSuccess?: (user: AuthUser) => void;
@@ -79,6 +103,7 @@ interface ProjectAssessmentPageProps {
 type AssessmentStage =
   | 1
   | 2
+  | 'auth_gate'
   | 3
   | 'feasibility_result'
   | 'collect_bankability'
@@ -92,6 +117,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   editingProject,
   onFinishEditing,
   onNavigateToDashboard,
+  onNavigateHome,
+  onOpenMembership,
   currentUser,
   onOpenAuth,
   onLoginSuccess
@@ -103,9 +130,18 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const [step2Error, setStep2Error] = useState('');
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('');
   const [isDataSaved, setIsDataSaved] = useState(false);
-  const [createdProjectId, setCreatedProjectId] = useState<string | null>(editingProject?.id || null);
-  const createdProjectIdRef = useRef<string | null>(editingProject?.id || null);
+  const [createdProjectId, setCreatedProjectId] = useState<string | null>(editingProject?.id || editingProject?._id || null);
+  const createdProjectIdRef = useRef<string | null>(editingProject?.id || editingProject?._id || null);
+  const clientProjectIdRef = useRef<string>(
+    editingProject?.clientProjectId || editingProject?.id || editingProject?._id || generateClientProjectId()
+  );
+  const draftHydratedRef = useRef<boolean>(false);
   const isSavingRef = useRef<boolean>(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+  const [quotaStatus, setQuotaStatus] = useState<AssessmentQuotaStatus | null>(null);
+  const [isCheckingQuota, setIsCheckingQuota] = useState(false);
+  const [membershipModalReason, setMembershipModalReason] = useState('');
   const [isDownloadingDocx, setIsDownloadingDocx] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isDownloadingDprPdf, setIsDownloadingDprPdf] = useState(false);
@@ -120,6 +156,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     switch (s) {
       case 1: return 1;
       case 2: return 2;
+      case 'auth_gate':
       case 3: return 3;
       case 'feasibility_result':
       case 'collect_bankability':
@@ -192,7 +229,77 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     setMaxStepReached(prev => Math.max(prev, idx));
   }, [stage]);
 
+  // Authentication State
+  const [activeUser, setActiveUser] = useState<AuthUser | null>(() => {
+    if (currentUser) return currentUser;
+    try {
+      const stored = localStorage.getItem('inisio_active_user');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return null;
+  });
+  const [authNotice, setAuthNotice] = useState('');
+
+  // Inline Quick Auth & OTP Verification State (used at Step 3 Gate and Final Step)
+  const [inlineAuthMode, setInlineAuthMode] = useState<'login' | 'signup'>('signup');
+  const [inlineEmail, setInlineEmail] = useState('');
+  const [inlinePassword, setInlinePassword] = useState('');
+  const [inlineName, setInlineName] = useState('');
+  const [inlinePhone, setInlinePhone] = useState('');
+  const [inlineAuthLoading, setInlineAuthLoading] = useState(false);
+  const [inlineAuthError, setInlineAuthError] = useState('');
+  const [inlineAuthSuccess, setInlineAuthSuccess] = useState('');
+  const [showInlinePassword, setShowInlinePassword] = useState(false);
+  const [inlineNeedsOtp, setInlineNeedsOtp] = useState(false);
+  const [inlineOtp, setInlineOtp] = useState('');
+  const [inlinePendingEmail, setInlinePendingEmail] = useState('');
+  const [inlineDevOtpHint, setInlineDevOtpHint] = useState('');
+  const [inlineOtpResending, setInlineOtpResending] = useState(false);
+  const inlineAuthPrefilledRef = useRef(false);
+
+  const isQuotaBlocked = Boolean(
+    !editingProject &&
+      activeUser &&
+      quotaStatus &&
+      !quotaStatus.allowed &&
+      !quotaStatus.isUpdatingExisting
+  );
+
+  const isStepLockedForGuest = (stepId: number): boolean =>
+    Boolean(!editingProject && !activeUser && stepId >= 3);
+
+  const triggerMembershipUpgrade = (reason?: string) => {
+    const finalReason =
+      reason ||
+      quotaStatus?.reason ||
+      'You have already used your 1 free project assessment. Upgrade your membership plan to assess additional projects.';
+    if (onOpenMembership) {
+      onOpenMembership(finalReason);
+    } else {
+      setMembershipModalReason(finalReason);
+      setIsMembershipModalOpen(true);
+    }
+  };
+
   const handleStepSelect = (stepId: number) => {
+    if (isQuotaBlocked && stepId >= 3) {
+      showToast('Your 1 free project assessment is already used. View your existing project in Dashboard or upgrade to assess a new project.', {
+        type: 'warning',
+        title: 'Free Assessment Limit Reached',
+      });
+      return;
+    }
+
+    if (isStepLockedForGuest(stepId)) {
+      if (!inlineEmail && formData.email) setInlineEmail(formData.email.trim().toLowerCase());
+      if (!inlineName && formData.fullName) setInlineName(sanitizePersonNameInput(formData.fullName, 80).trim());
+      if (!inlinePhone && formData.mobile) setInlinePhone(sanitizeIndianPhoneInput(formData.mobile));
+      setAuthNotice(`Create a free account or sign in to unlock Step ${stepId} and save your progress.`);
+      setStage('auth_gate');
+      scrollToFormTop();
+      return;
+    }
+
     if (stepId === 1) setStage(1);
     else if (stepId === 2) setStage(2);
     else if (stepId === 3) setStage(3);
@@ -209,6 +316,11 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   };
 
   const handlePreviousStep = () => {
+    if (stage === 'auth_gate') {
+      setStage(2);
+      scrollToFormTop();
+      return;
+    }
     if (currentStep === 2) setStage(1);
     else if (currentStep === 3) setStage(2);
     else if (currentStep === 4) setStage(3);
@@ -221,44 +333,64 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   };
 
   const handleGoBack = () => {
+    if (stage === 'auth_gate') {
+      setStage(2);
+      scrollToFormTop();
+      return;
+    }
     if (currentStep > 1) {
       handlePreviousStep();
+      return;
+    }
+    // Leaving Step 1: flush current draft so returning restores exact progress
+    if (!editingProject && !isDataSaved) {
+      saveAssessmentDraft(
+        {
+          clientProjectId: clientProjectIdRef.current,
+          formData,
+          financials,
+          riskProfileData,
+          numPromoters,
+          additionalPromoters,
+          stage,
+          completedSteps,
+        },
+        activeUser?.email
+      );
+    }
+    if (editingProject && onFinishEditing) {
+      onFinishEditing();
+    } else if (activeUser && onNavigateToDashboard) {
+      onNavigateToDashboard();
+    } else if (onNavigateHome) {
+      onNavigateHome();
     } else if (window.history.length > 1) {
       window.history.back();
     } else if (onNavigateToDashboard) {
       onNavigateToDashboard();
-    } else if (onFinishEditing) {
-      onFinishEditing();
     }
   };
-
-  // Authentication State
-  const [activeUser, setActiveUser] = useState<AuthUser | null>(() => {
-    if (currentUser) return currentUser;
-    try {
-      const stored = localStorage.getItem('inisio_active_user');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return null;
-  });
-  const [authNotice, setAuthNotice] = useState('');
-
-  // Inline Quick Auth Form State on Final Step
-  const [inlineAuthMode, setInlineAuthMode] = useState<'login' | 'signup'>('login');
-  const [inlineEmail, setInlineEmail] = useState('');
-  const [inlinePassword, setInlinePassword] = useState('');
-  const [inlineName, setInlineName] = useState('');
-  const [inlinePhone, setInlinePhone] = useState('');
-  const [inlineAuthLoading, setInlineAuthLoading] = useState(false);
-  const [inlineAuthError, setInlineAuthError] = useState('');
-  const [inlineAuthSuccess, setInlineAuthSuccess] = useState('');
-  const [showInlinePassword, setShowInlinePassword] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
       setActiveUser(currentUser);
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    if ((stage === 'auth_gate' || stage === 'final_assessment_results') && !activeUser && !inlineAuthPrefilledRef.current) {
+      inlineAuthPrefilledRef.current = true;
+      if (!inlineEmail && formData.email) {
+        setInlineEmail(formData.email.trim().toLowerCase());
+      }
+      if (!inlineName && formData.fullName) {
+        setInlineName(sanitizePersonNameInput(formData.fullName, 80).trim());
+      }
+      if (!inlinePhone && formData.mobile) {
+        setInlinePhone(sanitizeIndianPhoneInput(formData.mobile));
+      }
+    }
+  }, [stage, activeUser]);
 
   // Stage 2 Inputs: Risk Profile Data for Bankability Rating
   const [riskProfileData, setRiskProfileData] = useState<DetailedRiskProfileData | null>(null);
@@ -317,7 +449,43 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     qualification: string;
   }>>([]);
 
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const [submittedSteps, setSubmittedSteps] = useState<Record<number, boolean>>({});
+
+  const markFieldTouched = (field: string) => {
+    setTouchedFields((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+  };
+
   const mobileValidation = validateIndianMobileNumber(formData.mobile);
+  const emailValidation = validateEmailAddress(formData.email, true);
+  const fullNameValidation = validatePersonName(formData.fullName, 'Full name', true);
+  const projectNameValidation = validateRequiredText(formData.projectName, 'Project name', 120);
+  const branchLocationValidation = validateRequiredText(formData.branchLocation, 'Preferred branch location', 120);
+  const ifscValidation = validateIfscCode(formData.bankIfscCode, false);
+  const totalCostValidation = validatePositiveNumber(formData.totalCostCr, 'Total project cost', {
+    min: 0,
+    max: 100000,
+    allowZero: false,
+    required: true,
+  });
+  const promoterContribValidation = (() => {
+    const base = validatePositiveNumber(formData.promoterContribCr, 'Promoter equity', {
+      min: 0,
+      max: 100000,
+      allowZero: true,
+      required: true,
+    });
+    if (!base.isValid) return base;
+    const costVal = parseFloat(formData.totalCostCr);
+    const contribVal = parseFloat(formData.promoterContribCr);
+    if (Number.isFinite(costVal) && costVal > 0 && Number.isFinite(contribVal) && contribVal > costVal) {
+      return { isValid: false, error: 'Promoter equity cannot exceed Total Project Cost' };
+    }
+    return { isValid: true };
+  })();
+
+  const shouldShowError = (field: string, stepNum: number, isValid: boolean) =>
+    Boolean((touchedFields[field] || submittedSteps[stepNum]) && !isValid);
 
   // Helper to build full promoters list for persistence
   const buildPromotersList = (): PromoterDetail[] => {
@@ -521,10 +689,16 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           totalMeansOfFinance: projCost > 0 ? projCost.toFixed(2) : ''
         });
       }
+      if (editingProject.clientProjectId) {
+        clientProjectIdRef.current = String(editingProject.clientProjectId);
+      } else if (editingProject.id || editingProject._id) {
+        clientProjectIdRef.current = String(editingProject.id || editingProject._id);
+      }
+      draftHydratedRef.current = true;
     } else if (defaultIndustry) {
       setFormData((prev) => ({
         ...prev,
-        industry: defaultIndustry,
+        industry: prev.industry || defaultIndustry,
         fullName: prev.fullName || activeUser?.name || '',
         mobile: prev.mobile || activeUser?.phone || '',
         email: prev.email || activeUser?.email || ''
@@ -532,56 +706,197 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
   }, [editingProject?.id, defaultIndustry]);
 
-  // Auto-fill logged in user info if available and not editing
-  React.useEffect(() => {
-    if (editingProject) return;
+  // Verify authoritative server-side 1-free-assessment quota for authenticated users
+  const verifyUserQuota = async (userToCheck: AuthUser | null, autoAdvanceFromGate = false) => {
+    if (editingProject || !userToCheck) {
+      setQuotaStatus(null);
+      return { allowed: true } as AssessmentQuotaStatus;
+    }
+    setIsCheckingQuota(true);
     try {
-      const stored = localStorage.getItem('inisio_active_user');
-      if (stored) {
-        const u = JSON.parse(stored);
-        if (u.email) {
-          setFormData(prev => ({
-            ...prev,
-            fullName: prev.fullName || u.name || '',
-            mobile: prev.mobile || u.phone || '',
-            email: prev.email || u.email || ''
-          }));
-        }
+      const result = await fetchServerAssessmentQuota({
+        user: userToCheck,
+        email: userToCheck.email || formData.email,
+        mobile: userToCheck.phone || formData.mobile,
+        clientProjectId: clientProjectIdRef.current,
+        projectId: createdProjectIdRef.current || undefined,
+      });
+      setQuotaStatus(result);
+      if (result.allowed && autoAdvanceFromGate) {
+        setStage(3);
+        scrollToFormTop();
       }
-    } catch (e) {}
-  }, [editingProject?.id]);
+      return result;
+    } finally {
+      setIsCheckingQuota(false);
+    }
+  };
 
-  // Restore in-progress assessment draft from sessionStorage if not editing an existing project
+  // Restore saved localStorage draft on mount (when not editing an existing project)
   React.useEffect(() => {
-    if (editingProject) return;
-    try {
-      const rawDraft = sessionStorage.getItem('inisio_assessment_draft');
-      if (rawDraft) {
-        const draft = JSON.parse(rawDraft);
-        if (draft.formData) setFormData(prev => ({ ...prev, ...draft.formData }));
-        if (draft.financials) setFinancials(prev => ({ ...prev, ...draft.financials }));
-        if (draft.riskProfileData) setRiskProfileData(draft.riskProfileData);
-        if (draft.stage && draft.stage !== 'final_assessment_results') setStage(draft.stage);
-        if (Array.isArray(draft.completedSteps)) setCompletedSteps(draft.completedSteps);
+    if (editingProject) {
+      draftHydratedRef.current = true;
+      return;
+    }
+    const draft = loadAssessmentDraft(activeUser?.email);
+    if (draft) {
+      if (draft.clientProjectId) {
+        clientProjectIdRef.current = draft.clientProjectId;
       }
-    } catch (e) {}
-  }, [editingProject]);
-
-  // Persist draft in sessionStorage so work is not lost on reload
-  React.useEffect(() => {
-    if (editingProject || isDataSaved) return;
-    try {
-      if (formData.projectName || formData.totalCostCr || formData.industry) {
-        sessionStorage.setItem('inisio_assessment_draft', JSON.stringify({
-          formData,
-          financials,
-          riskProfileData,
-          stage,
-          completedSteps
+      if (draft.formData) {
+        setFormData((prev) => ({
+          ...prev,
+          ...draft.formData,
+          industry: draft.formData.industry || defaultIndustry || prev.industry,
+          fullName: draft.formData.fullName || activeUser?.name || prev.fullName,
+          mobile: draft.formData.mobile || activeUser?.phone || prev.mobile,
+          email: draft.formData.email || activeUser?.email || prev.email,
         }));
       }
-    } catch (e) {}
-  }, [formData, financials, riskProfileData, stage, completedSteps, editingProject, isDataSaved]);
+      if (draft.financials) {
+        setFinancials((prev) => ({ ...prev, ...draft.financials }));
+      }
+      if (draft.riskProfileData) {
+        setRiskProfileData(draft.riskProfileData);
+      }
+      if (typeof draft.numPromoters === 'number' && draft.numPromoters >= 1) {
+        setNumPromoters(draft.numPromoters);
+      }
+      if (Array.isArray(draft.additionalPromoters)) {
+        setAdditionalPromoters(draft.additionalPromoters);
+      }
+      if (Array.isArray(draft.completedSteps)) {
+        setCompletedSteps(draft.completedSteps);
+      }
+      if (draft.stage && draft.stage !== 'final_assessment_results') {
+        const restoredIdx = getStepIndex(draft.stage as AssessmentStage);
+        if (!activeUser && restoredIdx >= 3) {
+          setStage('auth_gate');
+        } else {
+          setStage(draft.stage as AssessmentStage);
+        }
+      }
+      setDraftSavedAt(draft.updatedAt || null);
+      setHasRestoredDraft(true);
+    }
+    draftHydratedRef.current = true;
+  }, [editingProject?.id]);
+
+  // Sync user identity, migrate guest draft, and verify server quota whenever user logs in/out
+  React.useEffect(() => {
+    if (editingProject) return;
+    if (!activeUser) {
+      setQuotaStatus(null);
+      return;
+    }
+
+    migrateGuestDraftToUser(activeUser.email);
+
+    setFormData((prev) => ({
+      ...prev,
+      fullName: prev.fullName || activeUser.name || '',
+      mobile: prev.mobile || activeUser.phone || '',
+      email: prev.email || activeUser.email || '',
+    }));
+
+    verifyUserQuota(activeUser, stage === 'auth_gate');
+  }, [activeUser?.email, editingProject?.id]);
+
+  // Auto-save form draft to localStorage on every change so Back/Return/Refresh never loses work
+  React.useEffect(() => {
+    if (editingProject || isDataSaved || !draftHydratedRef.current) return;
+    const hasData = Boolean(
+      formData.projectName?.trim() ||
+        formData.industry ||
+        formData.location?.trim() ||
+        formData.totalCostCr ||
+        formData.promoterContribCr ||
+        formData.fullName?.trim() ||
+        formData.mobile?.trim() ||
+        formData.email?.trim()
+    );
+    if (!hasData) return;
+
+    saveAssessmentDraft(
+      {
+        clientProjectId: clientProjectIdRef.current,
+        formData,
+        financials,
+        riskProfileData,
+        numPromoters,
+        additionalPromoters,
+        stage,
+        completedSteps,
+      },
+      activeUser?.email
+    );
+    setDraftSavedAt(new Date().toISOString());
+  }, [
+    formData,
+    financials,
+    riskProfileData,
+    numPromoters,
+    additionalPromoters,
+    stage,
+    completedSteps,
+    editingProject,
+    isDataSaved,
+    activeUser?.email,
+  ]);
+
+  const handleResetDraft = () => {
+    clearAssessmentDraft(activeUser?.email);
+    clientProjectIdRef.current = generateClientProjectId();
+    createdProjectIdRef.current = null;
+    setCreatedProjectId(null);
+    setIsDataSaved(false);
+    setHasRestoredDraft(false);
+    setDraftSavedAt(null);
+    setCompletedSteps([]);
+    setSubmittedSteps({});
+    setTouchedFields({});
+    setStep2Error('');
+    setSaveSuccessMessage('');
+    setRiskProfileData(null);
+    setNumPromoters(1);
+    setAdditionalPromoters([]);
+    setFinancials({
+      consultancyCostCr: '',
+      machineryCostCr: '',
+      civilCostCr: '',
+      otherCostsCr: '',
+      termLoanCr: '',
+      promoterContributionCr: '',
+      otherFinanceCr: '',
+      totalProjectCost: '',
+      totalMeansOfFinance: '',
+    });
+    setFormData({
+      projectName: '',
+      industry: defaultIndustry || '',
+      location: '',
+      totalCostCr: '',
+      promoterContribCr: '',
+      loanRequiredCr: '',
+      landStatus: '',
+      collateralStatus: '',
+      promoterExp: '',
+      description: '',
+      fullName: activeUser?.name || '',
+      mobile: activeUser?.phone || '',
+      email: activeUser?.email || '',
+      numPromoters: 1,
+      bankName: '',
+      branchLocation: '',
+      bankIfscCode: '',
+      bankAppRefNumber: '',
+      promoterContributionAvailable: 'Yes',
+      promoterFundAssistanceRequest: undefined,
+    });
+    setStage(1);
+    scrollToFormTop();
+    showToast('Assessment draft cleared. You can start fresh from Step 1.', { type: 'info' });
+  };
 
   // Calculate numbers dynamically
   const cost = parseFloat(formData.totalCostCr) || 0;
@@ -592,14 +907,35 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+
+    let nextValue = value;
+    if (name === 'totalCostCr' || name === 'promoterContribCr') {
+      nextValue = sanitizeDecimalInput(value, 2);
+    } else if (name === 'mobile') {
+      nextValue = sanitizeIndianPhoneInput(value);
+    } else if (name === 'fullName') {
+      nextValue = sanitizePersonNameInput(value, 80);
+    } else if (name === 'bankIfscCode') {
+      nextValue = sanitizeIfscInput(value);
+    } else if (name === 'projectName' || name === 'branchLocation') {
+      nextValue = value.slice(0, 120);
+    } else if (name === 'bankAppRefNumber') {
+      nextValue = value.slice(0, 40);
+    } else if (name === 'description') {
+      nextValue = value.slice(0, 600);
+    }
+
     setFormData((prev) => {
-      const updated = { ...prev, [name]: value };
+      const updated = { ...prev, [name]: nextValue };
       if (name === 'totalCostCr' || name === 'promoterContribCr') {
         setStep2Error('');
-        const updatedCost = parseFloat(name === 'totalCostCr' ? value : prev.totalCostCr) || 0;
-        const updatedContrib = parseFloat(name === 'promoterContribCr' ? value : prev.promoterContribCr) || 0;
-        if (updatedCost > 0) {
-          updated.loanRequiredCr = Math.max(0, updatedCost - updatedContrib).toFixed(2);
+        const rawCost = name === 'totalCostCr' ? nextValue : prev.totalCostCr;
+        const rawContrib = name === 'promoterContribCr' ? nextValue : prev.promoterContribCr;
+        const updatedCost = parseFloat(rawCost);
+        const updatedContrib = parseFloat(rawContrib);
+        if (Number.isFinite(updatedCost) && updatedCost > 0) {
+          const safeContrib = Number.isFinite(updatedContrib) && updatedContrib >= 0 ? updatedContrib : 0;
+          updated.loanRequiredCr = Math.max(0, updatedCost - safeContrib).toFixed(2);
         } else {
           updated.loanRequiredCr = '';
         }
@@ -613,7 +949,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     setStep2Error('');
 
     if (stage === 1) {
-      if (!formData.projectName.trim() || !formData.industry || !formData.location.trim()) {
+      setSubmittedSteps((prev) => ({ ...prev, 1: true }));
+      const trimmedProjectName = formData.projectName.trim();
+      if (trimmedProjectName !== formData.projectName) {
+        setFormData((prev) => ({ ...prev, projectName: trimmedProjectName }));
+      }
+      if (!trimmedProjectName || !formData.industry || !formData.location.trim()) {
         showToast('Please enter your Project Name, select Industry, and choose Location to continue.', { type: 'warning', title: 'Missing Information' });
         return;
       }
@@ -621,12 +962,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       setStage(2);
       scrollToFormTop();
     } else if (stage === 2) {
-      if (!formData.totalCostCr || parseFloat(formData.totalCostCr) <= 0) {
-        setStep2Error('Please enter a valid Total Project Cost in ₹ Crores.');
+      setSubmittedSteps((prev) => ({ ...prev, 2: true }));
+      if (!totalCostValidation.isValid) {
+        setStep2Error(totalCostValidation.error || 'Please enter a valid Total Project Cost in ₹ Crores.');
         return;
       }
-      if (formData.promoterContribCr === '' || parseFloat(formData.promoterContribCr) < 0) {
-        setStep2Error('Please enter how much money you have for the project in your hand (Promoter Equity).');
+      if (!promoterContribValidation.isValid) {
+        setStep2Error(promoterContribValidation.error || 'Please enter a valid Promoter Equity amount in ₹ Crores.');
         return;
       }
       if (!isEquityEligible) {
@@ -635,40 +977,78 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       }
       markStepComplete(2);
 
-      // Automatically sync Means of Finance and benchmark Capex from Step 2 inputs
+      // Automatically sync Means of Finance from Step 2 inputs (without fabricating capex breakup unless entered)
       const currentCost = parseFloat(formData.totalCostCr) || 0;
       const currentContrib = parseFloat(formData.promoterContribCr) || 0;
       const currentLoan = Math.max(0, currentCost - currentContrib);
 
-      const benchmarkFin = reconcileProjectFinancials({
-        totalCostCr: currentCost,
-        loanRequiredCr: currentLoan,
-        promoterContribCr: currentContrib,
-        consultancyCostCr: financials.consultancyCostCr,
-        machineryCostCr: financials.machineryCostCr,
-        civilCostCr: financials.civilCostCr,
-        otherCostsCr: financials.otherCostsCr,
-        termLoanCr: financials.termLoanCr,
-        promoterContributionCr: financials.promoterContributionCr,
-        otherFinanceCr: financials.otherFinanceCr
-      });
-
-      setFinancials(prev => ({
+      setFinancials((prev) => ({
         ...prev,
-        termLoanCr: currentLoan > 0 ? currentLoan.toFixed(2) : (prev.termLoanCr || benchmarkFin.termLoanFormatted),
-        promoterContributionCr: currentContrib > 0 ? currentContrib.toFixed(2) : (prev.promoterContributionCr || benchmarkFin.promoterContributionFormatted),
+        termLoanCr: prev.termLoanCr !== '' ? prev.termLoanCr : (currentLoan > 0 ? currentLoan.toFixed(2) : ''),
+        promoterContributionCr: prev.promoterContributionCr !== '' ? prev.promoterContributionCr : (currentContrib > 0 ? currentContrib.toFixed(2) : ''),
         otherFinanceCr: prev.otherFinanceCr || '0.00',
-        consultancyCostCr: prev.consultancyCostCr || benchmarkFin.consultancyFormatted,
-        machineryCostCr: prev.machineryCostCr || benchmarkFin.machineryFormatted,
-        civilCostCr: prev.civilCostCr || benchmarkFin.civilFormatted,
-        otherCostsCr: prev.otherCostsCr || benchmarkFin.otherCostsFormatted,
-        totalProjectCost: currentCost > 0 ? currentCost.toFixed(2) : benchmarkFin.totalCostFormatted,
-        totalMeansOfFinance: currentCost > 0 ? currentCost.toFixed(2) : benchmarkFin.totalFinanceFormatted
+        totalProjectCost: currentCost > 0 ? currentCost.toFixed(2) : prev.totalProjectCost,
+        totalMeansOfFinance: currentCost > 0 ? currentCost.toFixed(2) : prev.totalMeansOfFinance
       }));
+
+      // Progressive Step-Gate: lock Step 3+ until the user has a verified account
+      if (!activeUser && !editingProject) {
+        if (!inlineEmail && formData.email) setInlineEmail(formData.email.trim().toLowerCase());
+        if (!inlineName && formData.fullName) setInlineName(sanitizePersonNameInput(formData.fullName, 80).trim());
+        if (!inlinePhone && formData.mobile) setInlinePhone(sanitizeIndianPhoneInput(formData.mobile));
+        saveAssessmentDraft(
+          {
+            clientProjectId: clientProjectIdRef.current,
+            formData,
+            financials,
+            riskProfileData,
+            numPromoters,
+            additionalPromoters,
+            stage: 'auth_gate',
+            completedSteps: completedSteps.includes(2) ? completedSteps : [...completedSteps, 2],
+          },
+          null
+        );
+        setAuthNotice('Your Step 1 & Step 2 progress is safely saved. Create a free account or sign in to unlock Step 3 and your free bankability assessment.');
+        setStage('auth_gate');
+        scrollToFormTop();
+        return;
+      }
+
+      if (!editingProject && isQuotaBlocked) {
+        showToast('Your 1 free project assessment is already used. View your existing project in Dashboard or upgrade to evaluate another project.', {
+          type: 'warning',
+          title: 'Free Assessment Limit Reached',
+        });
+        scrollToFormTop();
+        return;
+      }
 
       setStage(3);
       scrollToFormTop();
     } else if (stage === 3) {
+      setSubmittedSteps((prev) => ({ ...prev, 3: true }));
+      setMobileTouched(true);
+
+      const trimmedFullName = sanitizePersonNameInput(formData.fullName, 80).trim();
+      const normalizedEmail = formData.email.trim().toLowerCase();
+      const cleanedMobile = sanitizeIndianPhoneInput(formData.mobile);
+      const trimmedBranch = formData.branchLocation.trim();
+      const cleanedIfsc = sanitizeIfscInput(formData.bankIfscCode);
+      const trimmedRef = formData.bankAppRefNumber.trim();
+      const trimmedDesc = formData.description.trim();
+
+      setFormData((prev) => ({
+        ...prev,
+        fullName: trimmedFullName,
+        email: normalizedEmail,
+        mobile: cleanedMobile,
+        branchLocation: trimmedBranch,
+        bankIfscCode: cleanedIfsc,
+        bankAppRefNumber: trimmedRef,
+        description: trimmedDesc,
+      }));
+
       if (!formData.landStatus) {
         showToast('Please select Land Status.', { type: 'warning' });
         return;
@@ -681,22 +1061,14 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         showToast('Please select Promoter Track Record.', { type: 'warning' });
         return;
       }
-      if (!formData.fullName.trim() || !formData.mobile.trim() || !formData.email.trim()) {
-        setMobileTouched(true);
-        showToast('Please enter your full name, mobile number, and email address.', { type: 'warning' });
+      const nameCheck = validatePersonName(trimmedFullName, 'Full name', true);
+      if (!nameCheck.isValid) {
+        showToast(nameCheck.error || 'Please enter a valid promoter name.', { type: 'warning' });
         return;
       }
-      if (!formData.bankName || !formData.bankName.trim()) {
-        showToast('Please select your Preferred Bank for the Term Loan proposal.', { type: 'warning' });
-        return;
-      }
-      if (!formData.branchLocation || !formData.branchLocation.trim()) {
-        showToast('Please enter your Preferred Bank Branch Location / City.', { type: 'warning' });
-        return;
-      }
-      if (!mobileValidation.isValid) {
-        setMobileTouched(true);
-        showToast(mobileValidation.error || 'Please enter a valid 10-digit Indian mobile number.', { type: 'warning', title: 'Invalid Mobile Number' });
+      const mobileCheck = validateIndianMobileNumber(cleanedMobile);
+      if (!mobileCheck.isValid) {
+        showToast(mobileCheck.error || 'Please enter a valid 10-digit Indian mobile number.', { type: 'warning', title: 'Invalid Mobile Number' });
         const mobileEl = document.querySelector('input[name="mobile"]');
         if (mobileEl) {
           mobileEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -704,6 +1076,34 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         }
         return;
       }
+      const emailCheck = validateEmailAddress(normalizedEmail, true);
+      if (!emailCheck.isValid) {
+        showToast(emailCheck.error || 'Please enter a valid email address.', { type: 'warning', title: 'Invalid Email' });
+        return;
+      }
+      if (numPromoters > 1) {
+        const invalidCoPromoter = additionalPromoters.find(
+          (p) => !validatePersonName(p.name, 'Co-promoter name', true).isValid
+        );
+        if (invalidCoPromoter) {
+          showToast('Please enter valid names (no digits) for all co-promoters.', { type: 'warning' });
+          return;
+        }
+      }
+      if (!formData.bankName || !formData.bankName.trim()) {
+        showToast('Please select your Preferred Bank for the Term Loan proposal.', { type: 'warning' });
+        return;
+      }
+      if (!trimmedBranch) {
+        showToast('Please enter your Preferred Bank Branch Location / City.', { type: 'warning' });
+        return;
+      }
+      const ifscCheck = validateIfscCode(cleanedIfsc, false);
+      if (!ifscCheck.isValid) {
+        showToast(ifscCheck.error || 'Please enter a valid 11-character IFSC code.', { type: 'warning' });
+        return;
+      }
+
       setIsSubmitting(true);
       markStepComplete(3);
       setTimeout(() => {
@@ -891,20 +1291,222 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
   };
 
+  const completeInlineUserSession = async (userData: any, fallbackName = '', fallbackPhone = '') => {
+    if (userData?.token) {
+      localStorage.setItem('inisio_auth_token', userData.token);
+    }
+    const loggedUser: AuthUser = {
+      email: userData.email,
+      role: (userData.role as UserRole) || 'user',
+      name: userData.name || fallbackName || 'Promoter',
+      phone: userData.phone || fallbackPhone,
+      company: userData.company,
+      membershipPlan: userData.membershipTier || userData.membershipPlan,
+      token: userData.token,
+    };
+    localStorage.setItem('inisio_active_user', JSON.stringify(loggedUser));
+    migrateGuestDraftToUser(loggedUser.email);
+    setActiveUser(loggedUser);
+    setAuthNotice('');
+    setInlineNeedsOtp(false);
+    setInlineOtp('');
+    setInlineDevOtpHint('');
+
+    setFormData((prev) => ({
+      ...prev,
+      fullName: prev.fullName || loggedUser.name || '',
+      mobile: prev.mobile || loggedUser.phone || '',
+      email: prev.email || loggedUser.email || '',
+    }));
+
+    if (onLoginSuccess) {
+      onLoginSuccess(loggedUser);
+    }
+
+    // Immediately verify authoritative server-side 1-free-assessment quota
+    const quota = await verifyUserQuota(loggedUser, stage === 'auth_gate');
+    if (!quota.allowed) {
+      setInlineAuthSuccess('');
+      setInlineAuthError(
+        quota.reason ||
+          'You have already used your 1 free assessment. Open your existing project in Dashboard or upgrade your plan.'
+      );
+      return;
+    }
+
+    // Only persist immediately if we are already on the final results screen
+    if (stage === 'final_assessment_results') {
+      const computed = computeResults();
+      const activeBankability = riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : String(computed.bankabilityRating);
+      const systemDscr = calculateSystemDscr({ industry: formData.industry });
+      const activeId = editingProject?.id || createdProjectIdRef.current || createdProjectId;
+      const payloadToSave = {
+        clientProjectId: clientProjectIdRef.current,
+        projectName: formData.projectName || 'Greenfield Project',
+        industry: formData.industry,
+        location: formData.location,
+        totalCostCr: formData.totalCostCr,
+        promoterContribCr: formData.promoterContribCr,
+        loanRequiredCr: formData.loanRequiredCr,
+        landStatus: formData.landStatus,
+        collateralStatus: formData.collateralStatus,
+        promoterExp: formData.promoterExp,
+        notes: formData.description,
+        fullName: loggedUser.name,
+        mobile: loggedUser.phone || formData.mobile,
+        email: loggedUser.email,
+        bankName: formData.bankName,
+        assignedBank: formData.bankName,
+        branchLocation: formData.branchLocation,
+        bankIfscCode: formData.bankIfscCode,
+        bankAppRefNumber: formData.bankAppRefNumber,
+        feasibilityScore: computed.feasibilityScore,
+        bankabilityRating: activeBankability,
+        dscrEstimate: systemDscr,
+        riskProfileData: riskProfileData || undefined,
+        financials: financials,
+        promotersList: buildPromotersList(),
+        assessmentCompleted: true,
+      };
+
+      try {
+        if (activeId) {
+          await updateLeadRecord(activeId, payloadToSave, loggedUser.name);
+        } else if (!isSavingRef.current) {
+          isSavingRef.current = true;
+          try {
+            const saved = await saveLeadRecord({
+              ...payloadToSave,
+              source: 'Project Assessment Flow',
+              downloadedPDF: false,
+            });
+            setCreatedProjectId(saved.id);
+            createdProjectIdRef.current = saved.id;
+            recordAssessmentCompletion(loggedUser.email);
+            clearAssessmentDraft(loggedUser.email);
+          } finally {
+            isSavingRef.current = false;
+          }
+        }
+      } catch (saveErr: any) {
+        if (saveErr?.code === FREE_ASSESSMENT_LIMIT_CODE || saveErr?.status === 403) {
+          setQuotaStatus({
+            allowed: false,
+            hasPaidMembership: false,
+            membershipTier: 'Free',
+            usedCount: 1,
+            limit: 1,
+            code: FREE_ASSESSMENT_LIMIT_CODE,
+            reason: saveErr.message,
+          });
+          setInlineAuthError(saveErr.message);
+          return;
+        }
+      }
+    }
+
+    setInlineAuthSuccess(
+      stage === 'auth_gate'
+        ? `Welcome, ${loggedUser.name}! Step 3 is now unlocked and your draft is saved.`
+        : `Signed in successfully as ${loggedUser.name}! Your project has been saved to your dashboard.`
+    );
+  };
+
+  const handleInlineOtpVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInlineAuthError('');
+    setInlineAuthSuccess('');
+    const cleanOtp = inlineOtp.replace(/\D/g, '').trim();
+    if (cleanOtp.length !== 6) {
+      setInlineAuthError('Please enter the 6-digit verification code sent to your email.');
+      return;
+    }
+
+    setInlineAuthLoading(true);
+    try {
+      const verifyRes = await fetch('/api/auth/verify-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inlinePendingEmail || inlineEmail.trim().toLowerCase(),
+          otp: cleanOtp,
+        }),
+      });
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      setInlineAuthLoading(false);
+
+      if (!verifyRes.ok || !verifyData.success || !verifyData.data) {
+        setInlineAuthError(verifyData.message || 'Invalid or expired verification code. Please try again.');
+        return;
+      }
+
+      await completeInlineUserSession(
+        verifyData.data,
+        sanitizePersonNameInput(inlineName, 80).trim(),
+        sanitizeIndianPhoneInput(inlinePhone)
+      );
+    } catch {
+      setInlineAuthLoading(false);
+      setInlineAuthError('Network error while verifying code. Please try again.');
+    }
+  };
+
+  const handleInlineResendOtp = async () => {
+    const emailTarget = inlinePendingEmail || inlineEmail.trim().toLowerCase();
+    if (!emailTarget) return;
+    setInlineOtpResending(true);
+    setInlineAuthError('');
+    try {
+      const res = await fetch('/api/auth/send-verification-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailTarget }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        if (data.data?.otp) setInlineDevOtpHint(String(data.data.otp));
+        setInlineAuthSuccess(`A fresh 6-digit verification code has been sent to ${emailTarget}.`);
+      } else {
+        setInlineAuthError(data.message || 'Could not resend verification code.');
+      }
+    } catch {
+      setInlineAuthError('Network error while resending code.');
+    } finally {
+      setInlineOtpResending(false);
+    }
+  };
+
   const handleInlineAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setInlineAuthError('');
     setInlineAuthSuccess('');
     setInlineAuthLoading(true);
 
-    const emailToUse = (inlineEmail || formData.email).trim().toLowerCase();
-    const nameToUse = (inlineName || formData.fullName || emailToUse.split('@')[0]).trim();
-    const phoneToUse = (inlinePhone || formData.mobile).trim();
+    const emailToUse = inlineEmail.trim().toLowerCase();
+    const nameToUse = sanitizePersonNameInput(inlineName, 80).trim();
+    const phoneToUse = sanitizeIndianPhoneInput(inlinePhone);
 
-    if (!emailToUse) {
-      setInlineAuthError('Please enter your email address');
+    const emailCheck = validateEmailAddress(emailToUse, true);
+    if (!emailCheck.isValid) {
+      setInlineAuthError(emailCheck.error || 'Please enter a valid email address');
       setInlineAuthLoading(false);
       return;
+    }
+    if (inlineAuthMode === 'signup') {
+      const nameCheck = validatePersonName(nameToUse, 'Full name', true);
+      if (!nameCheck.isValid) {
+        setInlineAuthError(nameCheck.error || 'Please enter your full name');
+        setInlineAuthLoading(false);
+        return;
+      }
+      if (phoneToUse) {
+        const phoneCheck = validateIndianMobileNumber(phoneToUse);
+        if (!phoneCheck.isValid) {
+          setInlineAuthError(phoneCheck.error || 'Please enter a valid 10-digit Indian mobile number');
+          setInlineAuthLoading(false);
+          return;
+        }
+      }
     }
     if (!inlinePassword || inlinePassword.length < 6) {
       setInlineAuthError('Password must be at least 6 characters');
@@ -928,7 +1530,18 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           return;
         }
 
-        // Auto-login to obtain verified session and JWT token
+        if (regData.data?.requiresVerification || regData.data?.isVerified === false) {
+          setInlineAuthLoading(false);
+          setInlineNeedsOtp(true);
+          setInlinePendingEmail(emailToUse);
+          setInlineDevOtpHint(regData.data?.otp ? String(regData.data.otp) : '');
+          setInlineAuthSuccess(
+            regData.data?.message || `We sent a 6-digit verification code to ${emailToUse}. Enter it below to unlock Step 3.`
+          );
+          return;
+        }
+
+        // Auto-login if already verified
         const loginRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -936,6 +1549,14 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         });
         const loginData = await loginRes.json().catch(() => ({}));
         if (loginRes.ok && loginData.success && loginData.data) {
+          if (loginData.data.requiresVerification || loginData.data.isVerified === false) {
+            setInlineAuthLoading(false);
+            setInlineNeedsOtp(true);
+            setInlinePendingEmail(emailToUse);
+            setInlineDevOtpHint(loginData.data.otp ? String(loginData.data.otp) : '');
+            setInlineAuthSuccess(`Please enter the 6-digit verification code sent to ${emailToUse}.`);
+            return;
+          }
           userData = loginData.data;
         } else {
           userData = regData.data;
@@ -952,81 +1573,25 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           setInlineAuthError(loginData.message || 'Authentication failed. Please check your credentials.');
           return;
         }
+        if (loginData.data.requiresVerification || loginData.data.isVerified === false) {
+          setInlineAuthLoading(false);
+          setInlineNeedsOtp(true);
+          setInlinePendingEmail(emailToUse);
+          setInlineDevOtpHint(loginData.data.otp ? String(loginData.data.otp) : '');
+          setInlineAuthSuccess(
+            loginData.data.message || `Email verification required. Enter the 6-digit code sent to ${emailToUse}.`
+          );
+          return;
+        }
         userData = loginData.data;
       }
 
       setInlineAuthLoading(false);
 
-      if (userData) {
-        if (userData.token) {
-          localStorage.setItem('inisio_auth_token', userData.token);
-        }
-        const loggedUser: AuthUser = {
-          email: userData.email,
-          role: (userData.role as UserRole) || 'user',
-          name: userData.name || nameToUse || 'Promoter',
-          phone: userData.phone || phoneToUse,
-          company: userData.company,
-          token: userData.token
-        };
-        localStorage.setItem('inisio_active_user', JSON.stringify(loggedUser));
-        setActiveUser(loggedUser);
-        setAuthNotice('');
-
-        // Link current project to user in leadStore
-        const computed = computeResults();
-        const activeBankability = riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : String(computed.bankabilityRating);
-        const systemDscr = calculateSystemDscr({ industry: formData.industry });
-        const activeId = editingProject?.id || createdProjectIdRef.current || createdProjectId;
-        const payloadToSave = {
-          projectName: formData.projectName || 'Greenfield Project',
-          industry: formData.industry,
-          location: formData.location,
-          totalCostCr: formData.totalCostCr,
-          promoterContribCr: formData.promoterContribCr,
-          loanRequiredCr: formData.loanRequiredCr,
-          landStatus: formData.landStatus,
-          collateralStatus: formData.collateralStatus,
-          promoterExp: formData.promoterExp,
-          notes: formData.description,
-          fullName: loggedUser.name,
-          mobile: loggedUser.phone || formData.mobile,
-          email: loggedUser.email,
-          bankName: formData.bankName,
-          assignedBank: formData.bankName,
-          branchLocation: formData.branchLocation,
-          bankIfscCode: formData.bankIfscCode,
-          bankAppRefNumber: formData.bankAppRefNumber,
-          feasibilityScore: computed.feasibilityScore,
-          bankabilityRating: activeBankability,
-          dscrEstimate: systemDscr,
-          riskProfileData: riskProfileData || undefined,
-          financials: financials,
-          promotersList: buildPromotersList()
-        };
-
-        if (activeId) {
-          updateLeadRecord(activeId, payloadToSave, loggedUser.name);
-        } else if (!isSavingRef.current) {
-          isSavingRef.current = true;
-          saveLeadRecord({
-            ...payloadToSave,
-            source: 'Project Assessment Flow',
-            downloadedPDF: false
-          }).then(saved => {
-            setCreatedProjectId(saved.id);
-            createdProjectIdRef.current = saved.id;
-          }).finally(() => {
-            isSavingRef.current = false;
-          });
-        }
-
-        setInlineAuthSuccess(`Signed in successfully as ${loggedUser.name}! Your project has been saved to your dashboard.`);
-        if (onLoginSuccess) {
-          onLoginSuccess(loggedUser);
-        }
+      if (userData && userData.token) {
+        await completeInlineUserSession(userData, nameToUse, phoneToUse);
       } else {
-        setInlineAuthError('Authentication failed. Please check your credentials.');
+        setInlineAuthError('Authentication failed. Please verify your email and try again.');
       }
     } catch (err) {
       setInlineAuthLoading(false);
@@ -1034,11 +1599,27 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
   };
 
-  const handleDownloadTeaser = async (action: 'download' | 'preview' = 'download') => {
+  const ensureDownloadEligible = (): boolean => {
     if (!activeUser) {
-      handleRequireAuth('login', 'Please sign in or create an account to preview or download the Project Teaser.');
-      return;
+      handleRequireAuth('signup', 'Please sign in or create a free account to preview or download project documents.');
+      return false;
     }
+    if (isQuotaBlocked) {
+      triggerMembershipUpgrade(quotaStatus?.reason);
+      return false;
+    }
+    return true;
+  };
+
+  const markProjectDownloadedIdempotent = () => {
+    const activeId = editingProject?.id || editingProject?._id || createdProjectIdRef.current || createdProjectId;
+    if (activeId) {
+      updateLeadRecord(activeId, { downloadedPDF: true }, activeUser?.name || formData.fullName || 'Promoter').catch(() => {});
+    }
+  };
+
+  const handleDownloadTeaser = async (action: 'download' | 'preview' = 'download') => {
+    if (!ensureDownloadEligible()) return;
     setIsDownloadingPdf(true);
     try {
       const pdfData = getPDFData();
@@ -1048,23 +1629,28 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         setPdfPreview({
           blobUrl: result.blobUrl,
           filename: result.filename,
-          title: `${pdfData.projectName || 'Project'} — Executive Project Teaser`,
-          subtitle: `${pdfData.industry || 'Greenfield Project'} · A4 Institutional PDF`,
+          title: `${result.resolved.projectName} - Project Teaser`,
+          subtitle: `${result.resolved.sector} · ${result.resolved.location}`,
+          resolved: result.resolved,
+          documentType: 'teaser',
+          onDownloadDocx: () => {
+            handleDownloadDocxTeaser();
+          },
         });
+      } else {
+        markProjectDownloadedIdempotent();
+        showToast(`Downloaded ${result.filename}`, { type: 'success' });
       }
     } catch (err) {
       console.error('PDF generation error:', err);
       showToast('Could not generate Project Teaser PDF. Please try again.', { type: 'error' });
     } finally {
-      setTimeout(() => setIsDownloadingPdf(false), 600);
+      setTimeout(() => setIsDownloadingPdf(false), 400);
     }
   };
 
   const handleDownloadDprSummary = async (action: 'download' | 'preview' = 'download') => {
-    if (!activeUser) {
-      handleRequireAuth('login', 'Please sign in or create an account to preview or download the DPR Executive Summary.');
-      return;
-    }
+    if (!ensureDownloadEligible()) return;
     setIsDownloadingDprPdf(true);
     try {
       const pdfData = getPDFData();
@@ -1074,28 +1660,32 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         setPdfPreview({
           blobUrl: result.blobUrl,
           filename: result.filename,
-          title: `${pdfData.projectName || 'Project'} — DPR Executive Summary`,
-          subtitle: `${pdfData.industry || 'Greenfield Project'} · Detailed Project Report Brief`,
+          title: `${result.resolved.projectName} - Detailed Project Report (DPR)`,
+          subtitle: `${result.resolved.sector} · ${result.resolved.location}`,
+          resolved: result.resolved,
+          documentType: 'dpr',
         });
+      } else {
+        markProjectDownloadedIdempotent();
+        showToast(`Downloaded ${result.filename}`, { type: 'success' });
       }
     } catch (err) {
       console.error('DPR PDF generation error:', err);
       showToast('Could not generate DPR Executive Summary PDF. Please try again.', { type: 'error' });
     } finally {
-      setTimeout(() => setIsDownloadingDprPdf(false), 600);
+      setTimeout(() => setIsDownloadingDprPdf(false), 400);
     }
   };
 
   const handleDownloadDocxTeaser = async () => {
-    if (!activeUser) {
-      handleRequireAuth('login', 'Please sign in or create an account to download the official AI Project Teaser in DOCX format.');
-      return;
-    }
+    if (!ensureDownloadEligible()) return;
     try {
       setIsDownloadingDocx(true);
       const pdfData = getPDFData();
       const { generateProjectTeaserDOCX } = await import('../utils/docxGenerator');
-      await generateProjectTeaserDOCX(pdfData);
+      const filename = await generateProjectTeaserDOCX(pdfData);
+      markProjectDownloadedIdempotent();
+      showToast(`Downloaded ${filename}`, { type: 'success' });
     } catch (err) {
       console.error('Failed to generate DOCX teaser:', err);
       showToast('Could not generate DOCX teaser. Please try again.', { type: 'error' });
@@ -1108,6 +1698,16 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     if (e) e.preventDefault();
     if (!formData.projectName.trim()) {
       showToast('Please enter your Project Name before saving.', { type: 'warning' });
+      return;
+    }
+    if (!activeUser && !editingProject) {
+      setAuthNotice('Please sign in or create a free account before saving and generating your Project Teaser.');
+      setStage('auth_gate');
+      scrollToFormTop();
+      return;
+    }
+    if (isQuotaBlocked) {
+      triggerMembershipUpgrade(quotaStatus?.reason);
       return;
     }
 
@@ -1149,6 +1749,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     const activeBankability = riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : String(computed.bankabilityRating);
     const systemDscr = calculateSystemDscr({ industry: formData.industry });
     const updatedPayload = {
+      clientProjectId: clientProjectIdRef.current,
       projectName: formData.projectName || 'Greenfield Project',
       industry: formData.industry,
       location: formData.location,
@@ -1159,9 +1760,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       collateralStatus: formData.collateralStatus,
       promoterExp: formData.promoterExp,
       notes: formData.description,
-      fullName: formData.fullName,
-      mobile: formData.mobile,
-      email: formData.email,
+      fullName: formData.fullName || activeUser?.name || '',
+      mobile: formData.mobile || activeUser?.phone || '',
+      email: formData.email || activeUser?.email || '',
       bankName: formData.bankName,
       assignedBank: formData.bankName,
       branchLocation: formData.branchLocation,
@@ -1179,31 +1780,54 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       assessmentCompleted: true
     };
 
-    // Guarantee idempotent save: Only save once in the dashboard
-    const activeId = editingProject?.id || createdProjectIdRef.current || createdProjectId;
-    if (activeId) {
-      updateLeadRecord(activeId, updatedPayload, formData.fullName || 'Promoter');
-    } else if (!isSavingRef.current) {
-      isSavingRef.current = true;
-      try {
-        const saved = await saveLeadRecord({
-          ...updatedPayload,
-          source: 'Project Assessment Flow',
-          downloadedPDF: false
-        });
-        setCreatedProjectId(saved.id);
-        createdProjectIdRef.current = saved.id;
-      } finally {
-        isSavingRef.current = false;
+    // Guarantee idempotent save: upsert single project record via activeId or clientProjectId
+    const activeId = editingProject?.id || editingProject?._id || createdProjectIdRef.current || createdProjectId;
+    try {
+      if (activeId) {
+        await updateLeadRecord(activeId, updatedPayload, formData.fullName || activeUser?.name || 'Promoter');
+      } else if (!isSavingRef.current) {
+        isSavingRef.current = true;
+        try {
+          const saved = await saveLeadRecord({
+            ...updatedPayload,
+            source: 'Project Assessment Flow',
+            downloadedPDF: false
+          });
+          setCreatedProjectId(saved.id);
+          createdProjectIdRef.current = saved.id;
+        } finally {
+          isSavingRef.current = false;
+        }
       }
+    } catch (saveErr: any) {
+      if (saveErr?.code === FREE_ASSESSMENT_LIMIT_CODE || saveErr?.status === 403) {
+        setQuotaStatus({
+          allowed: false,
+          hasPaidMembership: false,
+          membershipTier: 'Free',
+          usedCount: 1,
+          limit: 1,
+          code: FREE_ASSESSMENT_LIMIT_CODE,
+          reason: saveErr.message,
+        });
+        showToast(saveErr.message || 'Your 1 free project assessment limit has been reached.', {
+          type: 'warning',
+          title: 'Free Assessment Limit Reached',
+        });
+        triggerMembershipUpgrade(saveErr.message);
+        return;
+      }
+      showToast('Unable to save assessment right now. Please try again.', { type: 'error' });
+      return;
     }
 
     setIsDataSaved(true);
     markStepComplete(5);
     markStepComplete(6);
     setSaveSuccessMessage('Project assessment saved successfully to your dashboard!');
-    recordAssessmentCompletion(formData.email || activeUser?.email);
-    try { sessionStorage.removeItem('inisio_assessment_draft'); } catch (e) {}
+    recordAssessmentCompletion(activeUser?.email || formData.email);
+    clearAssessmentDraft(activeUser?.email);
+    setDraftSavedAt(null);
     setStage('final_assessment_results');
     scrollToFormTop();
   };
@@ -1217,6 +1841,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     const activeBankability = riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : String(computed.bankabilityRating);
     const systemDscr = calculateSystemDscr({ industry: formData.industry });
     const updatedPayload = {
+      clientProjectId: clientProjectIdRef.current,
       projectName: formData.projectName,
       industry: formData.industry,
       location: formData.location,
@@ -1246,21 +1871,28 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       promotersList: buildPromotersList()
     };
 
-    const activeId = editingProject?.id || createdProjectIdRef.current || createdProjectId;
-    if (activeId) {
-      updateLeadRecord(activeId, updatedPayload, formData.fullName || 'Promoter');
-    } else if (!isSavingRef.current) {
-      isSavingRef.current = true;
-      try {
-        const saved = await saveLeadRecord({
-          ...updatedPayload,
-          source: 'Project Assessment Form',
-          downloadedPDF: false
-        });
-        setCreatedProjectId(saved.id);
-        createdProjectIdRef.current = saved.id;
-      } finally {
-        isSavingRef.current = false;
+    const activeId = editingProject?.id || editingProject?._id || createdProjectIdRef.current || createdProjectId;
+    try {
+      if (activeId) {
+        await updateLeadRecord(activeId, updatedPayload, formData.fullName || 'Promoter');
+      } else if (!isSavingRef.current) {
+        isSavingRef.current = true;
+        try {
+          const saved = await saveLeadRecord({
+            ...updatedPayload,
+            source: 'Project Assessment Form',
+            downloadedPDF: false
+          });
+          setCreatedProjectId(saved.id);
+          createdProjectIdRef.current = saved.id;
+        } finally {
+          isSavingRef.current = false;
+        }
+      }
+    } catch (saveErr: any) {
+      if (saveErr?.code === FREE_ASSESSMENT_LIMIT_CODE || saveErr?.status === 403) {
+        triggerMembershipUpgrade(saveErr.message);
+        return;
       }
     }
 
@@ -1277,11 +1909,21 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   };
 
   const handleGoToDashboard = async () => {
-    // Save project if not already saved
+    if (isQuotaBlocked) {
+      if (onNavigateToDashboard) {
+        onNavigateToDashboard();
+      } else if (onFinishEditing) {
+        onFinishEditing();
+      }
+      return;
+    }
+
+    // Save project if not already saved (idempotently by clientProjectId)
     const computed = computeResults();
     const activeBankability = riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : String(computed.bankabilityRating);
     const systemDscr = calculateSystemDscr({ industry: formData.industry });
     const payload = {
+      clientProjectId: clientProjectIdRef.current,
       projectName: formData.projectName || 'Greenfield Project',
       industry: formData.industry,
       location: formData.location,
@@ -1306,22 +1948,26 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       promotersList: buildPromotersList()
     };
 
-    const activeId = editingProject?.id || createdProjectIdRef.current || createdProjectId;
-    if (activeId) {
-      updateLeadRecord(activeId, payload, formData.fullName || 'Promoter');
-    } else if (!isSavingRef.current) {
-      isSavingRef.current = true;
-      try {
-        const saved = await saveLeadRecord({
-          ...payload,
-          source: 'Project Assessment Flow',
-          downloadedPDF: false
-        });
-        setCreatedProjectId(saved.id);
-        createdProjectIdRef.current = saved.id;
-      } finally {
-        isSavingRef.current = false;
+    const activeId = editingProject?.id || editingProject?._id || createdProjectIdRef.current || createdProjectId;
+    try {
+      if (activeId) {
+        await updateLeadRecord(activeId, payload, formData.fullName || 'Promoter');
+      } else if (activeUser && !isSavingRef.current && formData.projectName.trim()) {
+        isSavingRef.current = true;
+        try {
+          const saved = await saveLeadRecord({
+            ...payload,
+            source: 'Project Assessment Flow',
+            downloadedPDF: false
+          });
+          setCreatedProjectId(saved.id);
+          createdProjectIdRef.current = saved.id;
+        } finally {
+          isSavingRef.current = false;
+        }
       }
+    } catch {
+      // Allow smooth dashboard navigation even if quota blocked new creation
     }
 
     if (onNavigateToDashboard) {
@@ -1370,7 +2016,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             <nav className="space-y-1.5">
               {ASSESSMENT_STEPS.map((s) => {
                 const isCurrent = currentStep === s.id;
-                const isCompleted = isStepCompleted(s.id) && !isCurrent;
+                const isLocked = isStepLockedForGuest(s.id) || (isQuotaBlocked && s.id >= 3);
+                const isCompleted = !isLocked && isStepCompleted(s.id) && !isCurrent;
 
                 return (
                   <button
@@ -1380,6 +2027,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs text-left transition-all cursor-pointer ${
                       isCurrent
                         ? 'bg-blue-600 text-white font-bold shadow-xs ring-1 ring-blue-400'
+                        : isLocked
+                        ? 'text-slate-500 hover:bg-slate-800/60 font-medium opacity-80'
                         : isCompleted
                         ? 'text-slate-200 hover:bg-slate-800/80 font-medium'
                         : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 font-medium'
@@ -1389,12 +2038,16 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
                         isCurrent
                           ? 'bg-white text-blue-600 shadow-2xs'
+                          : isLocked
+                          ? 'bg-slate-800/90 text-amber-400 border border-slate-700'
                           : isCompleted
                           ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                           : 'bg-slate-800 text-slate-400 border border-slate-700'
                       }`}
                     >
-                      {isCompleted ? (
+                      {isLocked ? (
+                        <Lock className="w-3 h-3" />
+                      ) : isCompleted ? (
                         <Check className="w-3.5 h-3.5 stroke-3" />
                       ) : (
                         <span>{s.id}</span>
@@ -1404,7 +2057,17 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     <div className="flex-1 min-w-0">
                       <div className="truncate leading-tight">{s.name}</div>
                       <div className="text-[10px] opacity-75 truncate">
-                        {isCurrent ? 'In Progress' : isCompleted ? 'Completed' : ''}
+                        {isCurrent && stage === 'auth_gate'
+                          ? 'Account Required'
+                          : isCurrent
+                          ? 'In Progress'
+                          : isLocked
+                          ? isQuotaBlocked
+                            ? 'Upgrade Required'
+                            : 'Sign in to unlock'
+                          : isCompleted
+                          ? 'Completed'
+                          : ''}
                       </div>
                     </div>
                   </button>
@@ -1449,7 +2112,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 </span>
                 <span className="text-slate-300">•</span>
                 <span className="text-xs text-slate-500 font-medium">
-                  {ASSESSMENT_STEPS.find(s => s.id === currentStep)?.name}
+                  {stage === 'auth_gate'
+                    ? 'Unlock Free Assessment'
+                    : ASSESSMENT_STEPS.find(s => s.id === currentStep)?.name}
                 </span>
               </div>
               <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 font-manrope">
@@ -1458,27 +2123,47 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             </div>
           </div>
 
-          {editingProject && (
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => handleSaveProjectEdits()}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5 stroke-3" />
-                <span>Save Updates</span>
-              </button>
-              {onFinishEditing && (
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            {!editingProject && draftSavedAt && !isDataSaved && (
+              <>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-700">
+                  <Save className="w-3 h-3" />
+                  <span>{hasRestoredDraft ? 'Draft Restored' : 'Draft Auto-Saved'}</span>
+                </span>
                 <button
                   type="button"
-                  onClick={onFinishEditing}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                  onClick={handleResetDraft}
+                  title="Clear saved draft and start fresh"
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  Back to Dashboard
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset Draft</span>
                 </button>
-              )}
-            </div>
-          )}
+              </>
+            )}
+
+            {editingProject && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleSaveProjectEdits()}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5 stroke-3" />
+                  <span>Save Updates</span>
+                </button>
+                {onFinishEditing && (
+                  <button
+                    type="button"
+                    onClick={onFinishEditing}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    Back to Dashboard
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         {/* Content Body */}
@@ -1491,11 +2176,327 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             </div>
           )}
 
+          {/* Server-Verified 1 Free Assessment Quota Reached Card */}
+          {isQuotaBlocked && (
+            <div className="p-6 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm space-y-4 animate-in fade-in">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0">
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h2 className="text-base font-extrabold text-slate-900 font-manrope">
+                    Your 1 Free Project Assessment Is Already Used
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+                    {quotaStatus?.reason ||
+                      'Each verified promoter account includes 1 free project assessment and Teaser download.'}
+                  </p>
+                  {quotaStatus?.existingProjectName && (
+                    <p className="text-xs text-amber-900 font-semibold pt-1">
+                      Existing Free Project: <span className="underline">{quotaStatus.existingProjectName}</span> — you can view, edit, and re-download PDF/DOCX for this project anytime at no extra cost.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                {onNavigateToDashboard && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToDashboard}
+                    className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span>Open Existing Project in Dashboard</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => triggerMembershipUpgrade(quotaStatus?.reason)}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Crown className="w-4 h-4" />
+                  <span>Upgrade Membership Plan</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* PROGRESSIVE STEP-GATE: LOCK STEP 3+ UNTIL REGISTERED / SIGNED IN          */}
+          {/* ========================================================================= */}
+          {stage === 'auth_gate' && !activeUser && (
+            <div className="max-w-xl mx-auto space-y-5 animate-in fade-in duration-300">
+              {/* Saved Progress Pill */}
+              <div className="p-4 rounded-2xl bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Steps 1 &amp; 2 Draft Saved Automatically</span>
+                  </div>
+                  <div className="text-sm font-bold text-white font-manrope">
+                    {formData.projectName || 'Your Greenfield Project'}
+                    {formData.totalCostCr ? ` · ₹${formData.totalCostCr} Cr` : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage(2);
+                    scrollToFormTop();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to Step 2</span>
+                </button>
+              </div>
+
+              {/* Gate Auth / OTP Card */}
+              <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-lg space-y-5">
+                <div className="text-center space-y-1.5">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto text-blue-600">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 font-manrope">
+                    {inlineNeedsOtp
+                      ? 'Verify Your Email to Unlock Step 3'
+                      : inlineAuthMode === 'signup'
+                      ? 'Create Your Free Account to Continue'
+                      : 'Sign In to Continue Your Assessment'}
+                  </h2>
+                  <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
+                    {inlineNeedsOtp
+                      ? `Enter the 6-digit verification code sent to ${inlinePendingEmail || inlineEmail}. Your Step 1 & 2 details are safely preserved.`
+                      : authNotice ||
+                        'Every verified promoter gets 1 complete free project assessment and bank-ready Teaser download. Sign up or sign in to unlock Step 3 onwards.'}
+                  </p>
+                </div>
+
+                {!inlineNeedsOtp ? (
+                  <>
+                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/70 max-w-xs mx-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInlineAuthMode('signup');
+                          setInlineAuthError('');
+                          setInlineAuthSuccess('');
+                        }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          inlineAuthMode === 'signup' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Create Free Account
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInlineAuthMode('login');
+                          setInlineAuthError('');
+                          setInlineAuthSuccess('');
+                        }}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          inlineAuthMode === 'login' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-900'
+                        }`}
+                      >
+                        Sign In
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleInlineAuthSubmit} noValidate className="space-y-3.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {inlineAuthMode === 'signup' && (
+                          <div className="space-y-1">
+                            <label className="block text-xs font-semibold text-slate-700">
+                              Full Name <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="relative">
+                              <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="text"
+                                required
+                                maxLength={80}
+                                value={inlineName}
+                                onChange={(e) => setInlineName(sanitizePersonNameInput(e.target.value, 80))}
+                                onBlur={() => setInlineName((prev) => prev.trim())}
+                                placeholder="e.g. Ramesh Sharma"
+                                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className={`space-y-1 ${inlineAuthMode !== 'signup' ? 'sm:col-span-2' : ''}`}>
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Email Address <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type="email"
+                              required
+                              maxLength={120}
+                              value={inlineEmail}
+                              onChange={(e) => setInlineEmail(e.target.value)}
+                              onBlur={() => setInlineEmail((prev) => prev.trim().toLowerCase())}
+                              placeholder="e.g. ramesh@enterprise.in"
+                              className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        {inlineAuthMode === 'signup' && (
+                          <div className="space-y-1">
+                            <label className="block text-xs font-semibold text-slate-700">
+                              Mobile Number <span className="text-rose-500">*</span>
+                            </label>
+                            <div className="relative">
+                              <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="tel"
+                                inputMode="numeric"
+                                autoComplete="tel"
+                                value={inlinePhone}
+                                onChange={(e) => setInlinePhone(sanitizeIndianPhoneInput(e.target.value))}
+                                placeholder="10-digit mobile"
+                                className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className={`space-y-1 ${inlineAuthMode !== 'signup' ? 'sm:col-span-2' : ''}`}>
+                          <label className="block text-xs font-semibold text-slate-700">
+                            Password <span className="text-rose-500">*</span>
+                          </label>
+                          <div className="relative">
+                            <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                              type={showInlinePassword ? 'text' : 'password'}
+                              required
+                              value={inlinePassword}
+                              onChange={(e) => setInlinePassword(e.target.value)}
+                              placeholder="Min 6 characters"
+                              className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowInlinePassword(!showInlinePassword)}
+                              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              {showInlinePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {inlineAuthError && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>{inlineAuthError}</span>
+                        </div>
+                      )}
+
+                      {inlineAuthSuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>{inlineAuthSuccess}</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={inlineAuthLoading || isCheckingQuota}
+                        className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {inlineAuthLoading || isCheckingQuota ? (
+                          <span>Verifying account...</span>
+                        ) : (
+                          <>
+                            <span>{inlineAuthMode === 'signup' ? 'Create Account & Unlock Step 3' : 'Sign In & Unlock Step 3'}</span>
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <form onSubmit={handleInlineOtpVerify} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-700 text-center">
+                        6-Digit Verification Code
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={inlineOtp}
+                        onChange={(e) => setInlineOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="000000"
+                        className="w-full max-w-[220px] mx-auto block text-center tracking-[0.4em] font-mono text-lg font-bold py-3 px-4 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                      />
+                      {inlineDevOtpHint && (
+                        <p className="text-[11px] text-center text-blue-700 font-semibold">
+                          Dev verification code: <span className="font-mono">{inlineDevOtpHint}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {inlineAuthError && (
+                      <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>{inlineAuthError}</span>
+                      </div>
+                    )}
+
+                    {inlineAuthSuccess && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{inlineAuthSuccess}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={inlineAuthLoading}
+                      className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{inlineAuthLoading ? 'Verifying...' : 'Verify Email & Continue to Step 3'}</span>
+                    </button>
+
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInlineNeedsOtp(false);
+                          setInlineAuthError('');
+                        }}
+                        className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
+                      >
+                        Change Email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleInlineResendOtp}
+                        disabled={inlineOtpResending}
+                        className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer disabled:opacity-50"
+                      >
+                        {inlineOtpResending ? 'Sending...' : 'Resend Code'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ========================================================================= */}
           {/* STAGE 1: STEPS 1, 2, 3 FORM                                                */}
           {/* ========================================================================= */}
-          {(stage === 1 || stage === 2 || stage === 3) && (
-            <form onSubmit={handleNextStep} className="w-full space-y-6 animate-in fade-in duration-300">
+          {(stage === 1 || stage === 2 || (stage === 3 && !isQuotaBlocked)) && (
+            <form onSubmit={handleNextStep} noValidate className="w-full space-y-6 animate-in fade-in duration-300">
               {/* STEP 1: PROJECT DETAILS */}
               {stage === 1 && (
                 <div className="space-y-5 animate-in fade-in duration-300">
@@ -1517,11 +2518,20 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <Input
                         type="text"
                         name="projectName"
+                        maxLength={120}
                         value={formData.projectName}
                         onChange={handleInputChange}
+                        onBlur={() => {
+                          setFormData((prev) => ({ ...prev, projectName: prev.projectName.trim() }));
+                          markFieldTouched('projectName');
+                        }}
+                        error={shouldShowError('projectName', 1, projectNameValidation.isValid)}
                         placeholder="Enter your project name (e.g. Bionex CNG, Solar Power Plant)"
                         required
                       />
+                      {shouldShowError('projectName', 1, projectNameValidation.isValid) && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">{projectNameValidation.error}</p>
+                      )}
                     </div>
 
                     <div className="md:col-span-2">
@@ -1552,6 +2562,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         ]}
                         triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
                       />
+                      {submittedSteps[1] && !formData.industry && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">Please select an industry sector</p>
+                      )}
                     </div>
 
                     <div className="md:col-span-2">
@@ -1560,6 +2573,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         onChange={(loc) => setFormData((prev) => ({ ...prev, location: loc }))}
                         required
                       />
+                      {submittedSteps[1] && !formData.location.trim() && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">Please select project state and city</p>
+                      )}
                     </div>
                   </div>
 
@@ -1614,16 +2630,22 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400 z-10">₹</span>
                         <Input
-                          type="number"
-                          step="0.1"
+                          type="text"
+                          inputMode="decimal"
                           name="totalCostCr"
                           value={formData.totalCostCr}
+                          onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
                           onChange={handleInputChange}
+                          onBlur={() => markFieldTouched('totalCostCr')}
+                          error={shouldShowError('totalCostCr', 2, totalCostValidation.isValid)}
                           placeholder="Enter total project cost in ₹ Cr"
                           required
                           className="pl-7 font-bold"
                         />
                       </div>
+                      {shouldShowError('totalCostCr', 2, totalCostValidation.isValid) && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">{totalCostValidation.error}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1633,16 +2655,22 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400 z-10">₹</span>
                         <Input
-                          type="number"
-                          step="0.1"
+                          type="text"
+                          inputMode="decimal"
                           name="promoterContribCr"
                           value={formData.promoterContribCr}
+                          onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
                           onChange={handleInputChange}
+                          onBlur={() => markFieldTouched('promoterContribCr')}
+                          error={shouldShowError('promoterContribCr', 2, promoterContribValidation.isValid)}
                           placeholder="Enter promoter equity in hand in ₹ Cr"
                           required
                           className="pl-7 font-bold"
                         />
                       </div>
+                      {shouldShowError('promoterContribCr', 2, promoterContribValidation.isValid) && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">{promoterContribValidation.error}</p>
+                      )}
                     </div>
 
                     <div>
@@ -1652,11 +2680,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <div className="relative">
                         <span className="absolute left-3 top-2.5 text-xs font-bold text-gray-400 z-10">₹</span>
                         <Input
-                          type="number"
-                          step="0.1"
+                          type="text"
+                          inputMode="decimal"
                           name="loanRequiredCr"
                           value={formData.loanRequiredCr}
-                          onChange={handleInputChange}
                           placeholder="Automatically calculated"
                           readOnly
                           className="pl-7 bg-blue-50/50 border-blue-200 font-bold text-blue-900"
@@ -1784,9 +2811,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          const c = parseFloat(formData.totalCostCr) || 10;
-                          const l = parseFloat(formData.loanRequiredCr) || (c * 0.75);
-                          const p = parseFloat(formData.promoterContribCr) || (c * 0.25);
+                          const c = parseFloat(formData.totalCostCr);
+                          if (!Number.isFinite(c) || c <= 0) {
+                            showToast('Enter a valid Total Project Cost above before auto-allocating CAPEX.', { type: 'warning' });
+                            return;
+                          }
+                          const p = parseFloat(formData.promoterContribCr) || 0;
+                          const l = Math.max(0, c - p);
                           setFinancials({
                             machineryCostCr: (c * 0.65).toFixed(2),
                             civilCostCr: (c * 0.25).toFixed(2),
@@ -1813,11 +2844,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <div className="relative">
                           <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={financials.machineryCostCr}
+                            onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const val = sanitizeDecimalInput(e.target.value, 2);
                               setFinancials(prev => ({ ...prev, machineryCostCr: val }));
                             }}
                             placeholder="e.g. 6.50"
@@ -1833,11 +2865,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <div className="relative">
                           <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={financials.civilCostCr}
+                            onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const val = sanitizeDecimalInput(e.target.value, 2);
                               setFinancials(prev => ({ ...prev, civilCostCr: val }));
                             }}
                             placeholder="e.g. 2.50"
@@ -1853,11 +2886,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <div className="relative">
                           <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={financials.consultancyCostCr}
+                            onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const val = sanitizeDecimalInput(e.target.value, 2);
                               setFinancials(prev => ({ ...prev, consultancyCostCr: val }));
                             }}
                             placeholder="e.g. 0.50"
@@ -1873,11 +2907,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <div className="relative">
                           <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400 z-10">₹</span>
                           <Input
-                            type="number"
-                            step="0.01"
+                            type="text"
+                            inputMode="decimal"
                             value={financials.otherCostsCr}
+                            onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
                             onChange={(e) => {
-                              const val = e.target.value;
+                              const val = sanitizeDecimalInput(e.target.value, 2);
                               setFinancials(prev => ({ ...prev, otherCostsCr: val }));
                             }}
                             placeholder="e.g. 0.50"
@@ -1993,6 +3028,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         ]}
                         triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
                       />
+                      {submittedSteps[3] && !formData.landStatus && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">Please select land status</p>
+                      )}
                     </div>
 
                     <div>
@@ -2015,6 +3053,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         ]}
                         triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
                       />
+                      {submittedSteps[3] && !formData.collateralStatus && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">Please select collateral status</p>
+                      )}
                     </div>
 
                     <div className="md:col-span-2">
@@ -2036,6 +3077,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         ]}
                         triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
                       />
+                      {submittedSteps[3] && !formData.promoterExp && (
+                        <p className="text-[11px] text-red-600 mt-1 font-medium">Please select promoter track record</p>
+                      )}
                     </div>
 
                     <div className="md:col-span-2">
@@ -2045,8 +3089,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <textarea
                         name="description"
                         rows={2}
+                        maxLength={600}
                         value={formData.description}
                         onChange={handleInputChange}
+                        onBlur={() => setFormData((prev) => ({ ...prev, description: prev.description.trim() }))}
                         placeholder="Enter brief project description (e.g. proposed capacity, plant details)"
                         className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500"
                       />
@@ -2094,31 +3140,43 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           <Input
                             type="text"
                             name="fullName"
+                            maxLength={80}
+                            autoComplete="name"
                             value={formData.fullName}
                             onChange={handleInputChange}
+                            onBlur={() => {
+                              setFormData((prev) => ({ ...prev, fullName: sanitizePersonNameInput(prev.fullName, 80).trim() }));
+                              markFieldTouched('fullName');
+                            }}
+                            error={shouldShowError('fullName', 3, fullNameValidation.isValid)}
                             required
                             placeholder="e.g. Rajesh Malhotra"
                           />
+                          {shouldShowError('fullName', 3, fullNameValidation.isValid) && (
+                            <p className="text-[11px] text-red-600 mt-1 font-medium">{fullNameValidation.error}</p>
+                          )}
                         </div>
 
                         <div>
                           <label className="block text-[11px] font-bold text-gray-600 mb-1">Mobile Number *</label>
                           <Input
                             type="tel"
+                            inputMode="numeric"
+                            autoComplete="tel"
                             name="mobile"
                             value={formData.mobile}
-                            onChange={(e) => {
-                              handleInputChange(e);
+                            onChange={handleInputChange}
+                            onBlur={() => {
+                              setFormData((prev) => ({ ...prev, mobile: sanitizeIndianPhoneInput(prev.mobile) }));
                               setMobileTouched(true);
+                              markFieldTouched('mobile');
                             }}
-                            onBlur={() => setMobileTouched(true)}
                             required
                             placeholder="Enter 10-digit mobile"
-                            maxLength={10}
-                            error={mobileTouched && !mobileValidation.isValid}
+                            error={(mobileTouched || Boolean(submittedSteps[3])) && !mobileValidation.isValid}
                           />
-                          {mobileTouched && !mobileValidation.isValid && (
-                            <p className="text-[11px] text-red-600 mt-1">{mobileValidation.error}</p>
+                          {(mobileTouched || Boolean(submittedSteps[3])) && !mobileValidation.isValid && (
+                            <p className="text-[11px] text-red-600 mt-1 font-medium">{mobileValidation.error}</p>
                           )}
                         </div>
 
@@ -2127,11 +3185,21 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           <Input
                             type="email"
                             name="email"
+                            maxLength={120}
+                            autoComplete="email"
                             value={formData.email}
                             onChange={handleInputChange}
+                            onBlur={() => {
+                              setFormData((prev) => ({ ...prev, email: prev.email.trim().toLowerCase() }));
+                              markFieldTouched('email');
+                            }}
+                            error={shouldShowError('email', 3, emailValidation.isValid)}
                             required
                             placeholder="promoter@company.com"
                           />
+                          {shouldShowError('email', 3, emailValidation.isValid) && (
+                            <p className="text-[11px] text-red-600 mt-1 font-medium">{emailValidation.error}</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2153,78 +3221,94 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           </button>
                         </div>
 
-                        {additionalPromoters.map((promoter, index) => (
-                          <div
-                            key={promoter.id || index}
-                            className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-2xs space-y-3 relative"
-                          >
-                            <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                              <span className="text-[11px] font-bold text-zinc-800">
-                                Promoter {index + 2} (Co-Director / Partner)
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveSinglePromoter(index)}
-                                className="text-[10px] text-red-500 hover:text-red-700 font-semibold cursor-pointer"
-                              >
-                                Remove
-                              </button>
+                        {additionalPromoters.map((promoter, index) => {
+                          const coKey = `coPromoter_${index}`;
+                          const coNameCheck = validatePersonName(promoter.name, 'Co-promoter name', true);
+                          const showCoErr = shouldShowError(coKey, 3, coNameCheck.isValid);
+                          return (
+                            <div
+                              key={promoter.id || index}
+                              className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-2xs space-y-3 relative"
+                            >
+                              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                                <span className="text-[11px] font-bold text-zinc-800">
+                                  Promoter {index + 2} (Co-Director / Partner)
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSinglePromoter(index)}
+                                  className="text-[10px] text-red-500 hover:text-red-700 font-semibold cursor-pointer"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                                    Promoter Name *
+                                  </label>
+                                  <Input
+                                    type="text"
+                                    maxLength={80}
+                                    value={promoter.name}
+                                    onChange={(e) =>
+                                      handleUpdateAdditionalPromoter(index, 'name', sanitizePersonNameInput(e.target.value, 80))
+                                    }
+                                    onBlur={() => {
+                                      handleUpdateAdditionalPromoter(index, 'name', promoter.name.trim());
+                                      markFieldTouched(coKey);
+                                    }}
+                                    error={showCoErr}
+                                    required
+                                    placeholder={`e.g. Co-Promoter ${index + 2}`}
+                                  />
+                                  {showCoErr && (
+                                    <p className="text-[11px] text-red-600 mt-1 font-medium">{coNameCheck.error}</p>
+                                  )}
+                                </div>
+
+                                <div>
+                                  <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                                    Experience (Years) *
+                                  </label>
+                                  <UISelect
+                                    value={promoter.experienceYears || ''}
+                                    onValueChange={(val) => handleUpdateAdditionalPromoter(index, 'experienceYears', val)}
+                                    placeholder="Select Experience"
+                                    options={[
+                                      '1-3 Years (Early Career)',
+                                      '3-5 Years (Relevant Domain)',
+                                      '5-10 Years (Senior Track Record)',
+                                      '10+ Years (Industry Veteran)',
+                                      '15+ Years (Executive Experience)'
+                                    ]}
+                                    triggerClassName="bg-gray-50 border-gray-200 text-xs"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[11px] font-bold text-gray-600 mb-1">
+                                    Qualification *
+                                  </label>
+                                  <UISelect
+                                    value={promoter.qualification}
+                                    onValueChange={(val) => handleUpdateAdditionalPromoter(index, 'qualification', val)}
+                                    options={[
+                                      'B.Tech / Engineering',
+                                      'MBA / Business Management',
+                                      'Chartered Accountant (CA)',
+                                      "Post Graduate / Master's",
+                                      'Doctorate (Ph.D)',
+                                      'Graduate / Other'
+                                    ]}
+                                    triggerClassName="bg-gray-50 border-gray-200 text-xs"
+                                  />
+                                </div>
+                              </div>
                             </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                                  Promoter Name *
-                                </label>
-                                <Input
-                                  type="text"
-                                  value={promoter.name}
-                                  onChange={(e) => handleUpdateAdditionalPromoter(index, 'name', e.target.value)}
-                                  required
-                                  placeholder={`e.g. Co-Promoter ${index + 2}`}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                                  Experience (Years) *
-                                </label>
-                                <UISelect
-                                  value={promoter.experienceYears || ''}
-                                  onValueChange={(val) => handleUpdateAdditionalPromoter(index, 'experienceYears', val)}
-                                  placeholder="Select Experience"
-                                  options={[
-                                    '1-3 Years (Early Career)',
-                                    '3-5 Years (Relevant Domain)',
-                                    '5-10 Years (Senior Track Record)',
-                                    '10+ Years (Industry Veteran)',
-                                    '15+ Years (Executive Experience)'
-                                  ]}
-                                  triggerClassName="bg-gray-50 border-gray-200 text-xs"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block text-[11px] font-bold text-gray-600 mb-1">
-                                  Qualification *
-                                </label>
-                                <UISelect
-                                  value={promoter.qualification}
-                                  onValueChange={(val) => handleUpdateAdditionalPromoter(index, 'qualification', val)}
-                                  options={[
-                                    'B.Tech / Engineering',
-                                    'MBA / Business Management',
-                                    'Chartered Accountant (CA)',
-                                    "Post Graduate / Master's",
-                                    'Doctorate (Ph.D)',
-                                    'Graduate / Other'
-                                  ]}
-                                  triggerClassName="bg-gray-50 border-gray-200 text-xs"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2272,6 +3356,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           ]}
                           triggerClassName="bg-white border-gray-200 text-xs font-medium"
                         />
+                        {submittedSteps[3] && !formData.bankName.trim() && (
+                          <p className="text-[11px] text-red-600 mt-1 font-medium">Please select your preferred bank</p>
+                        )}
                       </div>
 
                       <div>
@@ -2282,12 +3369,21 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <Input
                           type="text"
                           name="branchLocation"
+                          maxLength={120}
                           value={formData.branchLocation}
                           onChange={handleInputChange}
+                          onBlur={() => {
+                            setFormData((prev) => ({ ...prev, branchLocation: prev.branchLocation.trim() }));
+                            markFieldTouched('branchLocation');
+                          }}
+                          error={shouldShowError('branchLocation', 3, branchLocationValidation.isValid)}
                           required
                           placeholder="e.g. Industrial Finance Branch, Bengaluru"
                           className="bg-white font-medium"
                         />
+                        {shouldShowError('branchLocation', 3, branchLocationValidation.isValid) && (
+                          <p className="text-[11px] text-red-600 mt-1 font-medium">{branchLocationValidation.error}</p>
+                        )}
                       </div>
 
                       <div>
@@ -2297,11 +3393,20 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <Input
                           type="text"
                           name="bankIfscCode"
+                          maxLength={11}
                           value={formData.bankIfscCode}
-                          onChange={(e) => setFormData(prev => ({ ...prev, bankIfscCode: e.target.value.toUpperCase() }))}
+                          onChange={handleInputChange}
+                          onBlur={() => {
+                            setFormData((prev) => ({ ...prev, bankIfscCode: sanitizeIfscInput(prev.bankIfscCode) }));
+                            markFieldTouched('bankIfscCode');
+                          }}
+                          error={shouldShowError('bankIfscCode', 3, ifscValidation.isValid)}
                           placeholder="e.g. SBIN0004562"
                           className="bg-white font-mono uppercase"
                         />
+                        {shouldShowError('bankIfscCode', 3, ifscValidation.isValid) && (
+                          <p className="text-[11px] text-red-600 mt-1 font-medium">{ifscValidation.error}</p>
+                        )}
                       </div>
 
                       <div>
@@ -2311,8 +3416,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         <Input
                           type="text"
                           name="bankAppRefNumber"
+                          maxLength={40}
                           value={formData.bankAppRefNumber}
                           onChange={handleInputChange}
+                          onBlur={() =>
+                            setFormData((prev) => ({ ...prev, bankAppRefNumber: prev.bankAppRefNumber.trim() }))
+                          }
                           placeholder="e.g. SBI-SME-2026-081"
                           className="bg-white font-mono"
                         />
@@ -2746,10 +3855,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Consultancy &amp; Pre-op (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={financials.consultancyCostCr}
-                      onChange={(e) => setFinancials({...financials, consultancyCostCr: e.target.value})}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, consultancyCostCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
                       placeholder="e.g. 2.50"
                       className="text-xs font-semibold"
                     />
@@ -2757,10 +3869,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Plant &amp; Machinery (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={financials.machineryCostCr}
-                      onChange={(e) => setFinancials({...financials, machineryCostCr: e.target.value})}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, machineryCostCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
                       placeholder="e.g. 30.00"
                       className="text-xs font-semibold"
                     />
@@ -2768,10 +3883,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Land &amp; Civil Works (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={financials.civilCostCr}
-                      onChange={(e) => setFinancials({...financials, civilCostCr: e.target.value})}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, civilCostCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
                       placeholder="e.g. 15.00"
                       className="text-xs font-semibold"
                     />
@@ -2779,10 +3897,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Other Project Costs (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={financials.otherCostsCr}
-                      onChange={(e) => setFinancials({...financials, otherCostsCr: e.target.value})}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, otherCostsCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
                       placeholder="e.g. 2.50"
                       className="text-xs font-semibold"
                     />
@@ -2809,11 +3930,14 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Project Term Debt / Bank Loan (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
-                      value={financials.termLoanCr !== '' ? financials.termLoanCr : (currentLoanFromPrev > 0 ? currentLoanFromPrev.toFixed(2) : '')}
-                      onChange={(e) => setFinancials({...financials, termLoanCr: e.target.value})}
-                      placeholder="Enter debt amount..."
+                      type="text"
+                      inputMode="decimal"
+                      value={financials.termLoanCr}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, termLoanCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
+                      placeholder={currentLoanFromPrev > 0 ? `Suggested: ${currentLoanFromPrev.toFixed(2)}` : 'Enter debt amount...'}
                       className="text-xs font-semibold"
                     />
                     {totalFin > 0 && <div className="text-[10px] font-medium text-emerald-600 text-right">{debtPct}% Allocation</div>}
@@ -2821,11 +3945,14 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Promoter Contribution / Equity (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
-                      value={financials.promoterContributionCr !== '' ? financials.promoterContributionCr : (currentContribFromPrev > 0 ? currentContribFromPrev.toFixed(2) : '')}
-                      onChange={(e) => setFinancials({...financials, promoterContributionCr: e.target.value})}
-                      placeholder="Enter promoter contribution..."
+                      type="text"
+                      inputMode="decimal"
+                      value={financials.promoterContributionCr}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, promoterContributionCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
+                      placeholder={currentContribFromPrev > 0 ? `Suggested: ${currentContribFromPrev.toFixed(2)}` : 'Enter promoter contribution...'}
                       className="text-xs font-semibold"
                     />
                     {totalFin > 0 && <div className="text-[10px] font-medium text-emerald-600 text-right">{eqPct}% Allocation</div>}
@@ -2833,10 +3960,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Other Sources / Grants (Cr)</label>
                     <Input
-                      type="number"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
                       value={financials.otherFinanceCr}
-                      onChange={(e) => setFinancials({...financials, otherFinanceCr: e.target.value})}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, otherFinanceCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
                       placeholder="Optional (e.g. 0.00)"
                       className="text-xs font-semibold"
                     />
@@ -3344,7 +4474,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       </button>
                     </div>
 
-                    <form onSubmit={handleInlineAuthSubmit} className="space-y-3 pt-1">
+                    <form onSubmit={handleInlineAuthSubmit} noValidate className="space-y-3 pt-1">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {inlineAuthMode === 'signup' && (
                           <div className="space-y-1">
@@ -3356,8 +4486,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                               <input
                                 type="text"
                                 required
-                                value={inlineName || formData.fullName}
-                                onChange={(e) => setInlineName(e.target.value)}
+                                maxLength={80}
+                                value={inlineName}
+                                onChange={(e) => setInlineName(sanitizePersonNameInput(e.target.value, 80))}
+                                onBlur={() => setInlineName((prev) => prev.trim())}
                                 placeholder="e.g. Ramesh Sharma"
                                 className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                               />
@@ -3374,8 +4506,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                             <input
                               type="email"
                               required
-                              value={inlineEmail || formData.email}
+                              maxLength={120}
+                              value={inlineEmail}
                               onChange={(e) => setInlineEmail(e.target.value)}
+                              onBlur={() => setInlineEmail((prev) => prev.trim().toLowerCase())}
                               placeholder="e.g. ramesh@enterprise.in"
                               className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                             />
@@ -3391,8 +4525,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                               <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                               <input
                                 type="tel"
-                                value={inlinePhone || formData.mobile}
-                                onChange={(e) => setInlinePhone(e.target.value)}
+                                inputMode="numeric"
+                                autoComplete="tel"
+                                value={inlinePhone}
+                                onChange={(e) => setInlinePhone(sanitizeIndianPhoneInput(e.target.value))}
                                 placeholder="10-digit mobile"
                                 className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                               />
@@ -3776,6 +4912,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         currentUser={activeUser}
         onOpenAuth={onOpenAuth}
         onOpenConsultation={onOpenConsultation}
+        initialReason={membershipModalReason}
       />
 
       {/* DPR Request Modal */}

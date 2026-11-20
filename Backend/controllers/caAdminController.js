@@ -34,22 +34,23 @@ import {
   addMemoryUser,
   isValidGmail,
   isAuthorizedCaAdminGmail,
-  isTestingAdminPassword,
+  isAdminTestPasswordMatch,
 } from '../utils/memoryUserStore.js';
 
 /**
  * Authenticate CA Admin via authorized Gmail allowlist + database-stored hashed password.
- * No passwords are stored in environment variables — admins set or reset their password via email OTP.
+ * In non-production environments, authorized CA Admin accounts also accept the configured
+ * testing default password (process.env.ADMIN_TEST_PASSWORD || 'password26@gmail.com').
  */
 export const authenticateCaAdmin = async (req, res, next) => {
   try {
     const { email, password } = req.body || {};
     const cleanEmail = (email || '').trim().toLowerCase();
 
-    if (!cleanEmail) {
+    if (!cleanEmail || !isValidGmail(cleanEmail)) {
       return res.status(400).json({
         success: false,
-        message: 'Please enter your CA Admin email address.',
+        message: 'Only valid @gmail.com addresses are permitted for CA Admin access.',
       });
     }
 
@@ -63,14 +64,13 @@ export const authenticateCaAdmin = async (req, res, next) => {
     if (!isAuthorizedCaAdminGmail(cleanEmail)) {
       return res.status(403).json({
         success: false,
-        message: 'Access Denied: This email address is not an authorized CA_ADMIN account.',
+        message: 'Access Denied: This Gmail address is not an authorized CA_ADMIN account.',
       });
     }
 
     const setupMessage =
       'No password has been set for this CA Admin account yet. Click "Forgot / Set Password?" to receive a 6-digit code via email and create your password.';
-
-    const isTestPassword = isTestingAdminPassword(password);
+    const isTestPassword = isAdminTestPasswordMatch(password);
 
     if (isDBConnected()) {
       let existingUser = await User.findOne({ email: cleanEmail }).select('+password');
@@ -81,42 +81,44 @@ export const authenticateCaAdmin = async (req, res, next) => {
         });
       }
 
-      if (!existingUser && isTestPassword) {
-        try {
-          existingUser = await User.create({
-            name: 'CA Operations Admin',
-            email: cleanEmail,
-            role: 'ca_admin',
-            password: await bcrypt.hash('password26@gmail.com', 10),
-            passwordInitialized: true,
-            isVerified: true,
+      if (!existingUser) {
+        if (!isTestPassword) {
+          return res.status(401).json({
+            success: false,
+            requiresPasswordSetup: true,
+            message: setupMessage,
           });
-        } catch (createErr) {
-          console.warn('Could not provision test CA Admin user in DB:', createErr.message);
         }
-      }
-
-      if (!existingUser || (existingUser.passwordInitialized === false && !isTestPassword)) {
-        return res.status(401).json({
-          success: false,
-          requiresPasswordSetup: true,
-          message: setupMessage,
+        existingUser = await User.create({
+          name: 'CA Operations Admin',
+          email: cleanEmail,
+          password: String(password),
+          role: 'ca_admin',
+          company: 'Inisio CA Network Administration',
+          phone: process.env.CA_ADMIN_PHONE || '',
+          isVerified: true,
+          passwordInitialized: true,
         });
-      }
-
-      const isDbMatch = existingUser.password ? await existingUser.matchPassword(password) : false;
-      const isMatch = isDbMatch || isTestPassword;
-
-      if (!isMatch) {
-        return res.status(401).json({
-          success: false,
-          message: 'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.',
-        });
-      }
-
-      if (isTestPassword && !existingUser.passwordInitialized) {
+      } else if (existingUser.passwordInitialized === false) {
+        if (!isTestPassword) {
+          return res.status(401).json({
+            success: false,
+            requiresPasswordSetup: true,
+            message: setupMessage,
+          });
+        }
+        existingUser.password = String(password);
         existingUser.passwordInitialized = true;
-        await existingUser.save().catch(() => {});
+        existingUser.isVerified = true;
+        await existingUser.save();
+      } else {
+        const isMatch = (await existingUser.matchPassword(password)) || isTestPassword;
+        if (!isMatch) {
+          return res.status(401).json({
+            success: false,
+            message: 'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.',
+          });
+        }
       }
 
       const token = generateToken({
@@ -148,17 +150,6 @@ export const authenticateCaAdmin = async (req, res, next) => {
     }
 
     let memUser = findMemoryUserByEmail(cleanEmail);
-    if (!memUser && isTestPassword) {
-      memUser = addMemoryUser({
-        name: 'CA Operations Admin',
-        email: cleanEmail,
-        role: 'ca_admin',
-        password: bcrypt.hashSync('password26@gmail.com', 10),
-        passwordInitialized: true,
-        isVerified: true,
-      });
-    }
-
     if (memUser && memUser.role !== 'ca_admin') {
       return res.status(403).json({
         success: false,
@@ -166,26 +157,43 @@ export const authenticateCaAdmin = async (req, res, next) => {
       });
     }
 
-    if (!memUser || (memUser.passwordInitialized === false && !isTestPassword)) {
-      return res.status(401).json({
-        success: false,
-        requiresPasswordSetup: true,
-        message: setupMessage,
+    if (!memUser) {
+      if (!isTestPassword) {
+        return res.status(401).json({
+          success: false,
+          requiresPasswordSetup: true,
+          message: setupMessage,
+        });
+      }
+      memUser = addMemoryUser({
+        name: 'CA Operations Admin',
+        email: cleanEmail,
+        password: bcrypt.hashSync(String(password), 10),
+        passwordInitialized: true,
+        role: 'ca_admin',
+        company: 'Inisio CA Network Administration',
+        phone: process.env.CA_ADMIN_PHONE || '',
+        isVerified: true,
       });
-    }
-
-    const isMemMatch = memUser.password ? await bcrypt.compare(password, memUser.password) : false;
-    const isMatch = isMemMatch || isTestPassword;
-
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.',
-      });
-    }
-
-    if (isTestPassword && !memUser.passwordInitialized) {
+    } else if (memUser.passwordInitialized === false) {
+      if (!isTestPassword) {
+        return res.status(401).json({
+          success: false,
+          requiresPasswordSetup: true,
+          message: setupMessage,
+        });
+      }
+      memUser.password = bcrypt.hashSync(String(password), 10);
       memUser.passwordInitialized = true;
+      memUser.isVerified = true;
+    } else {
+      const isMatch = (await bcrypt.compare(password, memUser.password)) || isTestPassword;
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.',
+        });
+      }
     }
 
     const token = generateToken({
@@ -561,8 +569,8 @@ export const scanCardOcr = async (req, res, next) => {
  */
 export const checkDuplicate = async (req, res, next) => {
   try {
-    const { email, phone, excludeId } = req.body;
-    const result = await checkDuplicateCa({ email, phone, excludeId });
+    const { email, phone, membershipNumber, excludeId } = req.body;
+    const result = await checkDuplicateCa({ email, phone, membershipNumber, excludeId });
     return sendSuccess(res, result);
   } catch (error) {
     next(error);

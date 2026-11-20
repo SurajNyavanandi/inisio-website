@@ -17,8 +17,18 @@
     <!-- Canonical URL (TODO: Confirm custom production domain if migrating from inisio.vercel.app) -->
     <link rel="canonical" href="https://inisio.vercel.app/" />
 
-    <!-- Favicon & Touch Icons -->
+    <!-- Brand Typography (Manrope for headings/brand + Inter for UI/body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Brand Theme Color & Favicon / Touch Icons -->
+    <meta name="theme-color" content="#2563eb" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="shortcut icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
 
     <!-- Open Graph Social Share Tags (TODO: Host a dedicated 1200x630 branded og-image.png on your primary domain) -->
@@ -64,7 +74,13 @@
           "name": "Inisio Capital",
           "alternateName": ["Inisio", "Inisio Advisory", "Inisio Capital Advisory"],
           "url": "https://inisio.vercel.app/",
-          "logo": "https://inisio.vercel.app/favicon.svg",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://inisio.vercel.app/favicon.svg",
+            "width": 64,
+            "height": 64,
+            "caption": "Inisio Capital Logo"
+          },
           "image": "https://res.cloudinary.com/aessymvl/image/upload/v1786547187/ChatGPT_Image_Aug_12_2026_08_34_57_PM_hb8xi9.png",
           "description": "Inisio Capital offers institutional Detailed Project Report (DPR) preparation, bank debt syndication, bankability scorecards, and CMA financial models for greenfield projects in Hyderabad and across India.",
           "telephone": "+916302026462",

@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { UISelect } from './ui/Select';
 import { Input } from './ui/Input';
 import { Checkbox } from './ui/Checkbox';
+import {
+  blockInvalidNumberKeys,
+  sanitizeIntegerInput,
+  validateCibilScore,
+} from '../utils/validation';
 
 export interface DetailedRiskProfileData {
   educationalBackground?: string;
@@ -41,23 +46,48 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
   const [formData, setFormData] = useState<DetailedRiskProfileData>({
     businessConstitution: initialData?.businessConstitution || 'Private Limited (Pvt Ltd)',
     businessVintage: initialData?.businessVintage || '5-10 Years',
-    collateralCoveragePct: initialData?.collateralCoveragePct || 100,
+    collateralCoveragePct: initialData?.collateralCoveragePct ?? 100,
     isNewToCredit: initialData?.isNewToCredit || false,
-    cibilScore: initialData?.cibilScore || 780,
-    equityPercent: initialData?.equityPercent || defaultEquityPercent,
-    promoterExpYears: initialData?.promoterExpYears || defaultPromoterExpYears,
+    cibilScore:
+      initialData?.cibilScore !== undefined && initialData?.cibilScore !== null
+        ? String(initialData.cibilScore)
+        : '780',
+    equityPercent: initialData?.equityPercent ?? defaultEquityPercent,
+    promoterExpYears: initialData?.promoterExpYears ?? defaultPromoterExpYears,
     educationalBackground: initialData?.educationalBackground || 'Post Graduate / Professional (MBA, CA, Engg)',
     offtakeSecurity: initialData?.offtakeSecurity || 'Signed LOIs / Long-Term Supply Contracts',
     managementTeamStrength: initialData?.managementTeamStrength || 'Established Second-Line Management'
   });
 
+  const [cibilTouched, setCibilTouched] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const cibilValidation = validateCibilScore(formData.cibilScore, Boolean(formData.isNewToCredit));
+  const showCibilError = (cibilTouched || submitted) && !cibilValidation.isValid;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmitSuccess(formData);
+    setSubmitted(true);
+    setCibilTouched(true);
+
+    if (!cibilValidation.isValid) {
+      return;
+    }
+
+    const cleanedCibil = formData.isNewToCredit
+      ? ''
+      : formData.cibilScore !== '' && formData.cibilScore !== undefined
+      ? Number(formData.cibilScore)
+      : '';
+
+    onSubmitSuccess({
+      ...formData,
+      cibilScore: cleanedCibil,
+    });
   };
 
   return (
-    <form id={sectionId} onSubmit={handleSubmit} className="space-y-6 font-inter text-left">
+    <form id={sectionId} onSubmit={handleSubmit} noValidate className="space-y-6 font-inter text-left">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-700 block">
@@ -95,16 +125,27 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
 
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-700 block">
-            Lead Promoter CIBIL Score (or Commercial CMR) *
+            Lead Promoter CIBIL Score (or Commercial CMR) {!formData.isNewToCredit && '*'}
           </label>
           <Input
-            type="number"
-            min="300"
-            max="900"
-            value={formData.cibilScore}
-            onChange={(e) => setFormData({ ...formData, cibilScore: Number(e.target.value) })}
-            className="bg-white border-slate-300"
+            type="text"
+            inputMode="numeric"
+            maxLength={3}
+            disabled={Boolean(formData.isNewToCredit)}
+            value={formData.isNewToCredit ? '' : String(formData.cibilScore ?? '')}
+            onKeyDown={(e) => blockInvalidNumberKeys(e, false)}
+            onChange={(e) => {
+              const sanitized = sanitizeIntegerInput(e.target.value, 3);
+              setFormData({ ...formData, cibilScore: sanitized });
+            }}
+            onBlur={() => setCibilTouched(true)}
+            placeholder={formData.isNewToCredit ? 'Not applicable (New to Credit)' : '300 - 900 (e.g. 780)'}
+            error={showCibilError}
+            className="bg-white border-slate-300 disabled:bg-slate-100 disabled:text-slate-400"
           />
+          {showCibilError && (
+            <p className="text-[11px] text-red-600 font-medium">{cibilValidation.error}</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -112,7 +153,7 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
             Available Collateral Coverage (% of Loan) *
           </label>
           <UISelect
-            value={String(formData.collateralCoveragePct || '100')}
+            value={String(formData.collateralCoveragePct ?? '100')}
             onValueChange={(val) => setFormData({ ...formData, collateralCoveragePct: Number(val) })}
             options={[
               { value: '125', label: '125%+ (High Tangible Security)' },
@@ -130,7 +171,11 @@ export const DetailedRiskProfileForm: React.FC<DetailedRiskProfileFormProps> = (
         <Checkbox
           id="isNewToCredit"
           checked={!!formData.isNewToCredit}
-          onCheckedChange={(checked) => setFormData({ ...formData, isNewToCredit: !!checked })}
+          onCheckedChange={(checked) => {
+            const isNtc = !!checked;
+            setFormData({ ...formData, isNewToCredit: isNtc });
+            if (isNtc) setCibilTouched(false);
+          }}
         />
         <label htmlFor="isNewToCredit" className="text-xs font-semibold text-slate-700 cursor-pointer select-none">
           First-time commercial borrower / New to commercial credit (NTC)

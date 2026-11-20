@@ -3,6 +3,7 @@ import { api } from './apiClient';
 export interface LeadRecord {
   id: string;
   _id?: string;
+  clientProjectId?: string;
   fullName: string;
   companyName?: string;
   email: string;
@@ -110,6 +111,7 @@ export function normalizeLead(item: any): LeadRecord {
   return {
     id,
     _id: item._id || id,
+    clientProjectId: item.clientProjectId ? String(item.clientProjectId).trim() : undefined,
     fullName: item.fullName || item.promoterName || item.name || '',
     companyName: item.companyName || item.company || '',
     email: item.email || '',
@@ -230,6 +232,9 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
   // Send full structured assessment & project details to backend database API
   try {
     const payload = {
+      id: lead.id || undefined,
+      _id: lead._id || undefined,
+      clientProjectId: norm.clientProjectId || undefined,
       fullName: norm.fullName,
       companyName: norm.companyName || undefined,
       mobile: norm.phone || norm.mobile || '',
@@ -272,14 +277,30 @@ export async function saveLeadRecord(lead: Partial<LeadRecord>): Promise<LeadRec
     if (res && (res._id || res.id)) {
       norm.id = String(res._id || res.id);
       norm._id = norm.id;
+      if (res.clientProjectId) {
+        norm.clientProjectId = String(res.clientProjectId);
+      }
     }
-  } catch (err) {
+  } catch (err: any) {
+    // Propagate server-side 1-free-assessment quota enforcement immediately — never silently create a duplicate local entry
+    if (err?.code === 'FREE_ASSESSMENT_LIMIT_REACHED' || err?.status === 403) {
+      throw err;
+    }
     console.warn('API save to database lead collection deferred:', err);
   }
 
-  // Update local storage cache
+  // Update local storage cache with strict deduplication by id, _id, or clientProjectId
   const currentLeads = getStoredLeads();
-  const updated = [norm, ...currentLeads.filter((l) => l.id !== norm.id && l._id !== norm._id)];
+  const updated = [
+    norm,
+    ...currentLeads.filter((l) => {
+      if (l.id === norm.id || (norm._id && l._id === norm._id)) return false;
+      if (norm.clientProjectId && l.clientProjectId && l.clientProjectId === norm.clientProjectId) {
+        return false;
+      }
+      return true;
+    }),
+  ];
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
