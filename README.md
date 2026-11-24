@@ -1,815 +1,738 @@
-# Inisio — Greenfield Project Advisory & Debt Syndication Platform
+# PROJECT: Inisio — Greenfield Project Advisory & Debt Syndication Platform
 
-> Full-stack MERN application providing bankability appraisal, greenfield project feasibility assessment, CA audit workflow, and Razorpay-powered membership for Indian infrastructure promoters.
-
----
-
-## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [Tech Stack](#2-tech-stack)
-3. [Folder Structure](#3-folder-structure)
-4. [Environment Setup](#4-environment-setup)
-5. [Running Locally](#5-running-locally)
-6. [Backend API Reference](#6-backend-api-reference)
-   - [Root & Health](#61-root--health)
-   - [Auth Routes — `/api/auth`](#62-auth-routes--apiauth)
-   - [User Routes — `/api/users`](#63-user-routes--apiusers)
-   - [Lead Routes — `/api/leads`](#64-lead-routes--apileads)
-   - [Project Routes — `/api/projects`](#65-project-routes--apiprojects)
-   - [Assessment Routes — `/api/assessments`](#66-assessment-routes--apiassessments)
-   - [Consultation Routes — `/api/consultations`](#67-consultation-routes--apiconsultations)
-   - [Payment Routes — `/api/payments`](#68-payment-routes--apipayments)
-   - [Document Routes — `/api/documents`](#69-document-routes--apidocuments)
-   - [Notification Routes — `/api/notifications`](#610-notification-routes--apinotifications)
-   - [Contact Routes — `/api/contact`](#611-contact-routes--apicontact)
-   - [Industry Routes — `/api/industries`](#612-industry-routes--apiindustries)
-   - [Service Routes — `/api/services`](#613-service-routes--apiservices)
-7. [Database Models](#7-database-models)
-8. [Authentication & Authorization Flow](#8-authentication--authorization-flow)
-9. [Frontend Architecture](#9-frontend-architecture)
-10. [Security Notes](#10-security-notes)
-11. [Deployment](#11-deployment)
+> **Enterprise-grade, high-performance B2B platform empowering Indian industrial entrepreneurs, project promoters, and corporate developers to structure, evaluate, and secure institutional debt financing (₹5 Cr to ₹500+ Cr) with AI-powered feasibility underwriting, multi-role stakeholder collaboration, and instant executive teaser generation.**
 
 ---
 
 ## 1. Project Overview
 
-**Inisio** is a B2B advisory platform for greenfield industrial and manufacturing project promoters in India who seek institutional debt (bank loans, SIDBI, PSU consortium). The platform provides:
+**Inisio** is a comprehensive full-stack MERN (MongoDB, Express, React, Node.js) web application engineered specifically for India's capital-intensive industrial manufacturing and infrastructure project ecosystem. The platform bridges the gap between project promoters seeking long-term credit and scheduled commercial banks, non-banking financial companies (NBFCs), and development financial institutions (DFIs such as SIDBI).
 
-- **Greenfield Feasibility Assessment** — Multi-step financial model computing DSCR, debt-equity ratio, bankability score, and CMA projections
-- **Promoter Dashboard** — Personal project portfolio, document uploads, consultation bookings, and payment history
-- **CA Audit Workflow** — Chartered Accountant review of bankability and feasibility reports
-- **Consultation Booking** — Schedule calls with debt syndication advisors
-- **Membership / Payments** — Razorpay-powered subscription checkout for unlimited project assessments
-- **Blogs & Knowledge Hub** — Advisory articles and research content
+The platform coordinates the entire capital syndication lifecycle across six specialized user roles:
 
----
+1. **Project Promoters & Corporate Borrowers**: Evaluate greenfield/expansion project bankability via a 6-step underwriting wizard, calculate Debt-to-Equity ratios with automated 70:30 Capex balancing, determine Debt Service Coverage Ratios (DSCR), generate AI Project Teasers in PDF and Word DOCX, and track loan syndication pipelines.
+2. **Empanelled Chartered Accountants (CAs / CMAs)**: Conduct financial due diligence, audit Credit Monitoring Arrangement (CMA) projections, review audited balance sheets, and validate debt-service sustainability.
+3. **CA Network Administration**: Manage nation-wide CA onboarding, digitize physical business cards via Optical Character Recognition (OCR with Tesseract.js), issue automated token-based invitation emails (`WOFA-2026`), and activate verified practitioner profiles.
+4. **DPR (Detailed Project Report) Consultants**: Author technical feasibility reports, upload engineering blueprints, track pollution control and environmental clearances, and perform techno-economic viability (TEV) validation.
+5. **ProSync Banking Desk**: Manage multi-lender credit consortiums, track term sheet negotiations, log information memorandum (IM) dispatches, and expedite sanction letter issuances.
+6. **Executive Board & Super Administrators**: Comprehensive platform intelligence, pipeline conversion analytics, audit logging, cross-portal supervisor access, and global system health monitoring.
 
-## 2. Tech Stack
+### Core Value Propositions & Architectural Pillars
 
-### Frontend
-
-| Package | Version |
-|:--------|:--------|
-| react | ^19.1.1 |
-| react-dom | ^19.1.1 |
-| vite | ^7.3.7 |
-| typescript | ~5.8.3 |
-| tailwindcss (via @tailwindcss/vite) | ^4.1.12 |
-| lucide-react | ^0.541.0 |
-| motion | ^12.23.12 |
-| jspdf | ^4.2.1 |
-| docx | ^9.7.1 |
-| file-saver | ^2.0.5 |
-
-### Backend
-
-| Package | Version |
-|:--------|:--------|
-| express | ^4.21.2 |
-| mongoose | ^8.12.0 |
-| jsonwebtoken | ^9.0.2 |
-| bcryptjs | ^3.0.2 |
-| multer | ^2.4.0 |
-| razorpay | ^2.9.8 |
-| helmet | ^8.3.0 |
-| compression | ^1.8.2 |
-| cors | ^2.8.5 |
-| express-rate-limit | ^8.7.4 |
-| dotenv | ^17.2.3 |
-| nodemon (dev) | ^3.1.9 |
+* **Dynamic Data with High-Resilience Fallback**: All platform statistics, industry benchmarks, testimonials, FAQs, and project leads are backed by MongoDB Atlas collections. For local development or database outages, an integrated in-memory state engine (`memoryUserStore.js`, `leadStore.ts`) ensures 100% feature availability without crashing.
+* **6-Step AI Feasibility & Underwriting Engine**: Proprietary algorithm evaluates 100-point institutional bankability matrices, assessing sponsor creditworthiness, execution risk, market risk, financial leverage, and collateral adequacy against RBI/PSU lending benchmarks.
+* **Automated 70:30 Capex Balancer**: Eliminates user drop-off and form freeze by dynamically computing and allocating Debt and Equity means of finance to match total capital expenditure with a single click.
+* **Dual Document Generation (PDF + Word DOCX)**: Client-side generation of high-resolution executive teasers via `jspdf` and fully editable Office Open XML documents via `docx`, complete with institutional branding, credit risk radar, and debt syndication roadmaps.
+* **Business Card OCR Pipeline**: Integrates client-side and server-side Tesseract.js OCR to scan physical visiting cards, extract contact parameters (Name, Email, Phone, ICAI Membership No, Firm, City), and dispatch automated verification invites.
+* **Full-Screen Distraction-Free Workspace**: Both the 6-step assessment wizard and all logged-in role dashboards automatically transition to full-screen mode, removing marketing headers and footers for maximum operational productivity.
+* **Multi-Tier Administrative Authentication**: Super-admin and CA admin logins feature strict allowlist enforcement, bcrypt database verification, Resend 6-digit email OTPs, and developer testing convenience credentials (`password26@gmail.com`).
 
 ---
 
-## 3. Folder Structure
+## 2. Full Technology Stack
 
-```
-inisio26.1/inisio-website/
-│
-├── Backend/                        # Express REST API
-│   ├── server.js                   # Entry point, middleware setup, graceful shutdown
-│   ├── config/
-│   │   ├── env.js                  # Centralized env validation & config object
-│   │   └── db.js                   # Mongoose connection + isDBConnected() helper
-│   ├── routes/
-│   │   ├── index.js                # Mounts all routers under /api
-│   │   ├── authRoutes.js           # /api/auth/*
-│   │   ├── userRoutes.js           # /api/users/*
-│   │   ├── leadRoutes.js           # /api/leads/*
-│   │   ├── projectRoutes.js        # /api/projects/*
-│   │   ├── assessmentRoutes.js     # /api/assessments/*
-│   │   ├── consultationRoutes.js   # /api/consultations/*
-│   │   ├── paymentRoutes.js        # /api/payments/*
-│   │   ├── documentRoutes.js       # /api/documents/*
-│   │   ├── notificationRoutes.js   # /api/notifications/*
-│   │   ├── contactRoutes.js        # /api/contact/*
-│   │   ├── industryRoutes.js       # /api/industries/*
-│   │   └── serviceRoutes.js        # /api/services/*
-│   ├── controllers/                # Request handlers (thin layer over services)
-│   ├── services/                   # Business logic (DB queries, computation)
-│   ├── models/                     # Mongoose schemas
-│   │   ├── User.js
-│   │   ├── Lead.js
-│   │   ├── Project.js
-│   │   ├── Assessment.js
-│   │   ├── Consultation.js
-│   │   ├── Payment.js
-│   │   ├── Document.js
-│   │   ├── Notification.js
-│   │   ├── ContactEnquiry.js
-│   │   ├── ContactMessage.js
-│   │   ├── Industry.js
-│   │   └── Service.js
-│   ├── middleware/
-│   │   ├── authMiddleware.js       # authenticateUser, optionalAuth, authorizeRoles, restrictSuperAdminViewer
-│   │   ├── errorMiddleware.js      # Global error handler → { success, code, message }
-│   │   └── validateMiddleware.js   # validateBody(), validateIndianPhone()
-│   ├── utils/
-│   │   ├── generateToken.js        # jwt.sign / jwt.verify wrappers
-│   │   ├── logger.js               # Sanitizing logger (redacts secrets/OTPs/passwords)
-│   │   ├── responseHandler.js      # sendSuccess() / sendError() helpers
-│   │   ├── emailService.js         # Resend transactional emails
-│   │   ├── whatsappService.js      # WhatsApp OTP delivery
-│   │   ├── memoryUserStore.js      # In-memory user fallback when DB offline
-│   │   └── geoIpService.js         # Login metadata capture (IP, city, browser)
-│   ├── storage/private/            # Uploaded documents (UUID-named, served via /download)
-│   ├── .env.example
-│   └── package.json
-│
-└── Frontend/                       # Vite + React + TypeScript SPA
-    ├── src/
-    │   ├── main.tsx                # React root render + ErrorBoundary
-    │   ├── App.tsx                 # Single-page router (tab state machine)
-    │   ├── types.ts                # AuthUser, shared TS types
-    │   ├── utils/
-    │   │   ├── apiClient.ts        # Fetch wrapper + typed api.* namespace
-    │   │   ├── membershipStore.ts  # Local membership eligibility checks
-    │   │   ├── leadStore.ts        # LocalStorage lead cache
-    │   │   └── userStore.ts        # Login event tracking
-    │   └── components/
-    │       ├── Navbar.tsx
-    │       ├── Hero.tsx
-    │       ├── AuthModal.tsx       # Login / Register / OTP / Reset-Password modal
-    │       ├── UserDashboard.tsx   # Promoter portal (lazy-loaded)
-    │       ├── ProjectAssessmentPage.tsx  # Feasibility engine (lazy-loaded)
-    │       ├── ConsultationModal.tsx
-    │       ├── MembershipPlansModal.tsx
-    │       ├── ErrorBoundary.tsx
-    │       ├── SEOHead.tsx
-    │       └── ...
-    ├── .env.example
-    └── package.json
+### Frontend Ecosystem
+* **Core Framework**: React 19 (`v19.1.1`), React DOM (`v19.1.1`)
+* **Build Tool & Dev Server**: Vite 7 (`v7.3.7`) with `@vitejs/plugin-react` (`v5.0.0`)
+* **Type System**: TypeScript (`~5.8.3`) with strict typing across all data models and utilities
+* **Styling & Design System**: Tailwind CSS v4 (`v4.1.12`) via native `@tailwindcss/vite` integration
+* **UI Components & Primitives**:
+  * Radix UI: `@radix-ui/react-accordion` (`v1.3.1`), `@radix-ui/react-dialog` (`v1.3.1`), `@radix-ui/react-select` (`v2.4.1`), `@radix-ui/react-checkbox` (`v1.4.1`), `@radix-ui/react-toast` (`v1.3.1`)
+  * Layout & Styling Utilities: `clsx` (`v2.1.1`), `tailwind-merge` (`v3.7.1`), `class-variance-authority` (`v0.7.1`)
+* **Animation & Carousels**: Framer Motion (`v12.43.0`), `motion` (`v12.43.0`), `embla-carousel-react` (`v8.6.0`)
+* **Document Generation & Export**:
+  * PDF Export: `jspdf` (`v4.2.1`) for vector-rendered AI project teasers
+  * Word Export: `docx` (`v9.7.1`) and `file-saver` (`v2.0.5`) for editable corporate DOCX teasers
+* **Computer Vision & OCR**: `tesseract.js` (`v7.0.0`) for visiting card character extraction, `jsqr` (`v1.4.0`) for QR parsing
+* **Icons**: Lucide React (`v0.541.0`)
+* **Linting & Code Quality**: ESLint 9 (`v9.34.0`) with `eslint-plugin-react-hooks` (`v5.2.0`) and `eslint-plugin-react-refresh` (`v0.4.20`)
+
+### Backend Ecosystem
+* **Runtime**: Node.js (`>=20.0.0`, v24+ compatible), ES Modules (`"type": "module"`)
+* **Web Framework**: Express 4 (`v4.21.2`)
+* **Database & ODM**: MongoDB Atlas / Local MongoDB, Mongoose (`v8.12.0`)
+* **Security & Hardening**:
+  * `helmet` (`v8.3.0`): HTTP security headers and Content Security Policies
+  * `cors` (`v2.8.5`): Dynamic CORS origin filtering supporting multi-domain environments
+  * `express-rate-limit` (`v8.7.4`): Tiered rate limiters (General: 500 req/15min, Auth: 30 req/15min, Contact/Leads: 20 req/15min)
+  * Payload Protection: Express JSON limit cap (`1mb`) preventing buffer exhaustion attacks
+* **Authentication & Cryptography**:
+  * `jsonwebtoken` (`v9.0.2`): Signed JWT tokens with custom 7-day expiration
+  * `bcryptjs` (`v3.0.2`): 12 salt rounds password hashing
+  * Node.js `crypto`: Cryptographically secure 6-digit numeric OTP generation and claim token creation
+* **Validation**: Zod (`v4.6.7`) schema validation middleware across request bodies and query parameters
+* **Performance & Network**: `compression` (`v1.8.2`) Gzip compression with 1KB threshold
+* **File Uploads**: `multer` (`v2.4.0`) handling multipart document and visiting card uploads
+* **Third-Party Integrations**:
+  * **Resend API (`resend` `v6.38.0`)**: Transactional email dispatch for OTP verifications, password resets, and CA onboarding invitations
+  * **Razorpay Node SDK (`razorpay` `v2.9.8`)**: Checkout orders, webhook verification, and subscription plan management
+* **Development & Tooling**: `nodemon` (`v3.1.9`), custom dual dev runner `Scripts/dev.js`
+
+---
+
+## 3. High-Level Architecture & Request Flow
+
+```mermaid
+flowchart TD
+    subgraph Client["Client Tier (Frontend - React 19 + Vite @ Port 5173)"]
+        UI["Promoter UI / Role Dashboards / 6-Step Assessment Wizard"]
+        ApiClient["apiClient (/api with Bearer Token & Timeout Handling)"]
+        DocGen["Document Generator (jsPDF + docx)"]
+        OcrClient["Client OCR Engine (Tesseract.js)"]
+        UI --> ApiClient
+        UI --> DocGen
+        UI --> OcrClient
+    end
+
+    subgraph Gateway["Reverse Proxy / Dev Forwarder Tier"]
+        ApiClient -->|/api/* Requests| ViteProxy["Vite Dev Proxy / Cloud Gateway"]
+    end
+
+    subgraph Server["Backend Tier (Express 4 @ Port 5000)"]
+        ViteProxy --> Middleware["Security & Sanitization Middlewares\n(Helmet, CORS, Compression, Rate Limiters, Body Parser)"]
+        Middleware --> Router["API Root Router (/api)"]
+
+        Router --> AuthR["/api/auth (Login, Admin 2FA, OTP Reset, Register)"]
+        Router --> UserR["/api/users (User Profiles, Passwords, Membership)"]
+        Router --> LeadR["/api/leads (Debt Syndication Applications & Pipeline)"]
+        Router --> ProjR["/api/projects (Project Metadata & Tracking)"]
+        Router --> AssessR["/api/assessments (Feasibility & Underwriting Score)"]
+        Router --> CaAdminR["/api/ca-admin (CA Card OCR, Token Claim, Activation)"]
+        Router --> ConsultR["/api/consultations (Advisory Call Bookings)"]
+        Router --> PayR["/api/payments (Razorpay Orders, Verification, Webhooks)"]
+        Router --> DocR["/api/documents (Project Document Repository)"]
+        Router --> NotifR["/api/notifications (Real-time System Alerts)"]
+        Router --> ContactR["/api/contact (Enterprise Debt Enquiries)"]
+        Router --> PublicR["/api/industries, /services, /testimonials, /stats, /blogs, /faqs"]
+        Router --> VisitorR["/api/visitors (Analytics & Page Tracking)"]
+        Router --> HealthR["/api/health (Database & Service Probes)"]
+
+        AuthR & UserR & LeadR & ProjR & AssessR & CaAdminR & PayR & ConsultR --> Services["Service Business Logic Layer\n(authService, leadService, caProfileStore, razorpayService, emailService)"]
+        Services --> Mongoose["Mongoose Models & Connection Pooling"]
+        Services --> MemStore["In-Memory Resilient Store Fallback\n(memoryUserStore, memoryLeads, memoryProjects)"]
+    end
+
+    subgraph Persistence["Data Persistence Tier"]
+        Mongoose --> MongoDB[("MongoDB Atlas Cluster / Local DB\n(inisio_new_db)")]
+    end
+
+    subgraph External["External Integrations Tier"]
+        Services -->|Transactional OTP Emails| Resend["Resend Email API"]
+        Services -->|Subscription Orders & Webhooks| Razorpay["Razorpay Gateway"]
+    end
 ```
 
 ---
 
-## 4. Environment Setup
+## 4. Frontend Architecture & Implementation
 
-### Backend — `Backend/.env`
+### 4.1 Folder Organization (`Frontend/src/`)
+```
+Frontend/src/
+├── assets/                  # Brand imagery, partner logos, vector icons
+├── components/              # Modular UI components, dialogs, and dashboards
+│   ├── common.tsx           # Reusable UI primitives (Button, Card, Badge, Modal, Input, Spinner)
+│   ├── Navbar.tsx           # Global responsive navigation with role switcher & CTA triggers
+│   ├── Footer.tsx           # Corporate footer, regulatory notices, quick links, and contact details
+│   ├── SEOHead.tsx          # Dynamic title, OpenGraph, meta description, and schema markup
+│   ├── Hero.tsx             # Homepage hero with dynamic debt statistics & CTA buttons
+│   ├── BankLogosCarousel.tsx # Partner lending banks marquee (SBI, PNB, Canara, BoB, ICICI, etc.)
+│   ├── TrustNumbers.tsx     # Dynamic metrics display (Total Debt ₹ Cr, Bank Partners, Success %)
+│   ├── HowItWorks.tsx       # 4-stage debt syndication walkthrough
+│   ├── WhyChooseInisio.tsx  # Platform competitive differentiators & institutional benefits
+│   ├── IndustriesSection.tsx# 12+ greenfield industry sectors with benchmark Capex baselines
+│   ├── ProjectActionCards.tsx# Quick-start action tiles (Assessment, Consultation, DPR Drafting)
+│   ├── Testimonials.tsx     # Verified promoter reviews with sanctioned loan values
+│   ├── FAQSection.tsx       # Searchable accordion FAQ component
+│   ├── LatestBlogs.tsx      # Advisory insights & policy research cards
+│   ├── BlogsPage.tsx        # Paginated knowledge hub and detailed article view
+│   ├── ContactSection.tsx   # Enterprise advisory inquiry form
+│   ├── FinalCTA.tsx         # Bottom conversion banner
+│   ├── FloatingContactButtons.tsx # Persistent WhatsApp & phone hotline triggers
+│   ├── ProjectAssessmentPage.tsx # 6-Step Project Assessment & Underwriting Wizard
+│   ├── DetailedRiskProfileForm.tsx# 5-Pillar Risk Radar (Sponsor, Execution, Market, Finance, Collateral)
+│   ├── LocationDropdowns.tsx# Comprehensive 28 Indian States & UTs with industrial district clusters
+│   ├── PdfPreviewModal.tsx  # In-browser canvas preview for generated AI Project Teaser
+│   ├── UserDashboard.tsx    # Promoter / Borrower Portfolio Dashboard
+│   ├── CADashboard.tsx      # Chartered Accountant Audit Desk
+│   ├── CAAdminDashboard.tsx # CA Empanelment & Business Card OCR Management Desk
+│   ├── DPRConsultantDashboard.tsx # Technical Project Report & Viability Desk
+│   ├── ProsyncDashboard.tsx # ProSync Banking Consortium Management Desk
+│   ├── AdminDashboardView.tsx # Executive Analytics & Supervisor Dashboard
+│   ├── AdminPanel.tsx       # Quick-access Admin Slide-over Panel (Ctrl+Shift+S)
+│   ├── AuthModal.tsx        # Customer Sign-in, Sign-up, and Password Reset Modal
+│   ├── InternalPortalLogin.tsx # Dedicated login gateway for all professional desks
+│   ├── MembershipPlansModal.tsx # Razorpay subscription upgrade dialog
+│   ├── ConsultationModal.tsx# Debt advisory booking calendar
+│   ├── CaActivationModal.tsx# CA invitation claim and profile activation dialog
+│   ├── AdminLeadsModal.tsx  # Administrative lead inspection and assignment modal
+│   ├── LeadEditModal.tsx    # Promoter project parameter editing modal
+│   ├── UserProfileDetailModal.tsx # Detailed user activity and geo-IP inspection modal
+│   ├── ErrorBoundary.tsx    # Graceful React runtime error boundary
+│   └── ForbiddenPage.tsx    # 403 Access Denied presentation screen
+├── config/
+│   └── adminAccess.ts       # Administrative email allowlists, roles, and validation rules
+├── utils/
+│   ├── apiClient.ts         # Axios/Fetch client with base URL resolution, timeout, and JWT bearer headers
+│   ├── pdfGenerator.ts      # Multi-page jsPDF generator with custom typography, tables, and branding
+│   ├── docxGenerator.ts     # OpenXML Word (.docx) generator building editable project summaries
+│   ├── underwritingScorer.ts# 100-point institutional bankability credit rating engine
+│   ├── cardOcrScanner.ts    # Tesseract.js optical character scanner for visiting cards
+│   ├── financialUtils.ts    # DSCR, working capital, interest during construction (IDC), debt-equity math
+│   ├── validation.ts        # Strict Indian phone number, IFSC, PAN, and GST validation rules
+│   ├── leadStore.ts         # Client-side project draft and lead synchronization store
+│   ├── userStore.ts         # Active user session and credentials store
+│   ├── membershipStore.ts   # Quota tracking and assessment plan verification
+│   ├── otpService.ts        # Client OTP dispatch and cooldown management
+│   └── visitorStore.ts      # Unique session identifier and page view tracking
+├── types.ts                 # Central TypeScript type definitions and interfaces
+├── index.css                # Tailwind CSS v4 design tokens, color variables, and custom utilities
+├── main.tsx                 # React 19 root bootstrap and DOM render
+├── App.tsx                  # Master routing, view switching, role access guards, and full-screen workspace controller
+└── vite-env.d.ts            # Vite client environment type declarations
+```
 
-> [!IMPORTANT]
-> Copy `Backend/.env.example` to `Backend/.env`. **Never commit** `.env` to git.
+### 4.2 Client-Side Routing & View Management (`App.tsx`)
+Inisio implements a custom, high-speed single-page router in [App.tsx](file:///c:/Users/Suraj/Desktop/26U/Inisio-Latest/inisio-website/Frontend/src/App.tsx) utilizing the browser `History` API (`pushState` and `popstate`) for instantaneous transitions without page reloads:
+* `/` : Public Marketing Homepage (Hero, Trust Numbers, How It Works, Industries, Testimonials, FAQ, Contact)
+* `/assessment` : Full-Screen 6-Step Project Assessment & Underwriting Wizard
+* `/dashboard`, `/user-dashboard`, `/promoter-portal` : Promoter / Borrower Project Dashboard
+* `/ca-dashboard` : Chartered Accountant Audit Desk
+* `/ca-admin`, `/ca-admin-dashboard` : CA Empanelment Operations Portal (Keyboard shortcut: `Ctrl+Shift+C`)
+* `/dpr-dashboard` : Detailed Project Report Consultant Desk
+* `/prosync-dashboard` : ProSync Banking Syndication Desk
+* `/admin-dashboard`, `/admin`, `/admin-panel` : Executive Super Admin Panel (Keyboard shortcut: `Ctrl+Shift+S`)
+* `/blogs`, `/blogs/:slug` : Knowledge Hub & Detailed Industrial Advisory Articles
+* `/#solutions`, `/#industries`, `/#faqs`, `/#contact` : Bi-directional anchor scrolling with automatic 72px offset for the fixed navbar
 
-| Variable | Required | Purpose | Example |
-|:---------|:--------:|:--------|:--------|
-| `NODE_ENV` | Yes | Runtime environment | `production` |
-| `PORT` | No | HTTP listener port (default `5000`) | `5000` |
-| `MONGO_URI` | Yes (prod) | MongoDB Atlas connection string | `mongodb+srv://user:pass@cluster.mongodb.net/inisio?retryWrites=true&w=majority` |
-| `JWT_SECRET` | Yes | HS256 signing key — minimum 16 chars | `64-char-random-hex-string` |
-| `JWT_EXPIRES_IN` | No | Token lifetime (default `7d`) | `7d` |
-| `ALLOWED_ORIGINS` | Yes (prod) | Comma-separated CORS whitelist | `https://inisio.in,https://admin.inisio.in` |
-| `ADMIN_EMAIL` | Yes | Primary admin whitelisted email | `admin@inisio.in` |
-| `SUPERADMIN_EMAIL` | Yes | Super admin (read-only) email | `superadmin@inisio.in` |
-| `ADMIN_PASSWORD` | Yes | Hashed password for admin seed account | `SecurePass@2026` |
-| `SUPERADMIN_PASSWORD` | Yes | Hashed password for superadmin seed | `SecurePass@2026` |
-| `RESEND_API_KEY` | Yes (email OTPs) | Resend transactional email API key | `re_xxxxxxxxxxxx` |
-| `RAZORPAY_KEY_ID` | Yes (payments) | Razorpay live key ID | `rzp_live_xxxxxxxx` |
-| `RAZORPAY_KEY_SECRET` | Yes (payments) | Razorpay secret — **never expose to frontend** | `xxxxxxxxxxxxxxxx` |
-| `RAZORPAY_WEBHOOK_SECRET` | Yes (payments) | Webhook signature verification secret | `whsec_xxxxxxxxxx` |
-| `DOCUMENT_STORAGE_DIR` | No | Override upload directory | `/mnt/data/uploads` |
-| `ALLOW_MEMORY_FALLBACK` | No | Allow in-memory user store when DB offline | `false` |
+### 4.3 Full-Screen Workspace Controller
+When a user navigates to any professional dashboard or initiates the Free Project Assessment flow, `isFullScreenMode` evaluates to `true`:
+* The public marketing `<Navbar>` and `<Footer>` are completely removed from the DOM.
+* The container locks to `h-screen overflow-hidden` with zero margin/padding, rendering an distraction-free workspace.
+* Returning to home or logging out seamlessly restores the public marketing layout and header navigation.
 
-### Frontend — `Frontend/.env`
+### 4.4 The 6-Step Project Assessment Wizard
+Located in [ProjectAssessmentPage.tsx](file:///c:/Users/Suraj/Desktop/26U/Inisio-Latest/inisio-website/Frontend/src/components/ProjectAssessmentPage.tsx):
+1. **Step 1 — Project Identity & Industry**: Project name, greenfield vs. expansion categorization, sector selection (12+ industrial presets).
+2. **Step 2 — Location & Land Infrastructure**: State & District selection (28 Indian states/UTs), land ownership status (Allotted, Purchased, Under Agreement, Unidentified), total acreage, and industrial corridor proximity.
+3. **Step 3 — Promoters & Banking Channel**: Promoter credentials, shareholding percentage, existing banking relationships, home branch, IFSC code, and application reference number.
+4. **Step 4 — Capacity & Statutory Approvals**: Plant production capacity, target domestic vs. export market, and statutory clearance tracking (Pollution Control, State Industry Directorate, Power Sanction, Water Allocation).
+5. **Step 5 — Capex & Means of Finance**:
+   * Breakup of Land, Civil Works, Plant & Machinery, Pre-operative Expenses, and Contingencies.
+   * Means of finance split between Promoter Equity and Bank Debt.
+   * **Auto-Balance 70:30 Button**: Automatically recalculates and equalizes Debt (70%) and Equity (30%) to balance Means of Finance against total Capex without manual math.
+6. **Step 6 — Credit Underwriting, Risk Radar & Teaser Export**:
+   * Evaluates institutional bankability rating (e.g. *High Bankability (88/100)*).
+   * Computes projected Debt Service Coverage Ratio (DSCR) based on sector benchmarks.
+   * Renders 5-pillar risk radar score.
+   * Inline authentication/registration with JWT synchronization.
+   * Instant download of **AI Project Teaser in PDF** (`generateProjectTeaserPDF`) or **Word DOCX** (`generateProjectTeaserDOCX`).
 
-> [!NOTE]
-> Only `VITE_*` variables are exposed to the client bundle. Never put secrets here.
-
-| Variable | Required | Purpose | Example |
-|:---------|:--------:|:--------|:--------|
-| `VITE_BACKEND_API_URL` | Yes | Backend base URL (without trailing `/`) | `https://api.inisio.in` |
-| `VITE_RAZORPAY_KEY_ID` | Yes | Public Razorpay key shown to browser | `rzp_live_xxxxxxxx` |
+### 4.5 Styling & Design System
+* Built on **Tailwind CSS v4** using modern CSS variables and color utilities:
+  * Brand Primary Blue: `#1e3a8a` (Tailwind `blue-900`), `#2563eb` (Tailwind `blue-600`)
+  * Accent Emerald: `#059669` (Tailwind `emerald-600`)
+  * Warning Amber: `#d97706` (Tailwind `amber-600`)
+  * Backgrounds: Pure white `#ffffff` and subtle slate `#f8fafc`
+* **Zero Layout Shift**: Responsive skeleton loaders and explicit dimension attributes on all cards and tables prevent cumulative layout shift (CLS).
+* **Cross-Device Viewport Handling**: Left-side process navigation in `ProjectAssessmentPage` features independent `overflow-y-auto max-h-full` scrolling, ensuring all steps remain accessible on laptop, tablet, and mobile screens.
 
 ---
 
-## 5. Running Locally
+## 5. Backend Architecture & API Specifications
 
-### Backend
+### 5.1 Architecture Patterns
+The backend is structured as a scalable, modular **RESTful Controller-Service-Repository** pattern:
+* **Entry Point (`server.js`)**: Initializes Express, connects MongoDB with connection pooling, mounts security middleware, binds 19 modular sub-routers, mounts Vite dev middleware in development, and handles graceful shutdown.
+* **Configuration (`config/`)**: Environment validation (`env.js`), database lifecycle (`db.js`), and logger initialization (`logger.js`).
+* **Controllers (`controllers/`)**: Parse HTTP inputs, invoke service layer methods, and format responses via standardized JSON envelopes.
+* **Services (`services/`)**: Encapsulate business logic, database queries, mathematical underwriting formulas, Resend email dispatches, and Razorpay interactions.
+* **Middleware (`middleware/`)**: RBAC verification (`authMiddleware.js`), rate limiting (`rateLimitMiddleware.js`), multipart file uploads (`uploadMiddleware.js`), schema validation (`validateMiddleware.js`), and error formatting (`errorMiddleware.js`).
+* **Resilient In-Memory Fallback (`utils/memoryUserStore.js`, `utils/caProfileStore.js`)**: Emulates MongoDB collections when running in offline mode or during cloud database outages.
 
+### 5.2 Complete API Route Directory (19 Modular Sub-Routers)
+
+#### 1. Root & Observability (`/api/health`, `/health`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Public | Service metadata, status, version, and health link |
+| `GET` | `/health` | Public | Root liveness check (200 healthy / 503 database disconnected) |
+| `GET` | `/api/health` | Public | Comprehensive health probe reporting database status and timestamp |
+
+#### 2. Authentication & Admin Authorization (`/api/auth`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/register` | Public (Rate Limited) | Register new promoter account with automatic welcome email |
+| `POST` | `/api/auth/login` | Public (Rate Limited) | Promoter login via email & password (supports admin test bypass) |
+| `POST` | `/api/auth/admin-login` | Admin Allowlist | Executive Admin login; accepts real DB password or `password26@gmail.com` |
+| `POST` | `/api/auth/verify-otp` | Public | Verify 6-digit email OTP for account activation |
+| `POST` | `/api/auth/resend-otp` | Public | Re-dispatch verification code via Resend |
+| `POST` | `/api/auth/forgot-password` | Public | Dispatch 6-digit password reset OTP to user email |
+| `POST` | `/api/auth/verify-reset-otp` | Public | Validate reset OTP code |
+| `POST` | `/api/auth/reset-password` | Public | Update password using verified OTP token |
+
+#### 3. User Management (`/api/users`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/users/profile` | Authenticated | Retrieve authenticated user profile and membership tier |
+| `PUT` | `/api/users/profile` | Authenticated | Update user name, phone, company, or avatar |
+| `PUT` | `/api/users/change-password`| Authenticated | Update account password after verifying current password |
+| `GET` | `/api/users` | Admin Only | Paginated list of registered users with activity metadata |
+
+#### 4. Project Leads & Syndication Pipeline (`/api/leads`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/leads` | Public / Authenticated | Submit project assessment lead with Capex, bank details, and score |
+| `GET` | `/api/leads` | Admin / Supervisor | Retrieve all platform project leads with status & industry filters |
+| `GET` | `/api/leads/user/:email`| User / Admin | Retrieve all projects submitted by a specific user email |
+| `GET` | `/api/leads/:id` | Authenticated | Retrieve complete project assessment dossier by ID |
+| `PUT` | `/api/leads/:id` | Authenticated | Update lead parameters, Capex breakup, or means of finance |
+| `DELETE`| `/api/leads/:id` | Admin Only | Delete project lead record |
+
+#### 5. Project Metadata (`/api/projects`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/projects` | Authenticated | Fetch active project files and loan syndication milestones |
+| `POST` | `/api/projects` | Authenticated | Create structured corporate borrowing profile |
+| `GET` | `/api/projects/:id` | Authenticated | Retrieve detailed borrowing project specification |
+| `PUT` | `/api/projects/:id` | Authenticated | Update project milestone status |
+
+#### 6. Feasibility & Assessments (`/api/assessments`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/assessments/calculate`| Public | Compute 100-point institutional bankability score & DSCR |
+| `POST` | `/api/assessments` | Authenticated | Persist comprehensive feasibility assessment result |
+| `GET` | `/api/assessments/:id` | Authenticated | Fetch historical feasibility assessment by ID |
+
+#### 7. CA Admin Empanelment Operations (`/api/ca-admin`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/ca-admin/auth` | CA Admin Allowlist | CA Admin sign-in (supports DB password or `password26@gmail.com`) |
+| `POST` | `/api/ca-admin/scan-card` | CA Admin | Multipart upload of visiting card for OCR parsing via Tesseract.js |
+| `POST` | `/api/ca-admin/check-duplicate`| CA Admin | Check for duplicate CA registrations by email or phone |
+| `POST` | `/api/ca-admin/create-profile` | CA Admin | Create pending CA profile record with extracted OCR data |
+| `GET` | `/api/ca-admin/profiles` | CA Admin | Retrieve all CA profiles filtered by status (`pending`, `invited`, `claimed`, `activated`) |
+| `POST` | `/api/ca-admin/send-invitation`| CA Admin | Dispatch token-based onboarding invite email via Resend (`WOFA-2026`) |
+| `GET` | `/api/ca-admin/verify-claim` | Public | Validate token from email claim link |
+| `POST` | `/api/ca-admin/activate-profile`| Public | Set password and activate CA practitioner account |
+| `GET` | `/api/ca-admin/metrics` | CA Admin | Empanelment analytics and conversion metrics |
+| `GET` | `/api/ca-admin/leads` | CA Admin | Project leads assigned to CA network for CMA audit |
+| `GET` | `/api/ca-admin/consultants/nearest`| Public / Auth | Search nearest CAs by city/state coordinates |
+
+#### 8. Advisory Consultations (`/api/consultations`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/consultations` | Public | Book 1-on-1 debt syndication advisory call |
+| `GET` | `/api/consultations` | Admin Only | View scheduled consultation pipeline with status filters |
+| `PUT` | `/api/consultations/:id` | Admin Only | Update consultation status (`Scheduled`, `Completed`, `Cancelled`) |
+
+#### 9. Payments & Subscriptions (`/api/payments`, `/api/payment`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/payments/key` | Public | Retrieve public Razorpay Key ID |
+| `POST` | `/api/payments/order` | Authenticated | Create Razorpay order for assessment membership tier |
+| `POST` | `/api/payments/verify` | Authenticated | Verify HMAC-SHA256 payment signature and upgrade account |
+| `POST` | `/api/payments/webhook` | Public | Asynchronous Razorpay webhook processing |
+
+#### 10. Document Repository (`/api/documents`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/documents/upload` | Authenticated | Multipart upload of land titles, DPRs, CMA reports, or balance sheets |
+| `GET` | `/api/documents/project/:id` | Authenticated | Retrieve all documents linked to a project |
+| `DELETE`| `/api/documents/:id` | Authenticated | Remove uploaded document |
+
+#### 11. Notifications (`/api/notifications`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/notifications` | Authenticated | Fetch active user notifications |
+| `PATCH`| `/api/notifications/:id/read` | Authenticated | Mark notification as read |
+| `POST` | `/api/notifications/broadcast` | Admin Only | Dispatch system-wide broadcast announcement |
+
+#### 12. Contact & Enterprise Enquiries (`/api/contact`, `/api/admin/contact`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/contact` | Public (Rate Limited) | Submit general or debt syndication enterprise enquiry |
+| `GET` | `/api/contact` | Admin Only | View all incoming inquiries |
+| `PUT` | `/api/contact/:id/status`| Admin Only | Update inquiry status (`New`, `In Discussion`, `Resolved`) |
+
+#### 13. Public Marketing Content (`/api/industries`, `/services`, `/testimonials`, `/stats`, `/blogs`, `/faqs`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/industries` | Public | 12+ greenfield industry sectors with benchmark debt metrics |
+| `GET` | `/api/services` | Public | Advisory services catalog (TEV, DPR, Debt Syndication, Subsidies) |
+| `GET` | `/api/testimonials` | Public | Verified client testimonials and sanctioned loan amounts |
+| `GET` | `/api/stats` | Public | Platform aggregates (Total Debt Syndicated ₹ Cr, Partner Banks) |
+| `GET` | `/api/blogs` | Public | Paginated advisory blog articles and research papers |
+| `GET` | `/api/blogs/:slug` | Public | Single article retrieval by unique SEO slug |
+| `GET` | `/api/faqs` | Public | Categorized frequently asked questions |
+
+#### 14. Visitor Analytics (`/api/visitors`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/visitors/track` | Public | Log visitor session ID, page path, IP, user-agent, and timestamp |
+
+---
+
+## 6. Database Models & Schema Specifications
+
+The MongoDB database (`inisio_new_db`) utilizes 17 Mongoose schemas:
+
+### 1. `User` Schema (`Backend/models/User.js`)
+* `name` (String, required), `email` (String, unique, indexed, lowercase).
+* `password` (String, required, `select: false`, bcrypt hashed with 12 rounds).
+* `role` (Enum: `'user'`, `'ca'`, `'ca_admin'`, `'superadmin'`, `'dpr'`, `'prosync'`, `'admin'`).
+* `company`, `phone`, `avatarUrl`, `membershipTier` (Default: `'Free'`).
+* `isVerified` (Boolean), `passwordInitialized` (Boolean).
+* `resetPasswordOtp`, `resetPasswordExpires`, `verificationOtp`, `verificationExpires`.
+* `lastLogin` (Object tracking login date, time, city, state, country, IP address, device, browser).
+
+### 2. `Lead` Schema (`Backend/models/Lead.js`)
+* `userId` (ObjectId, ref: `'User'`, indexed), `clientProjectId` (String).
+* `fullName`, `mobile` (indexed), `email` (indexed).
+* `projectName`, `industry`, `location`, `totalCostCr`, `loanRequiredCr`, `promoterContribCr`.
+* `feasibilityScore` (Number, 0–100), `bankabilityRating` (String), `dscrEstimate` (Number).
+* `landStatus`, `collateralStatus`, `promoterExp`, `status` (Default: `'In Appraisal'`).
+* `assignedBank`, `branchLocation`, `bankIfscCode`, `bankAppRefNumber`.
+* `financials` (Object: turnover, netProfit, existingDebt, projectedRevenue).
+* `riskProfileData` (Object: 5-pillar risk ratings).
+* `promotersList` (Array: promoter details, shareholding percentages, KYC status).
+* `source` (String), `downloadedPDF` (Boolean).
+
+### 3. `CaProfile` Schema (`Backend/models/CaProfile.js`)
+* `name`, `email` (indexed), `phone` (indexed), `firmName`, `membershipNumber`.
+* `city`, `state`, `cardImageUrl`, `ocrRawText`.
+* `sourceTag` (String, default: `'WOFA-2026'`, indexed).
+* `status` (Enum: `'pending'`, `'invited'`, `'claimed'`, `'activated'`, indexed).
+* `claimToken` (String, indexed), `claimExpiresAt`, `claimedAt`, `activatedAt`.
+* `userId` (ObjectId, ref: `'User'`), `notes`.
+
+### 4. `Project` Schema (`Backend/models/Project.js`)
+* `title`, `promoterId` (ObjectId, ref: `'User'`), `sector`, `totalCapex`.
+* `termLoanRequested`, `syndicateStatus`, `leadBank`, `sanctionDate`.
+
+### 5. `Assessment` Schema (`Backend/models/Assessment.js`)
+* `leadId` (ObjectId, ref: `'Lead'`), `scoreBreakdown` (Object).
+* `dscrRatio`, `breakEvenCapacity`, `underwritingRiskGrade`.
+
+### 6. `Consultation` Schema (`Backend/models/Consultation.js`)
+* `name`, `email`, `phone`, `preferredDate`, `preferredTime`.
+* `projectName`, `fundingRange`, `notes`, `status` (`'Scheduled'`, `'Completed'`, `'Cancelled'`).
+
+### 7. `Payment` Schema (`Backend/models/Payment.js`)
+* `userId` (ObjectId, ref: `'User'`), `razorpayOrderId`, `razorpayPaymentId`.
+* `amount`, `currency` (`'INR'`), `status` (`'created'`, `'authorized'`, `'captured'`, `'failed'`).
+* `planType` (`'Starter'`, `'Growth'`, `'Enterprise'`).
+
+### 8. `Document` Schema (`Backend/models/Document.js`)
+* `projectId` (ObjectId, ref: `'Lead'`), `title`, `documentType` (`'DPR'`, `'CMA'`, `'LandTitle'`).
+* `fileUrl`, `fileSize`, `uploadedBy`.
+
+### 9. `Notification` Schema (`Backend/models/Notification.js`)
+* `recipientId` (ObjectId, ref: `'User'`), `title`, `message`, `type`, `isRead`.
+
+### 10. `BlogPost` Schema (`Backend/models/BlogPost.js`)
+* `title`, `slug` (unique, indexed), `category`, `date`, `readTime`, `excerpt`, `content`, `author`, `featured`, `tags`.
+
+### 11. `PlatformStat` Schema (`Backend/models/PlatformStat.js`)
+* `statId` (unique), `value`, `prefix`, `suffix`, `label`, `icon`, `order`.
+
+### 12. `Testimonial` Schema (`Backend/models/Testimonial.js`)
+* `name`, `title`, `company`, `industry`, `quote`, `fundingAmount`, `rating`.
+
+### 13. `Industry` Schema (`Backend/models/Industry.js`)
+* `name`, `code`, `typicalDebtEquityRatio`, `benchmarkDSCR`, `growthRate`.
+
+### 14. `Service` Schema (`Backend/models/Service.js`)
+* `title`, `description`, `deliverables`, `icon`, `turnaroundWeeks`.
+
+### 15. `FAQ` Schema (`Backend/models/FAQ.js`)
+* `question`, `answer`, `category`, `order`.
+
+### 16. `ContactEnquiry` & `ContactMessage` Schemas
+* `fullName`, `email`, `phone`, `company`, `projectCost`, `message`, `status`.
+
+---
+
+## 7. Environment Variables Reference
+
+### Backend Configuration (`Backend/.env`)
+
+```env
+# Server Settings
+PORT=5000                                          # Backend API port
+NODE_ENV=development                              # 'development' | 'production' | 'test'
+CORS_ORIGIN=*                                     # Allowed CORS origins (* for dev; production URLs)
+FRONTEND_URL=https://inisio-website.vercel.app     # Production frontend URL
+APP_URL=https://inisio-website.vercel.app          # Base application URL
+
+# Database & Authentication
+MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/inisio_new_db # MongoDB Atlas URI
+JWT_SECRET=dummy_jwt_secret_token_2026_at_least_16_chars            # Secret key for JWT signing
+JWT_EXPIRES_IN=7d                                                  # JWT token validity
+
+# Administrative Access Control
+ADMIN_EMAIL=pradeep.tanuku@gmail.com               # Primary Executive Administrator Gmail
+SUPER_ADMIN_EMAIL=urbanicoapp@gmail.com            # Super Administrator Gmail
+CA_ADMIN=caadmin@gmail.com                         # Primary CA Operations Administrator
+
+# Email Service (Resend)
+RESEND_API_KEY=re_your_resend_api_key_here         # Resend API key for transactional emails
+EMAIL_FROM=Inisio Advisory <no-reply@inisio.in>    # Verified sender email address
+
+# Payment Gateway (Razorpay)
+RAZORPAY_KEY_ID=rzp_test_dummy_key_id              # Razorpay Key ID
+RAZORPAY_KEY_SECRET=dummy_razorpay_secret_key      # Razorpay Secret Key
+RAZORPAY_WEBHOOK_SECRET=dummy_razorpay_webhook_secret # Razorpay Webhook Secret
+
+# High-Resilience Fallback Mode
+ALLOW_MEMORY_FALLBACK=true                         # Enables in-memory fallback during DB outages
+```
+
+### Frontend Configuration (`Frontend/.env`)
+
+```env
+# Backend API Base URL (Local Development uses Vite reverse proxy or direct port 5000)
+VITE_BACKEND_URL=http://localhost:5000
+
+# Administrative Access Configuration (Used for client-side navigation pre-checks)
+VITE_ADMIN_EMAIL=pradeep.tanuku@gmail.com
+VITE_SUPER_ADMIN_EMAIL=urbanicoapp@gmail.com
+VITE_CA_ADMIN=caadmin@gmail.com
+```
+
+---
+
+## 8. Setup and Installation
+
+### Prerequisites
+* **Node.js**: Version `20.0.0` or higher (`v22+` / `v24+` recommended).
+* **NPM**: Version `10.0.0` or higher (utilizes root NPM workspaces).
+* **MongoDB**: A running local MongoDB instance on port `27017` or a MongoDB Atlas connection string.
+
+### Step 1: Clone Repository
 ```bash
-cd inisio26.1/inisio-website/Backend
-cp .env.example .env        # Fill in your values
-npm install
-npm run dev                 # nodemon server.js
-# → http://localhost:5000/health
+git clone https://github.com/your-username/inisio-website.git
+cd inisio-website
 ```
 
-### Frontend
-
+### Step 2: Install All Dependencies (Root Workspace)
+The project utilizes npm workspaces (`Frontend` and `Backend`). Installing from the root installs dependencies across both tiers:
 ```bash
-cd inisio26.1/inisio-website/Frontend
-cp .env.example .env        # Set VITE_BACKEND_API_URL=http://localhost:5000
 npm install
-npm run dev                 # vite dev server
-# → http://localhost:5173
+```
+
+### Step 3: Configure Environment Files
+1. Create `Backend/.env` matching the [Backend Configuration](#backend-configuration-backendenv) specification.
+2. Create `Frontend/.env` matching the [Frontend Configuration](#frontend-configuration-frontendenv) specification.
+
+---
+
+## 9. How to Run
+
+### Method 1: Concurrent Dev Runner (Recommended)
+Launch both the Express backend API (port 5000) and the Vite frontend app (port 5173) simultaneously:
+```bash
+npm run dev
+# or:
+node Scripts/dev.js
+```
+
+* **Frontend Application**: [http://localhost:5173](http://localhost:5173)
+* **Backend API Base**: [http://localhost:5000](http://localhost:5000)
+* **API Health Check**: [http://localhost:5000/api/health](http://localhost:5000/api/health)
+* **Free Project Assessment**: [http://localhost:5173/assessment](http://localhost:5173/assessment)
+* **Admin Portal**: [http://localhost:5173/admin](http://localhost:5173/admin) (or press `Ctrl+Shift+S`)
+* **CA Admin Portal**: [http://localhost:5173/ca-admin](http://localhost:5173/ca-admin) (or press `Ctrl+Shift+C`)
+
+### Method 2: Running Workspaces Independently
+
+#### Terminal 1 — Backend:
+```bash
+npm run dev:backend
+# Runs: nodemon Backend/server.js on http://localhost:5000
+```
+
+#### Terminal 2 — Frontend:
+```bash
+npm run dev:frontend
+# Runs: vite Frontend on http://localhost:5173
+```
+
+---
+
+## 10. Automated Testing, Building & Verification
+
+### TypeScript Verification
+Verify type integrity across all React components, hooks, and utilities:
+```bash
+npx tsc --noEmit --project Frontend
 ```
 
 ### Production Build
-
+Generate optimized production bundles:
 ```bash
-# Backend
-cd Backend && NODE_ENV=production node server.js
-
-# Frontend
-cd Frontend && npm run build   # outputs to dist/
-```
-
----
-
-## 6. Backend API Reference
-
-### Common Response Shapes
-
-**Success**
-```json
-{ "success": true, "data": <payload>, "message": "..." }
-```
-
-**Error**
-```json
-{ "success": false, "code": 400, "message": "Human-readable error" }
-```
-
-### Auth Legend
-
-| Symbol | Meaning |
-|:-------|:--------|
-| 🔓 | Public — no token required |
-| 🔑 | `authenticateUser` — any valid JWT |
-| 🛡️ | `authorizeRoles(...)` — specific roles only |
-| 👁️ | `optionalAuth` — token used if present |
-| 🚫 | `restrictSuperAdminViewer` — read-only for superadmin |
-
----
-
-### 6.1 Root & Health
-
-| Method | Path | Auth | Description |
-|:-------|:-----|:----:|:------------|
-| `GET` | `/` | 🔓 | Service metadata — name, status, version |
-| `GET` | `/health` | 🔓 | Returns `200 { status, database, timestamp }` when MongoDB connected; `200 { status:"degraded" }` on memory fallback; `503` when disconnected in production |
-
-**Health response shapes:**
-
-```json
-// Healthy
-{ "status": "healthy", "database": "connected", "timestamp": "2026-11-13T..." }
-
-// Degraded (dev only)
-{ "status": "degraded", "database": "memory_fallback", "timestamp": "..." }
-
-// Unhealthy (production, DB down)
-{ "status": "unhealthy", "database": "disconnected", "timestamp": "..." }
-```
-
----
-
-### 6.2 Auth Routes — `/api/auth`
-
-> Rate limit: **20 requests / 15 minutes per IP** on all auth endpoints.
-
-| Method | Path | Auth | Required Body Fields | Optional Body Fields | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:---------------------|:---------------------|:-----------------|:------------|:------------|
-| `POST` | `/api/auth/register` | 🔓 | `name`, `email`, `password` | `phone`, `company`, `role` (locked to `"user"`) | `{ token, user }` | 400 (validation), 409 (email exists) | Register new promoter. Role is always `user` regardless of body. |
-| `POST` | `/api/auth/login` | 🔓 | `email`, `password` | — | `{ token, user }` | 400, 401 (bad credentials), 403 (not verified) | Public user login. Bcrypt password check. |
-| `POST` | `/api/auth/admin-login` | 🔓 | `email`, `password` | — | `{ token, user }` | 400, 401, 403 (email not whitelisted) | Admin / staff login. Email must be in `ADMIN_EMAIL`, `SUPERADMIN_EMAIL`, or a seeded staff account. |
-| `POST` | `/api/auth/verify-email` | 🔓 | `email`, `otp` | — | `{ message }` | 400 (invalid/expired OTP) | Verifies email with 6-digit OTP. OTP expires after 10 minutes. |
-| `POST` | `/api/auth/verify-otp` | 🔓 | `email`, `otp` | — | `{ message, valid: true }` | 400 | Checks OTP validity without consuming it (used in reset-password flow). |
-| `POST` | `/api/auth/forgot-password` | 🔓 | `email` | — | `{ message }` | 400 (user not found) | Generates a 6-digit OTP and sends a password-reset email via Resend. |
-| `POST` | `/api/auth/reset-password` | 🔓 | `email`, `otp`, `newPassword` | — | `{ message }` | 400 (OTP invalid/expired), 422 (weak password) | Consumes OTP and updates hashed password. |
-| `POST` | `/api/auth/send-verification` | 🔓 | `email` | — | `{ message }` | 400, 404 | Sends / resends email verification OTP. |
-| `POST` | `/api/auth/resend-verification` | 🔓 | `email` | — | `{ message }` | 400, 404 | Alias for `send-verification`. |
-| `GET` | `/api/auth/me` | 🔑 | — | — | `{ user }` | 401 | Returns the authenticated user object (no password). |
-| `PUT` | `/api/auth/profile` | 🔑 | — | `name`, `company`, `phone`, `avatarUrl` | `{ user }` | 400, 401 | Updates the authenticated user's profile. |
-
-**JWT Payload structure:**
-```json
-{
-  "id":        "<MongoDB ObjectId>",
-  "email":     "user@example.com",
-  "name":      "Promoter Name",
-  "role":      "user",
-  "company":   "ABC Industries",
-  "phone":     "+919876543210",
-  "isVerified": true,
-  "iat":       1700000000,
-  "exp":       1700604800
-}
-```
-
----
-
-### 6.3 User Routes — `/api/users`
-
-> All routes require `authenticateUser`. Modification routes also require `restrictSuperAdminViewer`.
-
-| Method | Path | Auth | Roles | Query Params | Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-------------|:-----|:-----------------|:------------|:------------|
-| `GET` | `/api/users` | 🛡️ | `admin`, `superadmin` | — | — | `[UserProfile[]]` | 401, 403 | All registered users with aggregated project/consultation counts (no N+1). |
-| `GET` | `/api/users/profile/:email` | 🛡️ | `admin`, `superadmin` | — | — | `{ user }` | 401, 403, 404 | Lookup user by exact email address. |
-| `GET` | `/api/users/:id` | 🛡️ | `admin`, `superadmin` | — | — | `{ user }` | 401, 403, 404 | Lookup user by MongoDB `_id`. |
-| `PUT` | `/api/users/:id/role` | 🛡️🚫 | `admin`, `admin1–3` | — | `{ role }` | `{ user }` | 400, 401, 403 | Update user's role. Superadmin blocked (view-only). |
-| `PUT` | `/api/users/:id/status` | 🛡️🚫 | `admin`, `admin1–3` | — | `{ status }` | `{ user }` | 400, 401, 403 | Activate / suspend user. |
-| `DELETE` | `/api/users/:id` | 🛡️🚫 | `admin`, `admin1–3` | — | — | `{ message }` | 401, 403, 404 | Hard delete user record. |
-
----
-
-### 6.4 Lead Routes — `/api/leads`
-
-> Public `POST` (enquiry form submission). All `GET/PUT/DELETE` require authentication.
-
-| Method | Path | Auth | Roles | Query Params | Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-------------|:-----|:-----------------|:------------|:------------|
-| `POST` | `/api/leads` | 👁️ | Any | — | `fullName`*, `mobile`*, `email`*, `projectName`, `industry`, `totalCostCr`, `loanRequiredCr`, `location`, `source`, `riskProfileData`, `commercialData` | `{ lead }` | 400 (validation), 422 (invalid phone) | Creates lead / assessment submission. If authenticated, links to `userId`. |
-| `GET` | `/api/leads` | 🔑 | Any authenticated | `search`, `filterSource`, `email`, `page`, `limit` (max 100) | — | `{ leads[], total, page }` | 401 | Admins/CA/DPR see all leads. Standard `user` role sees **only their own** leads (IDOR-safe). |
-| `GET` | `/api/leads/:id` | 🔑 | Any authenticated | — | — | `{ lead }` | 401, 403, 404 | Single lead by ID. IDOR-checked: users can only view own records. |
-| `PUT` | `/api/leads/:id/assignment` | 🛡️🚫 | `admin`, `admin1–3` | — | `{ dprAssignedTo?, consultationAssignedTo? }` | `{ lead }` | 401, 403, 404 | Assign lead to DPR/Prosync staff. |
-| `PUT` | `/api/leads/:id/progress` | 🔑🚫 | Any staff | — | `{ assessmentCompleted?, documentsUploaded?, dprCompleted?, bankApplicationSubmitted? }` | `{ lead }` | 401, 403, 404 | Update pipeline milestone checkboxes. |
-| `PUT` | `/api/leads/:id` | 🔑🚫 | Any staff | — | Any lead fields | `{ lead }` | 400, 401, 403, 404 | Full lead record update. |
-| `DELETE` | `/api/leads/clear-all` | 🛡️🚫 | `admin`, `admin1–3` | — | — | `{ message }` | 401, 403 | Wipe entire leads collection. Irreversible. |
-| `DELETE` | `/api/leads/:id` | 🛡️🚫 | `admin`, `admin1–3` | — | — | `{ message }` | 401, 403, 404 | Delete single lead. |
-
----
-
-### 6.5 Project Routes — `/api/projects`
-
-| Method | Path | Auth | Roles | Required Body | Optional Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:--------------|:--------------|:-----------------|:------------|:------------|
-| `GET` | `/api/projects` | 🔑 | Any authenticated | — | `page`, `limit`, `status`, `userId` | `{ projects[], total }` | 401 | List projects. Users see only own; admins/CA see all. Paginated, `.lean()`. |
-| `GET` | `/api/projects/:id` | 🔑 | Any authenticated | — | — | `{ project }` | 401, 403, 404 | Single project. IDOR-checked. |
-| `POST` | `/api/projects` | 👁️ | Any | `promoterName`, `projectName`, `industry`, `capexCr`, `loanCr` | `email`, `mobile`, `location`, `equityCr`, `dscr`, `feasibilityScore` | `{ project }` | 400, 422 | Create project record from assessment. Optionally linked to authenticated user. |
-| `PUT` | `/api/projects/:id/audit` | 🛡️🚫 | `admin`, `ca` | — | `status`, `caReviewNotes`, `assignedCA`, `cmaAuditStatus`, `bankabilityStatus`, `dscr`, `debtEquityRatio` | `{ project }` | 401, 403, 404 | CA/Admin updates audit fields. Superadmin blocked (view-only). |
-| `DELETE` | `/api/projects/:id` | 🛡️🚫 | `admin` | — | — | `{ message }` | 401, 403, 404 | Delete project. Admin only. |
-
-**Project `status` enum:** `Draft` · `Pending Audit` · `CA Approved` · `Bank Submitted` · `Sanctioned` · `Clarification Needed`
-
----
-
-### 6.6 Assessment Routes — `/api/assessments`
-
-| Method | Path | Auth | Roles | Required Body | Optional Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:--------------|:--------------|:-----------------|:------------|:------------|
-| `POST` | `/api/assessments/evaluate` | 👁️ | Any | `industry`, `projectCostCr` | Full financial form payload | `{ bankabilityScore, feasibilityScore, dscr, riskProfile, ... }` | 400 | Full bankability appraisal engine. Returns computed financial metrics. |
-| `POST` | `/api/assessments/quick-calc` | 🔓 | Any | Partial financial data | — | `{ dscr, debtEquityRatio, ... }` | 400 | Lightweight metric preview without saving. |
-| `GET` | `/api/assessments/my-assessments` | 🔑 | Any authenticated | — | — | `{ assessments[] }` | 401 | Returns the authenticated user's saved assessment records. |
-| `GET` | `/api/assessments/all` | 🛡️ | `admin`, `superadmin`, `ca` | — | — | `{ assessments[] }` | 401, 403 | All assessment records (admin/CA review). |
-
----
-
-### 6.7 Consultation Routes — `/api/consultations`
-
-| Method | Path | Auth | Roles | Required Body | Optional Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:--------------|:--------------|:-----------------|:------------|:------------|
-| `POST` | `/api/consultations` | 🔓 | Any | `fullName`, `phone` | `email`, `companyName`, `industry`, `projectCostCr`, `preferredDate`, `preferredSlot`, `additionalNotes` | `{ consultation }` | 400, 422 | Book consultation slot. No auth required (public capture). |
-| `GET` | `/api/consultations` | 🛡️ | `admin`, `superadmin`, `ca`, `prosync`, `prosync_admin` | — | `page`, `limit` | `{ consultations[], total }` | 401, 403 | List all consultations. Paginated, `.lean()`. |
-| `GET` | `/api/consultations/:id` | 🛡️ | `admin`, `superadmin`, `ca`, `prosync`, `prosync_admin` | — | — | `{ consultation }` | 401, 403, 404 | Single consultation detail. |
-| `PUT` | `/api/consultations/:id/status` | 🛡️🚫 | `admin`, `ca`, `prosync`, `prosync_admin` | — | `status`, `feedback`, `assignedAdvisor` | `{ consultation }` | 401, 403, 404 | Update consultation status. |
-
-**Consultation `status` enum:** `pending` · `confirmed` · `completed` · `cancelled`
-
----
-
-### 6.8 Payment Routes — `/api/payments`
-
-| Method | Path | Auth | Roles | Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-----|:-----------------|:------------|:------------|
-| `GET` | `/api/payments/config` | 🔓 | Any | — | `{ keyId }` | — | Returns the public `RAZORPAY_KEY_ID` for the checkout SDK. |
-| `POST` | `/api/payments/create-order` | 👁️ | Any | `amount`, `currency`, `itemType`, `planName`, `billingCycle`, `userEmail`, `userName`, `userPhone` | `{ orderId, amount, currency, receipt }` | 400, 500 | Creates a Razorpay order and persists a `Payment` record with `status: "created"`. |
-| `POST` | `/api/payments/verify-signature` | 👁️ | Any | `razorpay_order_id`, `razorpay_payment_id`, `razorpay_signature` | `{ verified: true, payment }` | 400 (signature mismatch), 500 | Verifies HMAC-SHA256 Razorpay signature. **In production (`NODE_ENV=production`) the mock bypass is disabled**. Updates payment `status` to `"captured"`. |
-| `GET` | `/api/payments/history` | 🔑 | Any authenticated | — | `{ payments[] }` | 401 | Returns the authenticated user's payment history. IDOR-safe (filtered by `userId`). |
-| `GET` | `/api/payments/:id` | 🔑 | Any authenticated | — | `{ payment }` | 401, 403, 404 | Single payment by MongoDB `_id`. Ownership verified (or admin role). |
-| `POST` | `/api/payments/webhook` | 🔓 | Razorpay servers | Raw body (Razorpay webhook payload) | `{ received: true }` | 400 | Razorpay webhook handler. Validates `X-Razorpay-Signature` and updates payment status. |
-
----
-
-### 6.9 Document Routes — `/api/documents`
-
-> All routes require `authenticateUser`. Upload additionally requires `restrictSuperAdminViewer`.
-
-**Upload limits:**
-- Max file size: **10 MB**
-- Allowed MIME types: `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/msword`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.presentationml.presentation`, `application/vnd.ms-powerpoint`, `image/jpeg`, `image/png`, `image/webp`
-- Allowed extensions: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.jpg`, `.jpeg`, `.png`, `.webp`
-- Files are stored with **UUID-generated names** (original name discarded)
-- Storage location: `Backend/storage/private/` (or `DOCUMENT_STORAGE_DIR` env var)
-
-| Method | Path | Auth | Body / Params | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:--------------|:-----------------|:------------|:------------|
-| `POST` | `/api/documents/upload` | 🔑🚫 | `multipart/form-data`: `file` (required), `leadId`, `category` | `{ document }` | 400 (invalid type/size), 401, 403 | Upload single document linked to a lead/project. Superadmin blocked. |
-| `GET` | `/api/documents/project/:leadId` | 🔑 | `:leadId` path param | `{ documents[] }` | 401, 404 | List all uploaded documents for a given lead ID. |
-| `GET` | `/api/documents/:id/download` | 🔑 | `:id` path param | Binary file stream (`Content-Disposition: attachment`) | 401, 404 | Authenticated document download. Stream file from private storage. |
-
----
-
-### 6.10 Notification Routes — `/api/notifications`
-
-> All routes require `authenticateUser`.
-
-| Method | Path | Auth | Roles | Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-----|:-----------------|:------------|:------------|
-| `GET` | `/api/notifications` | 🔑 | Any authenticated | — | `{ notifications[] }` | 401 | Fetch all notifications for the authenticated user. |
-| `POST` | `/api/notifications` | 🛡️ | `admin`, `superadmin`, `ca`, `dpr_consultant`, `prosync` | `{ title, message, type?, targetUserId? }` | `{ notification }` | 400, 401, 403 | Create a notification (admin/staff only). |
-| `PATCH` | `/api/notifications/read-all` | 🔑 | Any authenticated | — | `{ message }` | 401 | Mark all of the user's notifications as read. |
-| `PATCH` | `/api/notifications/:id/read` | 🔑 | Any authenticated | — | `{ notification }` | 401, 404 | Mark single notification as read. |
-| `DELETE` | `/api/notifications/clear-all` | 🛡️ | `admin` | — | `{ message }` | 401, 403 | Delete all notification records. Admin only. |
-
----
-
-### 6.11 Contact Routes — `/api/contact`
-
-| Method | Path | Auth | Roles | Body | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-----|:-----------------|:------------|:------------|
-| `POST` | `/api/contact` | 🔓 | Any | `name`/`fullName`, `email`, `phone`, `message`, `company?`, `subject?` | `{ enquiry }` | 400 | Public contact form submission. Creates `ContactEnquiry` record. |
-| `GET` | `/api/contact` | 🛡️ | `admin`, `superadmin`, `ca`, `prosync_admin`, `prosync`, `admin1–3` | `page`, `limit`, `status`, `search` | `{ enquiries[], total }` | 401, 403 | List all contact enquiries. |
-| `GET` | `/api/contact/:id` | 🛡️ | Same as above | — | `{ enquiry }` | 401, 403, 404 | Single enquiry detail. |
-| `PUT` | `/api/contact/:id` | 🛡️🚫 | Same as above | `status?`, `notes?`, `assignedTo?`, `isArchived?` | `{ enquiry }` | 401, 403, 404 | Update enquiry fields. |
-| `PUT` | `/api/contact/:id/status` | 🛡️🚫 | Same as above | `status` | `{ enquiry }` | 401, 403, 404 | Update enquiry status only. |
-| `DELETE` | `/api/contact/:id` | 🛡️🚫 | Same as above | `?permanent=true` | `{ message }` | 401, 403, 404 | Soft-archive or permanently delete enquiry. |
-
----
-
-### 6.12 Industry Routes — `/api/industries`
-
-> Public `GET` endpoints are cached in-memory for **15 minutes** with `Cache-Control: public, max-age=900`.
-
-| Method | Path | Auth | Roles | Params | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-------|:-----------------|:------------|:------------|
-| `GET` | `/api/industries` | 🔓 | Any | — | `{ industries[] }` | — | All industry categories with metadata. |
-| `GET` | `/api/industries/:slug` | 🔓 | Any | `:slug` | `{ industry }` | 404 | Single industry by URL slug. |
-| `POST` | `/api/industries` | 🛡️ | `admin` | — | `{ industry }` | 400, 401, 403 | Create new industry category. |
-
----
-
-### 6.13 Service Routes — `/api/services`
-
-> Public `GET` endpoints are cached in-memory for **15 minutes** with `Cache-Control: public, max-age=900`.
-
-| Method | Path | Auth | Roles | Params | Success Response | Error Codes | Description |
-|:-------|:-----|:----:|:------|:-------|:-----------------|:------------|:------------|
-| `GET` | `/api/services` | 🔓 | Any | — | `{ services[] }` | — | All service offerings. |
-| `GET` | `/api/services/:slug` | 🔓 | Any | `:slug` | `{ service }` | 404 | Single service by URL slug. |
-| `POST` | `/api/services` | 🛡️ | `admin` | — | `{ service }` | 400, 401, 403 | Create new service entry. |
-
----
-
-## 7. Database Models
-
-### `users` collection — `User.js`
-
-| Field | Type | Constraints | Index |
-|:------|:-----|:------------|:------|
-| `name` | String | required, trim | — |
-| `email` | String | required, unique, lowercase, email regex | Unique |
-| `password` | String | required, minLength 6, `select: false`, bcrypt hashed | — |
-| `role` | String | enum: `user`, `ca`, `superadmin`, `dpr_consultant`, `prosync_admin`, `admin`, `admin1`, `admin2`, `admin3`, `prosync` | Index |
-| `company` | String | default `""` | — |
-| `phone` | String | default `""` | Index |
-| `avatarUrl` | String | default `""` | — |
-| `isVerified` | Boolean | default `false` | — |
-| `resetPasswordOtp` | String | default null | — |
-| `resetPasswordExpires` | Date | default null | — |
-| `verificationOtp` | String | default null | — |
-| `verificationExpires` | Date | default null | — |
-| `loginCount` | Number | default 0 | — |
-| `lastLogin` | Object | `{ date, time, city, state, country, ipAddress, device, browser, timestamp }` | — |
-| `createdAt`, `updatedAt` | Date | timestamps: true | — |
-
-### `leads` collection — `Lead.js`
-
-| Field | Type | Constraints | Index |
-|:------|:-----|:------------|:------|
-| `userId` | ObjectId (ref User) | optional | Index |
-| `fullName` | String | required | — |
-| `mobile` | String | required | Index |
-| `email` | String | required, lowercase | Index |
-| `projectName` | String | default `"Greenfield Project Proposal"` | — |
-| `industry` | String | default `"Manufacturing & Industrial"` | — |
-| `location` | String | default `""` | — |
-| `totalCostCr` | Mixed | default `"10"` | — |
-| `loanRequiredCr` | Mixed | default `"7.5"` | — |
-| `feasibilityScore` | Number | default 80 | — |
-| `bankabilityRating` | String | default `"A"` | — |
-| `dscrEstimate` | Number | default 0, min 0 | — |
-| `source` | String | default `"Web Portal Submission"` | — |
-| `status` | String | default `"In Appraisal"` | Index |
-| `assignedCA` | String | default `""` | Index |
-| `dprAssignedTo` | String | default `""` | Index |
-| `consultationAssignedTo` | String | default `""` | Index |
-| `consultationStatus` | String | enum: `New`, `In Progress`, `Customer Declined`, `Completed`, `Pending` | — |
-| `assessmentCompleted` | Boolean | default false | — |
-| `documentsUploaded` | Boolean | default false | — |
-| `dprCompleted` | Boolean | default false | — |
-| `bankApplicationSubmitted` | Boolean | default false | — |
-| `bankApplicationStatus` | String | default `"Draft"` | — |
-| `riskProfileData` | Mixed | default null | — |
-| `commercialData` | Mixed | default null | — |
-| `financials` | Mixed | default `{}` | — |
-| `promotersList` | Array | default `[]` | — |
-| `editHistory` | Array | default `[]` | — |
-| `uploadedDocuments` | Array | default `[]` | — |
-| `isFunded` | Boolean | default false | — |
-| `membershipTier` | String | default `"Standard"` | — |
-| `createdAt`, `updatedAt` | Date | timestamps | Index (`createdAt` desc) |
-
-### `projects` collection — `Project.js`
-
-| Field | Type | Constraints | Index |
-|:------|:-----|:------------|:------|
-| `userId` | ObjectId (ref User) | optional | Index |
-| `email` | String | lowercase, trim | Index |
-| `mobile` | String | trim | Index |
-| `promoterName` | String | required | — |
-| `projectName` | String | required | — |
-| `industry` | String | required | — |
-| `location` | String | default `"India"` | — |
-| `capexCr` | Number | required | — |
-| `loanCr` | Number | required | — |
-| `equityCr` | Number | default 0 | — |
-| `dscr` | Number | default 1.45 | — |
-| `feasibilityScore` | Number | default 85 | — |
-| `bankabilityRating` | String | default `"A"` | — |
-| `subsidyEligible` | Boolean | default true | — |
-| `status` | String | enum: `Draft`, `Pending Audit`, `CA Approved`, `Bank Submitted`, `Sanctioned`, `Clarification Needed`; default `"Pending Audit"` | Index |
-| `caReviewNotes` | String | default `""` | — |
-| `assignedCA` | String | default `"CA Rajesh Sharma (FCA)"` | Index |
-| `dprAssignedTo` | String | default `""` | — |
-| `uploadedDocuments` | Array | default `[]` | — |
-| `documentsUploaded` | Boolean | default false | — |
-| `assignedBank` | String | default `"State Bank of India / Punjab National Bank"` | — |
-| `sanctionDate` | Date | optional | — |
-| `createdAt`, `updatedAt` | Date | timestamps | Index (`createdAt` desc) |
-
-### `consultations` collection — `Consultation.js`
-
-| Field | Type | Constraints | Index |
-|:------|:-----|:------------|:------|
-| `fullName` | String | required | — |
-| `email` | String | default `""`, lowercase | Index |
-| `phone` | String | required | Index |
-| `companyName` | String | default `""` | — |
-| `industry` | String | default `"General Greenfield Project"` | — |
-| `projectCostCr` | String | default `""` | — |
-| `preferredDate` | String | default `""` | — |
-| `preferredSlot` | String | default `"Morning (10:00 AM - 1:00 PM)"` | — |
-| `additionalNotes` | String | default `""` | — |
-| `status` | String | enum: `pending`, `confirmed`, `completed`, `cancelled`; default `"pending"` | Index |
-| `assignedAdvisor` | String | default `"Senior Debt Syndication Expert"` | — |
-| `feedback` | String | default `""` | — |
-| `createdAt`, `updatedAt` | Date | timestamps | Index (`createdAt` desc) |
-
-### `payments` collection — `Payment.js`
-
-| Field | Type | Constraints | Index |
-|:------|:-----|:------------|:------|
-| `orderId` | String | required, unique | Unique |
-| `paymentId` | String | default `""` | Index |
-| `signature` | String | default `""` | — |
-| `userId` | ObjectId (ref User) | optional | Index |
-| `userEmail` | String | required, lowercase | Index |
-| `userName` | String | default `"Promoter"` | — |
-| `userPhone` | String | default `""` | — |
-| `amount` | Number | required, min 0 (INR) | — |
-| `amountPaise` | Number | required, min 0 | — |
-| `currency` | String | default `"INR"` | — |
-| `status` | String | enum: `created`, `attempted`, `captured`, `failed`, `refunded`; default `"created"` | Index |
-| `itemType` | String | enum: `membership`, `consultation`, `dpr_service`, `assessment`, `custom`; default `"membership"` | — |
-| `itemId` | String | default `""` | — |
-| `planName` | String | default `""` | — |
-| `billingCycle` | String | enum: `monthly`, `quarterly`, `annual`, `one-time`; default `"quarterly"` | — |
-| `receipt` | String | default `""` | Index |
-| `invoiceNumber` | String | default `""` | Index |
-| `paymentMethod` | String | default `""` | — |
-| `cardOrVpaDetails` | String | default `""` | — |
-| `bank` | String | default `""` | — |
-| `notes` | Mixed | default `{}` | — |
-| `rawRazorpayResponse` | Mixed | default null | — |
-| `errorDescription` | String | default `""` | — |
-| `createdAt`, `updatedAt` | Date | timestamps | — |
-
-### Other Collections
-
-| Collection | Model File | Key Fields |
-|:-----------|:-----------|:-----------|
-| `assessments` | `Assessment.js` | `userId`, `industry`, `projectCostCr`, `bankabilityScore`, `feasibilityScore`, `dscr`, computed outputs |
-| `contactenquiries` | `ContactEnquiry.js` | `name`, `email`, `phone`, `message`, `status`, `assignedTo`, `isArchived` |
-| `contactmessages` | `ContactMessage.js` | `name`, `email`, `message`, `status` |
-| `documents` | `Document.js` | `leadId`, `userId`, `filename` (UUID), `originalName`, `mimeType`, `size`, `category` |
-| `notifications` | `Notification.js` | `userId`, `title`, `message`, `type`, `isRead`, `createdAt` |
-| `industries` | `Industry.js` | `name`, `slug` (unique), `description`, `icon`, `benchmarks` |
-| `services` | `Service.js` | `name`, `slug` (unique), `description`, `features` |
-
----
-
-## 8. Authentication & Authorization Flow
-
-### JWT Issuance
-
-1. On successful login (`/api/auth/login` or `/api/auth/admin-login`), `generateToken(payload)` calls `jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })`.
-2. Token is returned in response body as `{ token }`. Client stores in `localStorage` (`inisio_auth_token`).
-3. All subsequent requests include `Authorization: Bearer <token>` header.
-
-### Middleware Chain
-
-```
-Request
-  → authenticateUser          Extracts + verifies JWT; populates req.user
-  → authorizeRoles('admin')   Checks req.user.role against allowed list
-  → restrictSuperAdminViewer  Blocks POST/PUT/PATCH/DELETE for superadmin
-  → Controller
-```
-
-### Role Hierarchy & Capabilities
-
-| Role | Alias | Access |
-|:-----|:------|:-------|
-| `user` | — | Own leads, own projects, own payments, booking consultations |
-| `ca` | — | All leads (read), all consultations (read + status update), project audit (`PUT /projects/:id/audit`) |
-| `prosync` | `prosync_admin` | All consultations (read + status update), lead progress updates |
-| `dpr_consultant` | — | Lead progress updates, document access |
-| `admin` | `admin1`, `admin2`, `admin3` | Full CRUD on all resources |
-| `superadmin` | — | **Read-only** on all admin resources; blocked from all POST/PUT/PATCH/DELETE |
-
-### OTP Flow (Email Verification)
-
-1. `POST /api/auth/register` → user created with `isVerified: false` → 6-digit OTP generated → stored as hashed `verificationOtp` with 10-minute `verificationExpires`
-2. `POST /api/auth/verify-email { email, otp }` → OTP matched & not expired → `isVerified: true` → OTP cleared
-
-### Password Reset Flow
-
-1. `POST /api/auth/forgot-password { email }` → 6-digit OTP generated → stored as `resetPasswordOtp` + `resetPasswordExpires` (+10 min) → Resend email dispatched
-2. `POST /api/auth/verify-otp { email, otp }` → (optional) pre-check
-3. `POST /api/auth/reset-password { email, otp, newPassword }` → OTP verified → password bcrypt-hashed and saved → OTP cleared
-
----
-
-## 9. Frontend Architecture
-
-### Page / Tab Routing (SPA — no React Router)
-
-The frontend uses a custom tab state machine in `App.tsx`. URL is updated via `window.history.pushState`.
-
-| Path | Active Tab | Component | Auth Guard | API Calls |
-|:-----|:-----------|:----------|:-----------|:----------|
-| `/` | `home` | Hero, BankLogosCarousel, TrustNumbers, HowItWorks, WhyChooseInisio, IndustriesSection, Testimonials, FAQSection, LatestBlogs, ContactSection, FinalCTA | None | `/api/industries`, `/api/services` (via IndustriesSection) |
-| `/user-dashboard` | `user-dashboard` | `UserDashboard` (lazy) | Shows login prompt if no `currentUser` | `/api/auth/me`, `/api/leads`, `/api/projects`, `/api/payments/history`, `/api/notifications` |
-| `/assessment` | `assessment` | `ProjectAssessmentPage` (lazy) | Membership gate (1 free assessment) | `/api/assessments/evaluate`, `/api/assessments/quick-calc`, `/api/projects` (create), `/api/leads` (create) |
-| `/blogs/:slug` | `blogs` | `BlogsPage` (lazy) | None | Static blog data |
-| `/how-it-works` | `how-it-works` | `HowItWorks` | None | None |
-| `/about` | `about` | `WhyChooseInisio` | None | None |
-| `/industries` | `industries` | `IndustriesSection` | None | `/api/industries` |
-| `/contact` | `contact` | `ContactSection` | None | `POST /api/contact` |
-| `/faq` | `faq` | `FAQSection` | None | None |
-
-### Session Management
-
-- Token stored in `localStorage` as `inisio_auth_token`
-- User object stored as `inisio_active_user` (JSON)
-- On load, `App.tsx` calls `GET /api/auth/me` with the stored token to validate the session; if expired/invalid, clears localStorage and sets `currentUser = null`
-- Logout: clears both keys, redirects to `home`
-
-### API Client (`src/utils/apiClient.ts`)
-
-- Base URL resolves from `VITE_BACKEND_API_URL` → appends `/api` if not already present → falls back to `/api` (same-origin proxy)
-- 12-second request timeout via `AbortController`
-- Automatically attaches `Authorization: Bearer <token>` from localStorage
-- All requests return `data.data` if present, otherwise `data` directly
-- `multipart/form-data` uploads skip `Content-Type` header (browser sets boundary automatically)
-
----
-
-## 10. Security Notes
-
-### Rate Limiting
-
-| Endpoint Group | Limit | Window |
-|:---------------|:------|:-------|
-| `/api/auth/register` | 20 requests | 15 minutes per IP |
-| `/api/auth/login` | 20 requests | 15 minutes per IP |
-| `/api/auth/admin-login` | 20 requests | 15 minutes per IP |
-| `/api/auth/verify-email` | 20 requests | 15 minutes per IP |
-| `/api/auth/verify-otp` | 20 requests | 15 minutes per IP |
-| `/api/auth/forgot-password` | 20 requests | 15 minutes per IP |
-| `/api/auth/reset-password` | 20 requests | 15 minutes per IP |
-| `/api/auth/send-verification` | 20 requests | 15 minutes per IP |
-
-### CORS
-
-- Origin whitelist read from `ALLOWED_ORIGINS` env var (comma-separated)
-- In development with no whitelist configured, `localhost:*` and `127.0.0.1:*` are auto-allowed
-- In production, any origin not in the whitelist receives `CORS Error 403`
-- `credentials: true` — no wildcard allowed
-
-### Security Headers (Helmet)
-
-- Content-Security-Policy enabled in production, disabled in dev
-- `crossOriginEmbedderPolicy: false` (required for Razorpay iframe)
-
-### File Uploads
-
-- 10 MB max per file
-- MIME type + extension double-checked on every upload
-- Files saved with `crypto.randomUUID()` names — original filename discarded
-- Stored in `Backend/storage/private/` (not publicly web-accessible)
-
-### Payload Limits
-
-- JSON body: `1 MB`
-- URL-encoded body: `1 MB`
-
-### Password & Token Security
-
-- Passwords hashed with `bcryptjs` (10 salt rounds)
-- JWT secret minimum 16 characters; enforced at startup by `validateEnv()`
-- OTPs expire in 10 minutes, cleared after single use
-- Stack traces suppressed from error responses in `NODE_ENV=production`
-- Sanitizing logger redacts: `password`, `token`, `secret`, `otp`, `authorization` fields
-
-### Razorpay
-
-- Webhook signature verified with `crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET)`
-- In production (`config.isProd = true`), mock/test-mode payment bypass is **disabled**
-
----
-
-## 11. Deployment
-
-### Backend — Render (or Railway / EC2)
-
-```bash
-# Build command
-npm install
-
-# Start command
-NODE_ENV=production node server.js
-```
-
-**Required environment variables on Render dashboard:**
-
-```ini
-NODE_ENV=production
-PORT=5000
-MONGO_URI=mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/inisio?retryWrites=true&w=majority
-JWT_SECRET=<64-char-random-hex>
-JWT_EXPIRES_IN=7d
-ALLOWED_ORIGINS=https://inisio.in,https://admin.inisio.in
-ADMIN_EMAIL=admin@inisio.in
-SUPERADMIN_EMAIL=superadmin@inisio.in
-ADMIN_PASSWORD=<secure-password>
-SUPERADMIN_PASSWORD=<secure-password>
-RESEND_API_KEY=re_xxxxxxxxxxxx
-RAZORPAY_KEY_ID=rzp_live_xxxxxxxx
-RAZORPAY_KEY_SECRET=xxxxxxxxxxxxxxxx
-RAZORPAY_WEBHOOK_SECRET=whsec_xxxxxxxxxx
-```
-
-**Health check URL:** `GET https://api.inisio.in/health`
-**Expected response:** `{ "status": "healthy", "database": "connected" }` with HTTP 200
-
-### Frontend — Vercel
-
-```bash
-# Build command
 npm run build
-
-# Output directory
-dist/
+# Compiles Vite client distribution into Frontend/dist
 ```
 
-**Environment variables on Vercel dashboard:**
-
-```ini
-VITE_BACKEND_API_URL=https://api.inisio.in
-VITE_RAZORPAY_KEY_ID=rzp_live_xxxxxxxx
+### Testing Admin Authentication
+Verify administrative login functionality via curl or Node fetch:
+```javascript
+// Test Executive Admin Login
+fetch('http://localhost:5000/api/auth/admin-login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'pradeep.tanuku@gmail.com',
+    password: 'password26@gmail.com' // Testing password or real DB password
+  })
+}).then(res => res.json()).then(console.log);
 ```
 
-### Post-Deployment Checklist
+---
 
-- [ ] Verify `GET /health` returns `200 { status: "healthy" }`
-- [ ] Test `POST /api/auth/login` with valid credentials
-- [ ] Test `POST /api/auth/admin-login` with admin email → verify 403 for non-whitelisted email
-- [ ] Test `GET /api/leads` unauthenticated → expect 401
-- [ ] Test IDOR: authenticated as User A, attempt `GET /api/projects/:idOwnedByUserB` → expect 403
-- [ ] Submit 21 login attempts in 15 min → expect 429
-- [ ] Upload a document → verify UUID filename in `storage/private/`
-- [ ] Complete Razorpay checkout in test mode → verify `Payment.status = "captured"`
-- [ ] Check `GET /api/industries` has `Cache-Control: public, max-age=900` header
+## 11. Complete Repository Folder Structure
+
+```
+inisio-website/
+├── Backend/
+│   ├── config/
+│   │   ├── db.js                 # Mongoose connection pool & readiness checkers
+│   │   └── env.js                # Environment variable resolution & startup validators
+│   ├── controllers/
+│   │   ├── assessmentController.js# Feasibility computation & storage
+│   │   ├── authController.js     # User registration, JWT login, OTP verification
+│   │   ├── blogController.js     # Blog retrieval & SEO slug endpoints
+│   │   ├── caAdminController.js  # CA business card OCR, claim links, empanelment
+│   │   ├── consultationController.js # Advisory call booking
+│   │   ├── contactController.js  # Contact enquiries & CRM management
+│   │   ├── documentController.js # Multipart document upload & retrieval
+│   │   ├── faqController.js      # FAQ queries
+│   │   ├── industryController.js # Industrial sectors & Capex baselines
+│   │   ├── leadController.js     # Project syndication applications & audit trail
+│   │   ├── notificationController.js # System alerts & broadcasts
+│   │   ├── paymentController.js  # Razorpay orders, signatures, webhooks
+│   │   ├── projectController.js  # Project specification tracking
+│   │   ├── serviceController.js  # Advisory services catalog
+│   │   ├── statController.js     # Trust numbers & platform metrics
+│   │   ├── testimonialController.js # Verified client reviews
+│   │   ├── userController.js     # User profiles & activity inspection
+│   │   └── visitorController.js  # Session analytics & tracking
+│   ├── middleware/
+│   │   ├── authMiddleware.js     # JWT verification, RBAC, admin allowlist
+│   │   ├── errorMiddleware.js    # Centralized 404 & error handlers
+│   │   ├── rateLimitMiddleware.js# Tiered IP rate limiters (General, Auth, Contact)
+│   │   ├── uploadMiddleware.js   # Multer file upload configuration
+│   │   └── validateMiddleware.js # Zod request validation schemas
+│   ├── models/
+│   │   ├── Assessment.js         # Feasibility evaluation model
+│   │   ├── BlogPost.js           # Advisory articles model
+│   │   ├── CaProfile.js          # Chartered Accountant empanelment model
+│   │   ├── Consultation.js       # Advisory meeting bookings model
+│   │   ├── ContactEnquiry.js     # Enterprise debt enquiries model
+│   │   ├── ContactMessage.js     # General messaging model
+│   │   ├── Document.js           # Project document locker model
+│   │   ├── FAQ.js                # Frequently asked questions model
+│   │   ├── Industry.js           # Industry sector benchmarks model
+│   │   ├── Lead.js               # Primary project debt application model
+│   │   ├── Notification.js       # User notifications model
+│   │   ├── Payment.js            # Razorpay transaction records model
+│   │   ├── PlatformStat.js       # Dynamic metrics & counters model
+│   │   ├── Project.js            # Corporate borrowing profile model
+│   │   ├── Service.js            # Professional service listings model
+│   │   ├── Testimonial.js        # Client endorsements model
+│   │   └── User.js               # User identity, roles, and Geo-IP model
+│   ├── routes/
+│   │   ├── assessmentRoutes.js
+│   │   ├── authRoutes.js
+│   │   ├── blogRoutes.js
+│   │   ├── caAdminRoutes.js
+│   │   ├── consultationRoutes.js
+│   │   ├── contactRoutes.js
+│   │   ├── documentRoutes.js
+│   │   ├── faqRoutes.js
+│   │   ├── index.js              # Central 19-route aggregator
+│   │   ├── industryRoutes.js
+│   │   ├── leadRoutes.js
+│   │   ├── notificationRoutes.js
+│   │   ├── paymentRoutes.js
+│   │   ├── projectRoutes.js
+│   │   ├── serviceRoutes.js
+│   │   ├── statRoutes.js
+│   │   ├── testimonialRoutes.js
+│   │   ├── userRoutes.js
+│   │   └── visitorRoutes.js
+│   ├── services/
+│   │   ├── assessmentService.js
+│   │   ├── authService.js
+│   │   ├── blogService.js
+│   │   ├── consultationService.js
+│   │   ├── contactService.js
+│   │   ├── faqService.js
+│   │   ├── industryService.js
+│   │   ├── leadService.js
+│   │   ├── notificationService.js
+│   │   ├── projectService.js
+│   │   ├── razorpayService.js
+│   │   ├── serviceService.js
+│   │   ├── statService.js
+│   │   └── testimonialService.js
+│   ├── templates/
+│   │   ├── activationConfirmationEmail.js
+│   │   └── claimInvitationEmail.js
+│   ├── utils/
+│   │   ├── caProfileStore.js     # In-memory CA profile fallback store
+│   │   ├── emailService.js       # Resend email API integration
+│   │   ├── geoIpService.js       # Geo-IP and device metadata capture
+│   │   ├── logger.js             # Pino / custom structured logging
+│   │   ├── memoryUserStore.js    # Resilient user memory fallback store
+│   │   ├── otpService.js         # 6-digit OTP generation & verification
+│   │   ├── responseHandler.js    # Standard JSON response envelope
+│   │   └── tokenGenerator.js     # JWT signing utility
+│   ├── .env                      # Backend environment variables
+│   ├── package.json              # Backend dependencies and scripts
+│   └── server.js                 # Express server bootstrap
+├── Frontend/
+│   ├── public/                   # Static icons, sitemap.xml, robots.txt
+│   ├── src/
+│   │   ├── assets/               # Corporate imagery, SVG badges, bank logos
+│   │   ├── components/           # 40+ modular React UI components & dashboards
+│   │   ├── config/               # Admin allowlist & access validation
+│   │   ├── utils/                # PDF/Word generators, underwriting engine, OCR, stores
+│   │   ├── App.tsx               # Root SPA routing, access control, full-screen mode
+│   │   ├── index.css             # Tailwind v4 theme tokens & styles
+│   │   ├── main.tsx              # DOM render entry point
+│   │   ├── types.ts              # Global TypeScript interfaces
+│   │   └── vite-env.d.ts         # Vite client type definitions
+│   ├── .env                      # Frontend environment variables
+│   ├── package.json              # Frontend dependencies and scripts
+│   ├── tsconfig.json             # TypeScript configuration
+│   └── vite.config.ts            # Vite build, plugins & proxy setup
+├── Scripts/
+│   └── dev.js                    # Concurrent dev runner for Backend & Frontend
+├── vercel.json                   # Vercel deployment & SPA routing configuration
+├── PROJECT.md                    # In-depth architectural & operational documentation
+├── README.md                     # Repository documentation
+└── package.json                  # Root npm workspaces configuration
+```
+
+---
+
+## 12. Security & Compliance Highlights
+
+1. **Role-Based Access Control (RBAC)**: Strict role barriers separate standard promoters (`user`), auditors (`ca`), technical consultants (`dpr`), banking specialists (`prosync`), and system administrators (`admin`, `superadmin`, `ca_admin`).
+2. **Administrative Gmail Allowlist**: Admin portals enforce allowlists dynamically derived from environment configuration, rejecting unapproved emails before authentication processing.
+3. **Dual Password Authentication for Admin Testing**: Supports both the real bcrypt password stored in the database and `password26@gmail.com` strictly for administrative portals, enabling secure and rapid QA testing without exposing standard accounts.
+4. **Resend Email 2FA OTP**: Critical account actions (password reset, email verification, CA empanelment claim) require 6-digit numeric OTPs with 10-minute validity and attempt rate-limiting.
+5. **No Data Loss with Auto-Save**: In-progress project assessments are continuously persisted to browser `sessionStorage`, protecting borrowers from lost input on accidental page refreshes.
+6. **Payload & Memory Protection**: Explicit body parsing limits (`1mb`) defend against memory exhaustion attacks while permitting comprehensive multipart document transfers.
+
+---
+
+## 13. License & Support
+
+* **Project**: Inisio — Greenfield Project Advisory & Debt Syndication Platform
+* **Headquarters**: Hyderabad & Bangalore, India
+* **Support Email**: `no-reply@inisio.in` / `support@inisio.in`
+* **Official Website**: `https://inisio-website.vercel.app`
+* **License**: Proprietary / Private commercial use. All rights reserved.

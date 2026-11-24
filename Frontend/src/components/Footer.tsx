@@ -16,12 +16,14 @@ interface FooterProps {
   onSelectTab?: (tab: string) => void;
   onOpenAssessment: () => void;
   onOpenConsultation: () => void;
+  onOpenAdminPortal?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onSelectTab,
   onOpenAssessment,
   onOpenConsultation,
+  onOpenAdminPortal,
 }) => {
   const handleNav = (target: string, e?: React.MouseEvent) => {
     if (e) e.preventDefault();
@@ -217,7 +219,24 @@ export const Footer: React.FC<FooterProps> = ({
 
         {/* Regulatory Disclaimer & Copyright Bar */}
         <div className="pt-6 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
-          <p>© {new Date().getFullYear()} Inisio Greenfield Advisory Platform. All rights reserved.</p>
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <p>© {new Date().getFullYear()} Inisio Greenfield Advisory Platform. All rights reserved.</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenAdminPortal) {
+                  onOpenAdminPortal();
+                } else if (onSelectTab) {
+                  onSelectTab('admin-dashboard');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800/80 transition-colors cursor-pointer text-[11px] font-semibold"
+              title="Authorized Executive Admin Console"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+              <span>Admin Portal Shortcut</span>
+            </button>
+          </div>
 
           <p className="text-slate-400 text-center md:text-right max-w-xl text-[10px] leading-relaxed">
             Inisio is an independent private project consultancy &amp; debt syndication platform. Feasibility assessments and scorecards are analytical estimates based on standard bank credit underwriting criteria.

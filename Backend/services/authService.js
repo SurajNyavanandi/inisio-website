@@ -1318,7 +1318,7 @@ export const adminLogin = async ({ email, password, req }) => {
   const isAllowedCaAdmin = isAuthorizedCaAdminGmail(cleanEmail);
 
   if (!isAllowedAdmin && !isAllowedCaAdmin) {
-    const error = new Error('Access Denied: This Gmail address is not an authorized administrator account.');
+    const error = new Error('Access Denied: Only authorized administrators are permitted to log in through the Admin Portal. If you are a client or promoter, please use the main website login.');
     error.statusCode = 403;
     throw error;
   }
@@ -1351,7 +1351,7 @@ export const adminLogin = async ({ email, password, req }) => {
       let user = await User.findOne({ email: cleanEmail }).select('+password');
       if (user && NON_ADMIN_PORTAL_ROLES.includes(user.role)) {
         const error = new Error(
-          'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
+          'Access Denied: Only authorized administrators are permitted to log in through the Admin Portal. If you are a client or promoter, please use the main website login.'
         );
         error.statusCode = 403;
         throw error;
@@ -1445,7 +1445,7 @@ export const adminLogin = async ({ email, password, req }) => {
   let memUser = findMemoryUserByEmail(cleanEmail);
   if (memUser && NON_ADMIN_PORTAL_ROLES.includes(memUser.role)) {
     const error = new Error(
-      'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
+      'Access Denied: Only authorized administrators are permitted to log in through the Admin Portal. If you are a client or promoter, please use the main website login.'
     );
     error.statusCode = 403;
     throw error;

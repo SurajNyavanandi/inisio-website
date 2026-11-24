@@ -7,6 +7,10 @@
 }
 
 @layer base {
+  html, body {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     background-color: #f8fafc;
     color: #1e293b;

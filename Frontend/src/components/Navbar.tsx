@@ -179,7 +179,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {isActive && (
                       <span
                         aria-hidden="true"
-                        className="absolute left-0 right-0 -bottom-[21px] h-0.5 bg-blue-600 rounded-full"
+                        className="absolute left-0 right-0 -bottom-5.25 h-0.5 bg-blue-600 rounded-full"
                       />
                     )}
                   </a>
@@ -198,7 +198,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     title={`${currentUser.name} (${currentUser.email})`}
                     aria-expanded={userDropdownOpen}
                   >
-                    <span className="text-xs font-semibold text-slate-900 truncate max-w-[110px] lg:max-w-[150px]">
+                    <span className="text-xs font-semibold text-slate-900 truncate max-w-27.5 lg:max-w-37.5">
                       {currentUser.name}
                     </span>
                     <ChevronDown
@@ -276,7 +276,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   setMobileMenuOpen(false);
                   onOpenAssessment();
                 }}
-                className="min-h-[40px] h-10 px-3.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-lg shadow-xs inline-flex items-center gap-1 whitespace-nowrap cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+                className="min-h-10 h-10 px-3.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-lg shadow-xs inline-flex items-center gap-1 whitespace-nowrap cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
               >
                 <span>Free Assessment</span>
               </a>
@@ -316,7 +316,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     href={link.href}
                     onClick={(e) => handleNavClick(link.target, e)}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`w-full min-h-[44px] py-3 px-2 text-sm font-semibold transition-colors cursor-pointer flex items-center justify-between ${
+                    className={`w-full min-h-11 py-3 px-2 text-sm font-semibold transition-colors cursor-pointer flex items-center justify-between ${
                       isActive ? 'text-blue-600' : 'text-slate-800 hover:text-blue-600'
                     }`}
                   >
@@ -341,7 +341,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <button
                       type="button"
                       onClick={() => handleNavClick(getDashboardTabForRole(currentUser.role))}
-                      className="min-h-[44px] h-11 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                      className="min-h-11 h-11 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                     >
                       <LayoutDashboard className="w-4 h-4 shrink-0" />
                       <span>Dashboard</span>
@@ -352,7 +352,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setMobileMenuOpen(false);
                         onLogout();
                       }}
-                      className="min-h-[44px] h-11 px-3 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                      className="min-h-11 h-11 px-3 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                     >
                       <LogOut className="w-4 h-4 shrink-0" />
                       <span>Sign Out</span>
@@ -366,12 +366,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                     setMobileMenuOpen(false);
                     onOpenAuth('login');
                   }}
-                  className="w-full min-h-[44px] h-11 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  className="w-full min-h-11 h-11 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                 >
                   <LogIn className="w-4 h-4 shrink-0" />
                   <span>Sign In to Your Account</span>
                 </button>
               )}
+              {/* Mobile Admin Portal Shortcut */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onSelectTab('admin-dashboard');
+                  }}
+                  className="w-full text-center py-2 text-xs font-semibold text-slate-500 hover:text-blue-600 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Admin Portal Shortcut</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

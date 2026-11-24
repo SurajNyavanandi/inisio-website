@@ -25,6 +25,8 @@ import {
   EyeOff,
   KeyRound,
   RotateCw,
+  X,
+  Scan,
 } from 'lucide-react';
 import { resolveApiUrl } from '../utils/apiClient';
 import { isValidGmail, validateCaAdminEmail } from '../config/adminAccess';
@@ -133,9 +135,66 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   const [profileSubmitError, setProfileSubmitError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
+  // Mobile Live Viewfinder Camera State & Handlers
+  const [isLiveCameraOpen, setIsLiveCameraOpen] = useState(false);
+  const liveVideoRef = useRef<HTMLVideoElement>(null);
+  const liveStreamRef = useRef<MediaStream | null>(null);
+
+  const startLiveCamera = async () => {
+    setOcrError('');
+    setIsLiveCameraOpen(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+      });
+      liveStreamRef.current = stream;
+      if (liveVideoRef.current) {
+        liveVideoRef.current.srcObject = stream;
+        await liveVideoRef.current.play();
+      }
+    } catch (err) {
+      console.warn('Live camera stream not supported or rejected, falling back to camera input:', err);
+      stopLiveCamera();
+      cameraInputRef.current?.click();
+    }
+  };
+
+  const stopLiveCamera = () => {
+    if (liveStreamRef.current) {
+      liveStreamRef.current.getTracks().forEach((track) => track.stop());
+      liveStreamRef.current = null;
+    }
+    setIsLiveCameraOpen(false);
+  };
+
+  const captureLiveFrame = () => {
+    if (!liveVideoRef.current) return;
+    const video = liveVideoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    stopLiveCamera();
+    setCardImagePreview(dataUrl);
+    setCardFileName(`mobile-card-${Date.now()}.jpg`);
+    setScanMode('auto');
+    setAlternatePhones([]);
+    triggerOcrExtraction(dataUrl, 'auto');
+  };
+
   useEffect(() => {
     return () => {
       void terminateCardOcrWorker();
+      if (liveStreamRef.current) {
+        liveStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
     };
   }, []);
 
@@ -997,15 +1056,29 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
         onLogout={handleSignOut}
         logoutLabel="Sign Out"
         headerActions={
-          <button
-            type="button"
-            onClick={fetchDashboardData}
-            disabled={loading}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('card-registration');
+                setRegistrationStep(1);
+                setTimeout(() => cameraInputRef.current?.click(), 80);
+              }}
+              className="sm:hidden px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>Scan Card</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchDashboardData}
+              disabled={loading}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
         }
       >
         {/* SECTION 1: BUSINESS CARD REGISTRATION */}
@@ -1102,15 +1175,38 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto pt-2">
-                    <button
-                      type="button"
-                      onClick={() => cameraInputRef.current?.click()}
-                      className="p-6 rounded-xl border-2 border-dashed border-blue-300 hover:border-blue-600 hover:bg-blue-50/40 transition-colors flex flex-col items-center gap-2 cursor-pointer group"
-                    >
-                      <Camera className="w-7 h-7 text-blue-600" />
-                      <span className="text-xs font-semibold text-slate-800">Capture from Camera</span>
-                      <span className="text-[11px] text-slate-500">Mobile Camera Capture</span>
+                  <div className="space-y-3 max-w-lg mx-auto pt-2">
+                    {/* Primary Mobile Camera Action Card */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                          <Camera className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-bold">Mobile Camera Scanner</div>
+                          <div className="text-xs text-blue-100">
+                            Snap visiting card from your device to auto-fill details
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => cameraInputRef.current?.click()}
+                          className="flex-1 sm:flex-none px-4 py-2.5 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer text-center whitespace-nowrap"
+                        >
+                          Open Camera
+                        </button>
+                        <button
+                          type="button"
+                          onClick={startLiveCamera}
+                          className="px-3 py-2.5 bg-blue-700/80 hover:bg-blue-800 text-white font-semibold text-xs rounded-xl transition-colors cursor-pointer whitespace-nowrap border border-white/20"
+                          title="Interactive camera preview"
+                        >
+                          <Scan className="w-4 h-4 inline mr-1" />
+                          <span>Viewfinder</span>
+                        </button>
+                      </div>
                       <input
                         ref={cameraInputRef}
                         type="file"
@@ -1119,24 +1215,48 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                         onChange={handleFileSelect}
                         className="hidden"
                       />
-                    </button>
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-600 hover:bg-slate-50 transition-colors flex flex-col items-center gap-2 cursor-pointer group"
-                    >
-                      <Upload className="w-7 h-7 text-slate-600" />
-                      <span className="text-xs font-semibold text-slate-800">Upload Card Photo</span>
-                      <span className="text-[11px] text-slate-500">PNG, JPG, or WEBP file</span>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
-                    </button>
+                    {/* Secondary Desktop / File Upload Card */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-slate-50 transition-colors flex items-center gap-3 cursor-pointer group text-left"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-800">Upload from Gallery</div>
+                          <div className="text-[11px] text-slate-500">JPG, PNG, or WEBP image</div>
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileSelect}
+                          className="hidden"
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOcrError('');
+                          setRegistrationStep(2);
+                        }}
+                        className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-slate-50 transition-colors flex items-center gap-3 cursor-pointer group text-left"
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-slate-800">Manual Entry</div>
+                          <div className="text-[11px] text-slate-500">Fill CA profile without photo</div>
+                        </div>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1627,8 +1747,24 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                   </button>
                   <button
                     type="button"
+                    onClick={() => {
+                      setRegistrationStep(1);
+                      setCardImagePreview('');
+                      setCardFileName('');
+                      setAlternatePhones([]);
+                      setScanMode('auto');
+                      setCreatedProfile(null);
+                      setClaimDispatchResult(null);
+                    }}
+                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Scan Another Card</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('reporting')}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer"
+                    className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer"
                   >
                     View in Reporting Table
                   </button>
@@ -2015,6 +2151,98 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
             fetchDashboardData();
           }}
         />
+      )}
+
+      {/* Mobile Floating Action Button (FAB): One-tap visiting card scan on mobile */}
+      <button
+        type="button"
+        onClick={() => {
+          setActiveTab('card-registration');
+          setRegistrationStep(1);
+          setTimeout(() => cameraInputRef.current?.click(), 80);
+        }}
+        className="sm:hidden fixed bottom-6 right-5 z-40 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-3 rounded-full shadow-2xl shadow-blue-900/50 flex items-center gap-2 cursor-pointer transition-all border-2 border-white/90"
+        title="Scan Visiting Card from Mobile Camera"
+        aria-label="Scan Visiting Card from Mobile Camera"
+      >
+        <Camera className="w-5 h-5 shrink-0" />
+        <span className="text-xs font-bold whitespace-nowrap">Scan Card</span>
+      </button>
+
+      {/* Live Mobile Camera Viewfinder Modal */}
+      {isLiveCameraOpen && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 font-inter animate-in fade-in">
+          {/* Header */}
+          <div className="flex items-center justify-between text-white pt-2">
+            <div className="text-sm font-bold flex items-center gap-2">
+              <Camera className="w-4 h-4 text-blue-400" />
+              <span>Align Visiting Card in Box</span>
+            </div>
+            <button
+              type="button"
+              onClick={stopLiveCamera}
+              className="p-2 rounded-full bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
+              aria-label="Close Camera"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Viewfinder frame */}
+          <div className="relative flex-1 flex items-center justify-center my-4 overflow-hidden rounded-2xl bg-slate-950">
+            <video
+              ref={liveVideoRef}
+              playsInline
+              autoPlay
+              muted
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            {/* Card alignment overlay (standard ~1.58:1 ratio) */}
+            <div className="relative w-[88%] max-w-sm aspect-[1.58/1] rounded-xl border-2 border-blue-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] pointer-events-none flex items-center justify-center">
+              <div className="absolute inset-x-4 top-2 text-center text-[11px] font-semibold text-blue-200 bg-black/60 px-2 py-0.5 rounded-full">
+                Hold card flat &amp; steady
+              </div>
+              <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-blue-400 -mt-1 -ml-1 rounded-tl" />
+              <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-blue-400 -mt-1 -mr-1 rounded-tr" />
+              <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-blue-400 -mb-1 -ml-1 rounded-bl" />
+              <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-blue-400 -mb-1 -mr-1 rounded-br" />
+            </div>
+          </div>
+
+          {/* Controls Footer */}
+          <div className="flex items-center justify-around pb-6 text-white">
+            <button
+              type="button"
+              onClick={() => {
+                stopLiveCamera();
+                cameraInputRef.current?.click();
+              }}
+              className="text-xs text-slate-300 hover:text-white underline cursor-pointer"
+            >
+              Use Phone Camera App
+            </button>
+
+            {/* Shutter Button */}
+            <button
+              type="button"
+              onClick={captureLiveFrame}
+              className="w-16 h-16 rounded-full border-4 border-white bg-blue-600 active:scale-90 flex items-center justify-center shadow-lg cursor-pointer transition-transform"
+              aria-label="Capture Card Photo"
+            >
+              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-blue-600">
+                <Camera className="w-5 h-5" />
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={stopLiveCamera}
+              className="text-xs text-slate-300 hover:text-white cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </>
   );

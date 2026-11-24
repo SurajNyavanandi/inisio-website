@@ -78,7 +78,7 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
     if (portalType === 'admin') {
       const check = validateAdminEmail(cleanEmail);
       if (!check.allowed) {
-        setError(check.error || 'Access Denied: Only authorized admin @gmail.com accounts are permitted.');
+        setError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
         return;
       }
     } else if (portalType === 'ca-admin') {
@@ -167,7 +167,7 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
     if (portalType === 'admin') {
       const check = validateAdminEmail(cleanEmail);
       if (!check.allowed) {
-        setError(check.error || 'Access Denied: Only authorized admin @gmail.com accounts are permitted.');
+        setError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
         return;
       }
     } else if (portalType === 'ca-admin') {

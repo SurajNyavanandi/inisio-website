@@ -240,8 +240,8 @@ export const DashboardLoadingState: React.FC<{
 );
 
 export const DASHBOARD_TABLE = {
-  wrapper: 'overflow-x-auto',
-  table: 'w-full text-left text-xs',
+  wrapper: 'overflow-x-auto w-full -mx-4 sm:mx-0 px-4 sm:px-0 scrollbar-thin',
+  table: 'w-full text-left text-xs min-w-[640px]',
   thead: 'bg-slate-50 text-slate-600 uppercase tracking-wider font-semibold border-b border-slate-200',
   th: 'py-3 px-5 whitespace-nowrap',
   tbody: 'divide-y divide-slate-100',

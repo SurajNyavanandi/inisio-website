@@ -556,7 +556,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setAuthLoading(true);
     const detected = validateAdminEmail(cleanEmail);
     if (!detected.allowed) {
-      setAuthError(detected.error || 'Access Denied: This Gmail address is not an authorized administrator account.');
+      setAuthError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
       setAuthLoading(false);
       return;
     }
@@ -605,7 +605,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       }
 
       if (backendRole !== 'admin' && backendRole !== 'superadmin') {
-        setAuthError('Access Denied: Administrative privileges required.');
+        setAuthError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
         return;
       }
 

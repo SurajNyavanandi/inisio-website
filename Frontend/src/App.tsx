@@ -403,12 +403,36 @@ export default function App() {
     localStorage.setItem('inisio_active_user', JSON.stringify(user));
     recordUserLogin(user);
 
+    // Synchronize administrative sessions for immediate workspace access
+    if (user.role === 'admin' || user.role === 'superadmin') {
+      localStorage.setItem('inisio_active_admin_session', JSON.stringify({ email: user.email, role: user.role }));
+    }
+    if (user.role === 'ca_admin') {
+      localStorage.setItem(
+        'inisio_ca_admin_session',
+        JSON.stringify({ email: user.email, token: user.token })
+      );
+    }
+
     if (activeTab === 'assessment') {
       // Stay on assessment page so user's outputs unlock immediately
       return;
     }
 
-    setActiveTab('user-dashboard');
+    // Role-based routing: Admins to Admin Dashboard, CA Admin to CA Admin Portal, CA to CA Desk, Normal Users to User Dashboard
+    const targetDashboard = getDashboardTabForRole(user.role);
+    setActiveTab(targetDashboard);
+
+    const pathMap: Record<string, string> = {
+      'user-dashboard': '/dashboard',
+      'admin-dashboard': '/admin',
+      'ca-admin-dashboard': '/ca-admin',
+      'ca-dashboard': '/ca-dashboard',
+      'dpr-dashboard': '/dpr-dashboard',
+      'prosync-dashboard': '/prosync-dashboard',
+    };
+    const targetPath = pathMap[targetDashboard] || `/${targetDashboard}`;
+    window.history.pushState({}, '', targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -992,6 +1016,7 @@ export default function App() {
             onSelectTab={handleSelectTab}
             onOpenAssessment={() => handleOpenAssessment()}
             onOpenConsultation={() => setConsultationModalOpen(true)}
+            onOpenAdminPortal={() => setIsAdminPanelOpen(true)}
           />
         </div>
       )}
