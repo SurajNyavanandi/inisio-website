@@ -156,13 +156,13 @@ export const CADashboard: React.FC<CADashboardProps> = ({
   );
 
   const navItems = [
-    { id: 'overview' as CATab, label: 'Overview', icon: LayoutDashboard },
-    { id: 'own-leads' as CATab, label: 'Own Leads', icon: FolderOpen, count: ownLeads.length },
-    { id: 'inisio-leads' as CATab, label: 'Inisio Leads', icon: FileCheck2, count: inisioLeads.length },
-    { id: 'projects-assessed' as CATab, label: 'Projects Assessed', icon: CheckCircle2, count: assessedProjects.length },
-    { id: 'new-leads' as CATab, label: 'New Leads', icon: PlusCircle, count: newLeads.length },
-    { id: 'nearest-consultant' as CATab, label: 'Contact Consultant', icon: MapPin },
-    { id: 'upgrade' as CATab, label: 'Membership Upgrade', icon: Award },
+    { id: 'overview' as CATab, label: 'Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
+    { id: 'own-leads' as CATab, label: 'Own Leads', mobileLabel: 'Own Leads', icon: FolderOpen, count: ownLeads.length },
+    { id: 'inisio-leads' as CATab, label: 'Inisio Leads', mobileLabel: 'Inisio', icon: FileCheck2, count: inisioLeads.length },
+    { id: 'projects-assessed' as CATab, label: 'Projects Assessed', mobileLabel: 'Assessed', icon: CheckCircle2, count: assessedProjects.length },
+    { id: 'new-leads' as CATab, label: 'New Leads', mobileLabel: 'New Leads', icon: PlusCircle, count: newLeads.length },
+    { id: 'nearest-consultant' as CATab, label: 'Contact Consultant', mobileLabel: 'Consultant', icon: MapPin },
+    { id: 'upgrade' as CATab, label: 'Membership Upgrade', mobileLabel: 'Upgrade', icon: Award },
   ];
 
   const handleSelectTab = (tab: string) => {
@@ -212,11 +212,52 @@ export const CADashboard: React.FC<CADashboardProps> = ({
         <button
           type="button"
           onClick={() => setIsUpgradeModalOpen(true)}
-          className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+          className="w-full min-h-[44px] lg:min-h-0 py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
         >
           <Sparkles className="w-3.5 h-3.5 shrink-0" />
           <span>Upgrade Tier</span>
         </button>
+      }
+      mobileStickyAction={
+        activeTab === 'nearest-consultant' ? (
+          <button
+            type="button"
+            onClick={() => fetchConsultants(consultantLocation)}
+            disabled={consultantLoading}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <MapPin className="w-4 h-4 shrink-0" />
+            <span>{consultantLoading ? 'Locating...' : 'Find Consultants'}</span>
+          </button>
+        ) : activeTab === 'upgrade' ? (
+          <button
+            type="button"
+            onClick={() => setIsUpgradeModalOpen(true)}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span>Upgrade to Partner</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsUpgradeModalOpen(true)}
+              className="flex-1 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span>Upgrade Tier</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectTab('nearest-consultant')}
+              className="min-h-[44px] px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <MapPin className="w-4 h-4 shrink-0" />
+              <span>Consultants</span>
+            </button>
+          </div>
+        )
       }
       headerActions={
         <div className="flex items-center gap-2">
@@ -224,15 +265,16 @@ export const CADashboard: React.FC<CADashboardProps> = ({
             type="button"
             onClick={loadData}
             disabled={loading}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+            aria-label="Refresh leads"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             type="button"
             onClick={() => setIsUpgradeModalOpen(true)}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+            className="hidden lg:flex px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Upgrade</span>
@@ -242,14 +284,14 @@ export const CADashboard: React.FC<CADashboardProps> = ({
     >
       {/* 1. Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           <DashboardSectionBanner
             eyebrow="Chartered Accountant (CA) Advisory Desk"
             eyebrowIcon={ShieldCheck}
             title="Partner Lead & Project Dashboard"
             description="Track your own created client mandates, evaluate inbound Inisio debt syndication leads, monitor assessed projects, and coordinate with regional DPR consultants."
             actions={
-              <>
+              <div className="hidden lg:flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={loadData}
@@ -267,11 +309,11 @@ export const CADashboard: React.FC<CADashboardProps> = ({
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Upgrade</span>
                 </button>
-              </>
+              </div>
             }
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <DashboardKpiCard
               label="Own Leads"
               value={ownLeads.length}
@@ -349,7 +391,7 @@ export const CADashboard: React.FC<CADashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSelectTab('new-leads')}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-2 sm:px-0 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
                 >
                   <span>View All New Leads</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -413,7 +455,53 @@ export const CADashboard: React.FC<CADashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {ownLeads.filter(matchesSearch).length === 0 ? (
+              <DashboardEmptyState
+                icon={FolderOpen}
+                title="No leads yet"
+                description="Practice-created mandates matching your search will appear here."
+              />
+            ) : (
+              ownLeads.filter(matchesSearch).map((lead) => (
+                <div key={lead.id || lead._id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm">{lead.fullName}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {lead.projectName || 'Greenfield Project'}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={lead.status || 'Active'} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      {lead.location || 'India'}
+                    </span>
+                    <span>{lead.industry || 'General Industry'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[11px] text-slate-500">Capex</div>
+                      <div className="font-bold text-slate-900 tabular-nums mt-0.5">
+                        ₹ {lead.totalCostCr || lead.projectCost || '0'} Cr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Debt</div>
+                      <div className="font-bold text-blue-700 tabular-nums mt-0.5">
+                        ₹ {lead.loanRequiredCr || lead.proposedLoan || '0'} Cr
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -486,7 +574,53 @@ export const CADashboard: React.FC<CADashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {inisioLeads.filter(matchesSearch).length === 0 ? (
+              <DashboardEmptyState
+                icon={FileCheck2}
+                title="No leads yet"
+                description="Syndicated borrower leads from the Inisio platform will appear here."
+              />
+            ) : (
+              inisioLeads.filter(matchesSearch).map((lead) => (
+                <div key={lead.id || lead._id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm">{lead.fullName}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {lead.projectName || 'Greenfield Project'}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={lead.status || 'Active'} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      {lead.location || 'India'}
+                    </span>
+                    <span>{lead.industry || 'General Industry'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[11px] text-slate-500">Capex</div>
+                      <div className="font-bold text-slate-900 tabular-nums mt-0.5">
+                        ₹ {lead.totalCostCr || lead.projectCost || '0'} Cr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Debt</div>
+                      <div className="font-bold text-blue-700 tabular-nums mt-0.5">
+                        ₹ {lead.loanRequiredCr || lead.proposedLoan || '0'} Cr
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -559,7 +693,52 @@ export const CADashboard: React.FC<CADashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {assessedProjects.filter(matchesSearch).length === 0 ? (
+              <DashboardEmptyState
+                icon={CheckCircle2}
+                title="No projects yet"
+                description="Completed CMA assessments will appear in this ledger."
+              />
+            ) : (
+              assessedProjects.filter(matchesSearch).map((proj) => (
+                <div key={proj.id || proj._id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm">
+                        {proj.projectName || 'Greenfield Project'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {proj.fullName} · {proj.industry || 'Manufacturing'}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={proj.status || 'Assessed'} />
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>{proj.location || 'India'}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[11px] text-slate-500">DSCR</div>
+                      <div className="font-bold text-blue-600 tabular-nums mt-0.5">
+                        {proj.dscr || proj.dscrEstimate || '1.45'}x
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Capex</div>
+                      <div className="font-bold text-slate-900 tabular-nums mt-0.5">
+                        ₹ {proj.totalCostCr || proj.projectCost || '0'} Cr
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -631,7 +810,47 @@ export const CADashboard: React.FC<CADashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {newLeads.filter(matchesSearch).length === 0 ? (
+              <DashboardEmptyState
+                icon={PlusCircle}
+                title="No leads yet"
+                description="New borrower project submissions will appear here chronologically."
+              />
+            ) : (
+              newLeads.filter(matchesSearch).map((lead) => (
+                <div key={lead.id || lead._id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm">{lead.fullName}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {lead.projectName || 'Greenfield Project'}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={lead.status || 'New'} />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      {lead.location || 'India'}
+                    </span>
+                    <span className="tabular-nums text-slate-500">
+                      {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : 'Recent'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 flex items-center justify-between text-xs">
+                    <span className="text-slate-500">Capex Outlay</span>
+                    <span className="font-bold text-slate-900 tabular-nums">
+                      ₹ {lead.totalCostCr || lead.projectCost || '0'} Cr
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -711,14 +930,14 @@ export const CADashboard: React.FC<CADashboardProps> = ({
                   value={consultantLocation}
                   onChange={(e) => setConsultantLocation(e.target.value)}
                   placeholder="Enter project location (e.g. Mumbai, Gujarat, Hyderabad)..."
-                  className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                  className="w-full min-h-[44px] sm:min-h-[40px] pl-9 pr-4 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                 />
               </div>
               <button
                 type="button"
                 onClick={() => fetchConsultants(consultantLocation)}
                 disabled={consultantLoading}
-                className="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap disabled:opacity-50"
+                className="w-full sm:w-auto min-h-[44px] sm:min-h-[40px] px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap disabled:opacity-50"
               >
                 {consultantLoading ? 'Locating...' : 'Find Consultants'}
               </button>
@@ -766,7 +985,7 @@ export const CADashboard: React.FC<CADashboardProps> = ({
 
                 <a
                   href={`mailto:${c.email}?subject=Project Consultation Inquiry via Inisio CA Desk`}
-                  className="w-full py-2 px-4 bg-slate-900 hover:bg-blue-600 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+                  className="w-full min-h-[44px] py-2.5 px-4 bg-slate-900 hover:bg-blue-600 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
                 >
                   <span>Contact Consultant</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -849,7 +1068,7 @@ export const CADashboard: React.FC<CADashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsUpgradeModalOpen(true)}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                className="w-full min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
               >
                 Upgrade to Partner
               </button>
@@ -878,7 +1097,7 @@ export const CADashboard: React.FC<CADashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsUpgradeModalOpen(true)}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                className="w-full min-h-[44px] py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
               >
                 Contact Enterprise
               </button>

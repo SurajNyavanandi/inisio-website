@@ -17,9 +17,14 @@ import { Reveal } from './ui/MotionPrimitives';
 
 interface ContactSectionProps {
   isStandalone?: boolean;
+  onNavigateToPage?: (tab: string) => void;
 }
 
-export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = false }) => {
+export const ContactSection: React.FC<ContactSectionProps> = ({
+  isStandalone = false,
+  onNavigateToPage,
+}) => {
+  const FormHeading = isStandalone ? 'h2' : 'h3';
   const [submitted, setSubmitted] = useState(false);
   const [phoneError, setPhoneError] = useState('');
   const [formData, setFormData] = useState({
@@ -194,6 +199,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
                     <span className="font-manrope font-bold text-slate-900 block text-sm">
                       Direct Email
                     </span>
+                    {/* TODO: Confirm official contact email (advisory@inisio.in here vs contact@inisio.com in Footer) */}
                     <a
                       href="mailto:advisory@inisio.in"
                       className="text-slate-900 font-semibold hover:text-blue-700 hover:underline text-sm"
@@ -211,6 +217,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
                     <span className="font-manrope font-bold text-slate-900 block text-sm">
                       Working Hours
                     </span>
+                    {/* TODO: Confirm official office hours (9:00 AM - 7:00 PM here vs 9:30 AM - 6:30 PM in Footer & index.html) */}
                     <p className="text-slate-600 text-xs sm:text-sm">
                       Monday - Saturday | 9:00 AM - 7:00 PM IST
                     </p>
@@ -241,9 +248,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
                   <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center mx-auto border border-blue-200">
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
-                  <h3 className="text-2xl font-bold text-slate-900 font-manrope">
+                  <FormHeading className="text-2xl font-bold text-slate-900 font-manrope">
                     Consultation Booked Successfully!
-                  </h3>
+                  </FormHeading>
                   <p className="text-base text-slate-600 font-inter max-w-md mx-auto leading-relaxed">
                     Thank you, <strong>{formData.fullName}</strong>. A Senior Greenfield Advisor will review your project brief and reach out within 2 business hours.
                   </p>
@@ -258,9 +265,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-5 font-inter">
                   <div className="border-b border-slate-100 pb-4">
-                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 font-manrope">
+                    <FormHeading className="text-lg sm:text-xl font-bold text-slate-900 font-manrope">
                       Project Consultation Form
-                    </h3>
+                    </FormHeading>
                     <p className="text-xs sm:text-sm text-slate-500 mt-1">
                       Fill in your project requirements to request an underwriting review.
                     </p>
@@ -432,6 +439,53 @@ export const ContactSection: React.FC<ContactSectionProps> = ({ isStandalone = f
             </div>
           </Reveal>
         </div>
+
+        {isStandalone && onNavigateToPage && (
+          <nav aria-label="Related advisory pages" className="pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+            <a
+              href="/assessment"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('assessment'); }}
+              className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              Free Bankability Scorecard
+            </a>
+            <a
+              href="/how-it-works"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('how-it-works'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              6-Step Funding Process
+            </a>
+            <a
+              href="/about"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('about'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Why Choose Inisio Capital
+            </a>
+            <a
+              href="/industries"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('industries'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Explore Priority Sectors
+            </a>
+            <a
+              href="/blogs"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('blogs'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Advisory Blogs &amp; Research
+            </a>
+            <a
+              href="/faq"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('faq'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Greenfield Funding FAQs
+            </a>
+          </nav>
+        )}
       </div>
     </section>
   );

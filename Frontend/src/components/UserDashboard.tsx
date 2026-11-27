@@ -188,11 +188,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   );
 
   const navItems = [
-    { id: 'overview' as UserTab, label: 'Overview', icon: LayoutDashboard },
-    { id: 'projects' as UserTab, label: 'My Projects', icon: FolderOpen, count: leads.length },
-    { id: 'appraisal' as UserTab, label: 'New Appraisal', icon: Calculator },
-    { id: 'consultations' as UserTab, label: 'CA Advisory', icon: Calendar },
-    { id: 'membership' as UserTab, label: 'Membership Plan', icon: Crown },
+    { id: 'overview' as UserTab, label: 'Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
+    { id: 'projects' as UserTab, label: 'My Projects', mobileLabel: 'Projects', icon: FolderOpen, count: leads.length },
+    { id: 'appraisal' as UserTab, label: 'New Appraisal', mobileLabel: 'Appraisal', icon: Calculator },
+    { id: 'consultations' as UserTab, label: 'CA Advisory', mobileLabel: 'Advisory', icon: Calendar },
+    { id: 'membership' as UserTab, label: 'Membership Plan', mobileLabel: 'Plan', icon: Crown },
   ];
 
   const handleSelectTab = (tab: string) => {
@@ -240,11 +240,53 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         <button
           type="button"
           onClick={handleStartNewAssessment}
-          className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+          className="w-full min-h-[44px] lg:min-h-0 py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
         >
           <Plus className="w-3.5 h-3.5 shrink-0" />
           <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade for New Project' : 'Appraise Project'}</span>
         </button>
+      }
+      mobileStickyAction={
+        activeTab === 'consultations' ? (
+          <button
+            type="button"
+            onClick={onOpenConsultation}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Calendar className="w-4 h-4 shrink-0" />
+            <span>Schedule 1-on-1 CA Session</span>
+          </button>
+        ) : activeTab === 'membership' ? (
+          <button
+            type="button"
+            onClick={onOpenMembership}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Crown className="w-4 h-4 shrink-0" />
+            <span>Explore All Membership Plans</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleStartNewAssessment}
+              className="flex-1 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan' : 'New Project Appraisal'}</span>
+            </button>
+            {activeTab === 'overview' && (
+              <button
+                type="button"
+                onClick={onOpenConsultation}
+                className="min-h-[44px] px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
+              >
+                <Calendar className="w-4 h-4 shrink-0" />
+                <span>CA Advisory</span>
+              </button>
+            )}
+          </div>
+        )
       }
       headerActions={
         <div className="flex items-center gap-2">
@@ -252,15 +294,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             type="button"
             onClick={loadUserProjects}
             disabled={loading}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+            aria-label="Refresh projects"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             type="button"
             onClick={handleStartNewAssessment}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+            className="hidden lg:flex px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan' : 'New Appraisal'}</span>
@@ -277,11 +320,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             title={`Welcome, ${user?.name || user?.email?.split('@')[0] || 'Promoter'}`}
             description={`${user?.company ? `${user.company} · ` : ''}Real-time monitoring of your greenfield debt syndication pipeline.`}
             actions={
-              <>
+              <div className="hidden lg:flex flex-wrap items-center gap-2.5">
                 <button
                   type="button"
                   onClick={handleStartNewAssessment}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-[38px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade for More Projects' : 'New Project Appraisal'}</span>
@@ -289,17 +332,17 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <button
                   type="button"
                   onClick={onOpenConsultation}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-[38px] px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   <span>Book CA Advisory</span>
                 </button>
-              </>
+              </div>
             }
           />
 
           {/* Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <DashboardKpiCard
               label="Active Projects"
               value={leads.length}
@@ -346,7 +389,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSelectTab('projects')}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-2 sm:px-0 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
                 >
                   <span>View All ({leads.length})</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -365,7 +408,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenAssessment()}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                    className="min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
                   >
                     Start First Project Appraisal
                   </button>
@@ -376,42 +419,49 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 {leads.slice(0, 4).map((lead) => (
                   <div
                     key={lead.id || lead._id}
-                    className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
+                    className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-slate-50/70 transition-colors"
                   >
-                    <div className="min-w-0">
-                      <h4 className="font-semibold text-slate-900 text-sm truncate">
-                        {lead.projectName || 'Greenfield Project'}
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-semibold text-slate-900 text-sm truncate">
+                          {lead.projectName || 'Greenfield Project'}
+                        </h4>
+                        <div className="sm:hidden shrink-0">
+                          <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 tabular-nums">
                         {lead.industry || 'Manufacturing'}
                         {lead.location ? ` · ${lead.location}` : ''} · Outlay: ₹{' '}
                         {Number(lead.projectCost || lead.totalCostCr || 0).toFixed(2)} Cr
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
+                    <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+                      <div className="hidden sm:block">
+                        <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleOpenProjectPdf(lead, 'teaser')}
                         title="Preview Project Teaser PDF"
-                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        className="min-h-[44px] sm:min-h-[34px] px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-3.5 h-3.5 shrink-0" />
                         <span>Teaser PDF</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleOpenProjectPdf(lead, 'dpr')}
                         title="Preview DPR Executive Summary PDF"
-                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        className="min-h-[44px] sm:min-h-[34px] px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                       >
-                        <FileCheck className="w-3.5 h-3.5" />
+                        <FileCheck className="w-3.5 h-3.5 shrink-0" />
                         <span>DPR PDF</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => onOpenAssessment(lead)}
-                        className="px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                        className="min-h-[44px] sm:min-h-[34px] px-3 py-2 sm:py-1.5 text-xs font-semibold text-blue-600 bg-blue-50/70 sm:bg-transparent hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
                       >
                         View / Resume
                       </button>
@@ -440,7 +490,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <button
                   type="button"
                   onClick={handleStartNewAssessment}
-                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap"
+                  className="hidden lg:flex px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer items-center gap-1.5 shrink-0 whitespace-nowrap"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan' : 'New Project'}</span>
@@ -449,7 +499,90 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {loading ? (
+              <DashboardLoadingState label="Loading projects from database..." />
+            ) : filteredLeads.length === 0 ? (
+              <DashboardEmptyState
+                icon={FolderOpen}
+                title="No projects found"
+                description={
+                  searchTerm
+                    ? 'No projects match your search query.'
+                    : 'You have not initiated any project assessments yet.'
+                }
+                action={
+                  <button
+                    type="button"
+                    onClick={() => onOpenAssessment()}
+                    className="min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                  >
+                    Start First Project Appraisal
+                  </button>
+                }
+              />
+            ) : (
+              filteredLeads.map((lead) => (
+                <div key={lead.id || lead._id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm leading-snug">
+                        {lead.projectName || 'Greenfield Project'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {lead.industry || 'Manufacturing'}
+                        {lead.location ? ` · ${lead.location}` : ''}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[11px] text-slate-500">Cost / Outlay</div>
+                      <div className="font-semibold text-slate-900 tabular-nums mt-0.5">
+                        ₹ {Number(lead.projectCost || lead.totalCostCr || 0).toFixed(2)} Cr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Term Loan</div>
+                      <div className="font-semibold text-blue-700 tabular-nums mt-0.5">
+                        ₹ {Number(lead.proposedLoan || lead.loanRequiredCr || 0).toFixed(2)} Cr
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProjectPdf(lead, 'teaser')}
+                      className="min-h-[44px] px-2.5 py-2 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
+                    >
+                      <Eye className="w-3.5 h-3.5 shrink-0" />
+                      <span>Teaser</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProjectPdf(lead, 'dpr')}
+                      className="min-h-[44px] px-2.5 py-2 text-xs font-semibold text-slate-700 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
+                    >
+                      <FileCheck className="w-3.5 h-3.5 shrink-0" />
+                      <span>DPR</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenAssessment(lead)}
+                      className="min-h-[44px] px-2.5 py-2 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
+                    >
+                      Resume
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -573,14 +706,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <button
                 type="button"
                 onClick={handleStartNewAssessment}
-                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+                className="w-full min-h-[44px] py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Plan to Start New Appraisal' : 'Launch Comprehensive Appraisal'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div className="p-6 rounded-xl border border-slate-200 bg-white space-y-4 flex flex-col justify-between">
+            <div className="p-5 sm:p-6 rounded-xl border border-slate-200 bg-white space-y-4 flex flex-col justify-between">
               <div className="space-y-2.5">
                 <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center">
                   <FileText className="w-4 h-4" />
@@ -595,7 +728,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <button
                 type="button"
                 onClick={handleStartNewAssessment}
-                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+                className="w-full min-h-[44px] py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <span>{quotaStatus && !quotaStatus.allowed ? 'Upgrade Membership Plan' : 'Open Quick Calculator'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -617,7 +750,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
               <button
                 type="button"
                 onClick={onOpenConsultation}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer inline-flex items-center gap-2 whitespace-nowrap"
+                className="hidden lg:inline-flex min-h-[40px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer items-center gap-2 whitespace-nowrap"
               >
                 <Calendar className="w-3.5 h-3.5" />
                 <span>Schedule 1-on-1 CA Session</span>
@@ -625,7 +758,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             }
           />
 
-          <DashboardCard className="p-6 space-y-4">
+          <DashboardCard className="p-4 sm:p-6 space-y-4">
             <h3 className="text-sm font-bold text-slate-900 font-manrope">What We Cover During Advisory</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">
               <div className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200">
@@ -659,7 +792,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             description="Unlock priority debt syndication, unlimited financial model evaluations, and direct lender consortium representation."
           />
 
-          <div className="p-6 rounded-xl border border-blue-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-5 sm:p-6 rounded-xl border border-blue-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-blue-700">Active Tier</span>
               <h3 className="text-lg font-extrabold text-slate-900 font-manrope">
@@ -678,7 +811,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             <button
               type="button"
               onClick={onOpenMembership}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+              className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap"
             >
               Explore All Membership Plans
             </button>

@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -9,6 +11,7 @@ import connectDB, { isDBConnected } from './config/db.js';
 import apiRouter from './routes/index.js';
 import visitorRoutes from './routes/visitorRoutes.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
+import { generalApiLimiter } from './middleware/rateLimitMiddleware.js';
 import logger from './utils/logger.js';
 import config from './config/env.js';
 import { getEmailSenderStatus } from './utils/emailService.js';
@@ -27,6 +30,18 @@ dotenv.config({ path: backendEnvPath });
 const app = express();
 app.set('trust proxy', 1);
 const PORT = config.PORT;
+
+// Security headers (CSP & frameguard disabled so embedded preview, OCR WASM, and PDF blobs work cleanly)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    frameguard: false,
+  })
+);
+
+// Gzip / Brotli HTTP response compression for faster load times
+app.use(compression());
 
 // Connect to MongoDB Atlas
 connectDB().catch(() => {});
@@ -100,10 +115,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Mount API Routes
-app.use('/api', apiRouter);
-app.use('/api/visitors', visitorRoutes);
-app.use('/visitors', visitorRoutes);
+// Mount API Routes with general API rate limiting
+app.use('/api', generalApiLimiter, apiRouter);
+app.use('/api/visitors', generalApiLimiter, visitorRoutes);
+app.use('/visitors', generalApiLimiter, visitorRoutes);
 
 // Frontend serving paths
 const frontendRootPath = path.resolve(__dirname, '../Frontend');

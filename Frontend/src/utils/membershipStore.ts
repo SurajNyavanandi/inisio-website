@@ -26,12 +26,78 @@ const PRIVILEGED_ROLES = new Set([
 const FREE_TIER_NAMES = new Set([
   '',
   'free',
+  'free starter',
   'standard',
   'starter',
   'basic',
   'inisio greenfield starter',
   'standard feasibility',
 ]);
+
+export interface MembershipPlanTier {
+  id: 'free_starter' | 'plus_pack' | 'pro_growth';
+  name: string;
+  priceInr: number;
+  priceLabel: string;
+  period: string;
+  assessmentsIncluded: number | null;
+  description: string;
+  features: string[];
+  popular?: boolean;
+  buttonText: string;
+}
+
+export const MEMBERSHIP_PLAN_TIERS: MembershipPlanTier[] = [
+  {
+    id: 'free_starter',
+    name: 'Free Starter',
+    priceInr: 0,
+    priceLabel: '₹0',
+    period: 'forever',
+    assessmentsIncluded: 1,
+    description: 'Try Inisio risk-free with 1 complete greenfield project assessment and instant score preview.',
+    features: [
+      '1 free complete project assessment',
+      'Bankability score & preliminary DSCR check',
+      'AI project teaser summary preview',
+      'Saved in your promoter dashboard',
+    ],
+    buttonText: 'Start Free',
+  },
+  {
+    id: 'plus_pack',
+    name: 'Plus Pack',
+    priceInr: 299,
+    priceLabel: '₹299',
+    period: 'pack',
+    assessmentsIncluded: 5,
+    description: 'Affordable pack for founders evaluating multiple project ideas or revised funding structures.',
+    features: [
+      'Up to 5 additional project assessments',
+      'Full downloadable AI Teaser PDF & editable DOCX',
+      'Complete Means of Finance & ratio breakdowns',
+      'Dashboard tracking & re-download access',
+    ],
+    popular: true,
+    buttonText: 'Choose Plus Pack',
+  },
+  {
+    id: 'pro_growth',
+    name: 'Pro Growth',
+    priceInr: 899,
+    priceLabel: '₹899',
+    period: '6 months',
+    assessmentsIncluded: null,
+    description: 'Built for repeat assessments, consultants, and founders preparing bank-ready files.',
+    features: [
+      'Unlimited project assessments for 6 months',
+      'Full DOCX & PDF outputs for every project',
+      'CMA & DPR readiness checklist included',
+      'Priority advisory callback & CA desk routing',
+    ],
+    buttonText: 'Choose Pro Growth',
+  },
+];
 
 export interface AssessmentQuotaStatus {
   allowed: boolean;

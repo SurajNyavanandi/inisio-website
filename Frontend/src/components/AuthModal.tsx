@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthUser, UserRole } from '../types';
 import { validateIndianMobileNumber } from '../utils/validation';
 import { getAutoFillOtp } from '../utils/otpService';
+import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
 import { UISelect } from './ui/Select';
 import {
   X,
@@ -31,17 +32,6 @@ interface AuthModalProps {
   prefilledPhone?: string;
   initialOtp?: string;
 }
-
-const maskEmail = (val: string): string => {
-  if (!val || !val.includes('@')) return val || '';
-  const [user, domain] = val.split('@');
-  if (user.length <= 4) {
-    return `${user.slice(0, 1)}***@${domain}`;
-  }
-  const prefix = user.length >= 7 ? user.slice(0, 4) : user.slice(0, 2);
-  const suffix = user.slice(-2);
-  return `${prefix}*****${suffix}@${domain}`;
-};
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
@@ -168,7 +158,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setResendingOtp(false);
       if (response.ok && resData.success) {
         setResendCooldown(30);
-        setSuccessMessage(resData.message || 'A fresh 6-digit code has been sent to your email.');
+        setSuccessMessage(
+          resData.message
+            ? maskEmailsInText(resData.message)
+            : `A fresh 6-digit code has been sent to ${maskEmail(email)}.`
+        );
       } else {
         setError(resData.message || 'Unable to resend code.');
       }
@@ -304,7 +298,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         const resData = await response.json().catch(() => ({}));
         setLoading(false);
         if (response.ok && resData.success) {
-          setSuccessMessage(resData.message || `A password reset link and authorization code have been dispatched to ${cleanEmail}. Please check your email.`);
+          setSuccessMessage(
+            resData.message
+              ? maskEmailsInText(resData.message)
+              : `A password reset link and 6-digit code have been sent to ${maskEmail(cleanEmail)}. Please check your email.`
+          );
           setResendCooldown(30);
           setMode('reset-password');
           setOtpCode(getAutoFillOtp());
@@ -349,9 +347,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           setOtpCode('');
           setResendCooldown(30);
           setSuccessMessage(
-            userData.message ||
-              resData.message ||
-              `We sent a 6-digit verification code to ${cleanEmail}. Enter it below to verify your email.`
+            userData.message
+              ? maskEmailsInText(userData.message)
+              : resData.message
+              ? maskEmailsInText(resData.message)
+              : `We sent a 6-digit verification code to ${maskEmail(cleanEmail)}. Enter it below to verify your email.`
           );
           return;
         }
@@ -381,7 +381,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
       
       {/* Click outside backdrop */}
       <div className="absolute inset-0" onClick={onClose} />
@@ -390,10 +390,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="relative w-full max-w-md bg-gradient-to-b from-sky-50/70 via-white to-white rounded-[24px] shadow-2xl shadow-blue-950/10 border border-blue-100 overflow-hidden z-10 font-inter max-h-[92vh] flex flex-col">
         
         {/* Header with Small Rounded Icon Tile, Centered Heading & Muted Subtitle */}
-        <div className="pt-6 pb-2 px-6 text-center shrink-0 relative">
+        <div className="pt-5 sm:pt-6 pb-2 px-4 sm:px-6 text-center shrink-0 relative">
           <button
             onClick={onClose}
-            className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100/80 transition-colors cursor-pointer"
+            className="absolute right-3 top-3 sm:right-4 sm:top-4 text-slate-400 hover:text-slate-600 p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl hover:bg-slate-100/80 transition-colors cursor-pointer"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -435,12 +435,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Tab Switcher for Sign in / Create Account */}
         {!isVerifyingOtp && (mode === 'login' || mode === 'signup') && (
-          <div className="px-6 pt-2 shrink-0">
+          <div className="px-4 sm:px-6 pt-2 shrink-0">
             <div className="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/60">
               <button
                 type="button"
                 onClick={() => { setMode('login'); setError(''); setSuccessMessage(''); setIsVerifyingOtp(false); }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[38px] ${
                   mode === 'login'
                     ? 'bg-white text-slate-900 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-900'
@@ -451,7 +451,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="button"
                 onClick={() => { setMode('signup'); setError(''); setSuccessMessage(''); setIsVerifyingOtp(false); }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer min-h-[38px] ${
                   mode === 'signup'
                     ? 'bg-white text-slate-900 shadow-2xs'
                     : 'text-slate-500 hover:text-slate-900'
@@ -464,7 +464,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         )}
 
         {/* Form Body */}
-        <div className="overflow-y-auto flex-1 p-6 space-y-4">
+        <div className="overflow-y-auto flex-1 p-4 sm:p-6 space-y-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             
             {/* Feedback Messages */}
@@ -553,7 +553,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <p className="font-bold">Verification Code Sent to:</p>
                     <div className="flex items-center justify-between gap-2 mt-1">
                       <span className="font-mono font-bold text-blue-950 bg-blue-100/80 px-2 py-0.5 rounded-md text-[12px] truncate max-w-60">
-                        {email}
+                        {maskEmail(email)}
                       </span>
                       <button
                         type="button"
@@ -887,7 +887,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               ? 'e.g. Er. Suresh Varma'
                               : 'e.g. Ramesh Chandra'
                           }
-                          className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-base sm:text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                          className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                         />
                       </div>
                     </div>
@@ -916,7 +916,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                                 ? 'e.g. Apex Techno-Economic'
                                 : 'e.g. Apex Solar Infra Ltd'
                             }
-                            className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-base sm:text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                           />
                         </div>
                       </div>
@@ -934,7 +934,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                             value={phone}
                             onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                             placeholder="9876543210"
-                            className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-base sm:text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                            className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                           />
                         </div>
                       </div>
@@ -955,7 +955,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="name@company.com"
-                      className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-base sm:text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      className="w-full pl-10 pr-3 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     />
                   </div>
                 </div>
@@ -984,7 +984,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full pl-10 pr-10 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-base sm:text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-100/80 border border-slate-200/80 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     />
                     <button
                       type="button"

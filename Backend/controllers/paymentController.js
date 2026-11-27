@@ -8,6 +8,30 @@ import { getRazorpayConfig } from '../config/razorpay.js';
 import { sendSuccess, sendError } from '../utils/responseHandler.js';
 import logger from '../utils/logger.js';
 
+export const MEMBERSHIP_PLANS = [
+  {
+    id: 'free_starter',
+    name: 'Free Starter',
+    amountInr: 0,
+    period: 'forever',
+    assessmentsIncluded: 1,
+  },
+  {
+    id: 'plus_pack',
+    name: 'Plus Pack',
+    amountInr: 299,
+    period: 'pack',
+    assessmentsIncluded: 5,
+  },
+  {
+    id: 'pro_growth',
+    name: 'Pro Growth',
+    amountInr: 899,
+    period: '6 months',
+    assessmentsIncluded: null,
+  },
+];
+
 /**
  * @desc Get public payment gateway config (Key ID, currency, test mode status)
  * @route GET /api/payments/config
@@ -25,6 +49,7 @@ export const getGatewayConfig = async (req, res, next) => {
         currency: 'INR',
         merchantName: 'Inisio Greenfield Consultancy',
         themeColor: '#2563EB',
+        plans: MEMBERSHIP_PLANS,
       },
       'Payment gateway configuration retrieved'
     );

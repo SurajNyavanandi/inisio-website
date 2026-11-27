@@ -113,10 +113,10 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
   );
 
   const navItems = [
-    { id: 'overview' as DPRTab, label: 'Overview', icon: LayoutDashboard },
-    { id: 'drafting' as DPRTab, label: 'DPR Drafting', icon: FileCode, count: leads.length },
-    { id: 'tev' as DPRTab, label: 'TEV Clearances', icon: CheckCircle2 },
-    { id: 'guidelines' as DPRTab, label: 'Technical Guidelines', icon: BookOpen },
+    { id: 'overview' as DPRTab, label: 'Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
+    { id: 'drafting' as DPRTab, label: 'DPR Drafting', mobileLabel: 'Drafting', icon: FileCode, count: leads.length },
+    { id: 'tev' as DPRTab, label: 'TEV Clearances', mobileLabel: 'TEV', icon: CheckCircle2 },
+    { id: 'guidelines' as DPRTab, label: 'Technical Guidelines', mobileLabel: 'Guidelines', icon: BookOpen },
   ];
 
   const handleSelectTab = (tab: string) => {
@@ -160,21 +160,45 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
       onGoBack={handleGoBack}
       onNavigateHome={onNavigateHome}
       onLogout={onLogout}
+      mobileStickyAction={
+        activeTab === 'drafting' ? (
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Pipeline</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleSelectTab('drafting')}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <FileCode className="w-4 h-4 shrink-0" />
+            <span>DPR Drafting ({leads.length})</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
+          </button>
+        )
+      }
       headerActions={
         <button
           type="button"
           onClick={loadData}
           disabled={loading}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+          aria-label="Refresh Pipeline"
+          className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Pipeline</span>
+          <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Refresh Pipeline</span>
         </button>
       }
     >
       {/* 1. Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           <DashboardSectionBanner
             eyebrow="DPR Engineering & Technical Desk"
             eyebrowIcon={FileCode}
@@ -185,7 +209,7 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                 type="button"
                 onClick={loadData}
                 disabled={loading}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                className="hidden lg:flex px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh Pipeline</span>
@@ -193,7 +217,7 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
             }
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             <DashboardKpiCard
               label="Assigned DPRs"
               value={leads.length}
@@ -211,13 +235,15 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
               tone="emerald"
               onClick={() => handleSelectTab('tev')}
             />
-            <DashboardKpiCard
-              label="Average Turnaround"
-              value={leads.length > 0 ? '7 Days' : '—'}
-              subtext="Comprehensive report generation"
-              icon={Clock}
-              tone="slate"
-            />
+            <div className="col-span-2 sm:col-span-1">
+              <DashboardKpiCard
+                label="Average Turnaround"
+                value={leads.length > 0 ? '7 Days' : '—'}
+                subtext="Comprehensive report generation"
+                icon={Clock}
+                tone="slate"
+              />
+            </div>
           </div>
 
           <DashboardCard>
@@ -228,7 +254,7 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSelectTab('drafting')}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-2 sm:px-0 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
                 >
                   <span>View All</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -249,34 +275,42 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                 {leads.slice(0, 4).map((l, idx) => (
                   <div
                     key={l.id || l._id || idx}
-                    className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
+                    className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-slate-50/70 transition-colors"
                   >
-                    <div className="min-w-0">
-                      <h4 className="font-semibold text-slate-900 text-sm truncate">
-                        {l.projectName || 'Greenfield Plant'}
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-semibold text-slate-900 text-sm truncate">
+                          {l.projectName || 'Greenfield Plant'}
+                        </h4>
+                        <div className="sm:hidden shrink-0">
+                          <DashboardStatusBadge status={l.status || 'Active DPR'} />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 tabular-nums">
                         Promoter: {l.fullName} · {l.industry || 'Manufacturing'} · Outlay: ₹{' '}
                         {l.projectCost || l.totalCostCr || '0'} Cr
                       </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <DashboardStatusBadge status={l.status || 'Active DPR'} />
+                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+                      <div className="hidden sm:block">
+                        <DashboardStatusBadge status={l.status || 'Active DPR'} />
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleDprSummaryPdf(l, 'preview')}
-                        className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                        className="min-h-[44px] sm:min-h-[34px] px-3 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
                       >
-                        <Eye className="w-3.5 h-3.5" />
+                        <Eye className="w-3.5 h-3.5 shrink-0" />
                         <span>DPR Summary</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDprSummaryPdf(l, 'download')}
                         title="Download DPR Executive Summary PDF"
-                        className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                        className="min-h-[44px] sm:min-h-[34px] sm:min-w-[34px] px-3 sm:px-2 py-2 sm:py-1.5 text-xs font-semibold text-blue-700 sm:text-slate-600 bg-blue-50 sm:bg-transparent hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
                       >
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-3.5 h-3.5 shrink-0" />
+                        <span className="sm:hidden">Download</span>
                       </button>
                     </div>
                   </div>
@@ -302,7 +336,69 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {loading ? (
+              <DashboardLoadingState label="Loading drafting queue..." />
+            ) : filteredLeads.length === 0 ? (
+              <DashboardEmptyState
+                icon={FolderOpen}
+                title="No projects match your search"
+                description="Newly assigned projects requiring technical appraisal will appear here."
+              />
+            ) : (
+              filteredLeads.map((l, idx) => (
+                <div key={l.id || l._id || idx} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm">
+                        {l.projectName || 'Greenfield Plant'}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {l.fullName || 'Promoter'} · {l.industry || 'Manufacturing'}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={l.status || 'Active DPR'} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[11px] text-slate-500">Outlay</div>
+                      <div className="font-semibold text-slate-900 tabular-nums mt-0.5">
+                        ₹ {l.projectCost || l.totalCostCr || '0'} Cr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Term Loan</div>
+                      <div className="font-semibold text-blue-700 tabular-nums mt-0.5">
+                        ₹ {l.proposedLoan || l.loanRequiredCr || '0'} Cr
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDprSummaryPdf(l, 'preview')}
+                      className="min-h-[44px] px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                    >
+                      <Eye className="w-3.5 h-3.5 shrink-0" />
+                      <span>Preview</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDprSummaryPdf(l, 'download')}
+                      className="min-h-[44px] px-3 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5 shrink-0" />
+                      <span>Download</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -363,7 +459,7 @@ export const DPRConsultantDashboard: React.FC<DPRConsultantDashboardProps> = ({
                             type="button"
                             onClick={() => handleDprSummaryPdf(l, 'download')}
                             title="Download DPR Executive Summary PDF"
-                            className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>

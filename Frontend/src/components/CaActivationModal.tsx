@@ -136,12 +136,13 @@ export const CaActivationModal: React.FC<CaActivationModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 font-inter">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-slate-200 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 font-inter">
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="relative z-10 bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full p-5 sm:p-8 border border-slate-200 shadow-2xl max-h-[92vh] overflow-y-auto">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-5 top-5 p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          className="absolute right-3 top-3 sm:right-5 sm:top-5 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           aria-label="Close modal"
         >
           <X className="w-5 h-5" />
@@ -295,7 +296,7 @@ export const CaActivationModal: React.FC<CaActivationModalProps> = ({
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
                   <>

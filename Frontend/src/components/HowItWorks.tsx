@@ -22,6 +22,7 @@ interface HowItWorksProps {
   onOpenConsultation: () => void;
   onOpenAssessment: () => void;
   onNavigateToContact: () => void;
+  onNavigateToPage?: (tab: string) => void;
   isStandalone?: boolean;
 }
 
@@ -145,6 +146,7 @@ export const HOW_IT_WORKS_STEPS: StepItem[] = [
 export const HowItWorks: React.FC<HowItWorksProps> = ({
   onOpenConsultation,
   onOpenAssessment,
+  onNavigateToPage,
   isStandalone = false,
 }) => {
   const [activeStep, setActiveStep] = useState<number>(1);
@@ -217,7 +219,7 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
             )}
 
             <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl mx-auto">
-              From your business idea to funding readiness, Inisio guides you through every stage with expert advisory, bank-ready documentation, and complete project finance support.
+              From your business idea to funding readiness, Inisio Capital guides promoters in Hyderabad, Telangana and across India through every stage with expert DPR preparation, CMA modeling, and complete project finance support.
             </p>
           </Reveal>
 
@@ -230,9 +232,9 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
                     <span className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                       <Icon className="w-4 h-4" />
                     </span>
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 font-manrope leading-snug">
+                    <p className="text-xs sm:text-sm font-bold text-slate-900 font-manrope leading-snug">
                       {item.title}
-                    </h3>
+                    </p>
                   </div>
                 </StaggerItem>
               );
@@ -265,9 +267,15 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
             <div className="bg-slate-50/90 border border-slate-200/90 rounded-3xl p-4 sm:p-5 shadow-[0_2px_12px_-6px_rgba(15,23,42,0.06)] space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-200/80">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-left">
-                  <span className="text-xs font-bold tracking-wide text-slate-900 font-manrope">
-                    6-Step Project Journey
-                  </span>
+                  {isStandalone ? (
+                    <h2 className="text-xs font-bold tracking-wide text-slate-900 font-manrope">
+                      6-Step Project Journey
+                    </h2>
+                  ) : (
+                    <span className="text-xs font-bold tracking-wide text-slate-900 font-manrope">
+                      6-Step Project Journey
+                    </span>
+                  )}
                   <span aria-hidden="true" className="text-slate-300">·</span>
                   <span className="text-xs font-semibold text-blue-700 font-inter">
                     Step {activeStep} of 6: {HOW_IT_WORKS_STEPS[activeStep - 1]?.title}
@@ -604,6 +612,53 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
             </div>
           </section>
         </Reveal>
+
+        {isStandalone && onNavigateToPage && (
+          <nav aria-label="Related advisory pages" className="pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+            <a
+              href="/assessment"
+              onClick={(e) => { e.preventDefault(); onOpenAssessment(); }}
+              className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              Free Bankability Scorecard
+            </a>
+            <a
+              href="/about"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('about'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Why Choose Inisio Capital
+            </a>
+            <a
+              href="/industries"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('industries'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Explore Priority Sectors
+            </a>
+            <a
+              href="/blogs"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('blogs'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Advisory Blogs &amp; Research
+            </a>
+            <a
+              href="/faq"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('faq'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Greenfield Funding FAQs
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('contact'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Contact Hyderabad Advisory Desk
+            </a>
+          </nav>
+        )}
       </div>
     </div>
   );

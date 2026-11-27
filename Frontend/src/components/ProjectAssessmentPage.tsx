@@ -39,6 +39,7 @@ import { UISelect } from './ui/Select';
 import { Input } from './ui/Input';
 import { Checkbox } from './ui/Checkbox';
 import { showToast } from './ui/Toast';
+import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
 import {
   Calculator,
   CheckCircle2,
@@ -156,12 +157,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     switch (s) {
       case 1: return 1;
       case 2: return 2;
-      case 'auth_gate':
       case 3: return 3;
       case 'feasibility_result':
       case 'collect_bankability':
       case 'bankability_result': return 4;
       case 'collect_financials': return 5;
+      case 'auth_gate':
       case 'final_assessment_results': return 6;
       default: return 1;
     }
@@ -266,13 +267,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   );
 
   const isStepLockedForGuest = (stepId: number): boolean =>
-    Boolean(!editingProject && !activeUser && stepId >= 3);
+    Boolean(!editingProject && !activeUser && stepId >= 6);
 
   const triggerMembershipUpgrade = (reason?: string) => {
     const finalReason =
       reason ||
       quotaStatus?.reason ||
-      'You have already used your 1 free project assessment. Upgrade your membership plan to assess additional projects.';
+      'You have already used your 1 free project assessment. Upgrade your membership plan to unlock AI Teaser & outputs for additional projects.';
     if (onOpenMembership) {
       onOpenMembership(finalReason);
     } else {
@@ -282,11 +283,12 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   };
 
   const handleStepSelect = (stepId: number) => {
-    if (isQuotaBlocked && stepId >= 3) {
-      showToast('Your 1 free project assessment is already used. View your existing project in Dashboard or upgrade to assess a new project.', {
+    if (isQuotaBlocked && stepId >= 6) {
+      showToast('Your 1 free project assessment is already used. View your existing project in Dashboard or upgrade to unlock outputs for a new project.', {
         type: 'warning',
         title: 'Free Assessment Limit Reached',
       });
+      triggerMembershipUpgrade(quotaStatus?.reason);
       return;
     }
 
@@ -294,7 +296,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       if (!inlineEmail && formData.email) setInlineEmail(formData.email.trim().toLowerCase());
       if (!inlineName && formData.fullName) setInlineName(sanitizePersonNameInput(formData.fullName, 80).trim());
       if (!inlinePhone && formData.mobile) setInlinePhone(sanitizeIndianPhoneInput(formData.mobile));
-      setAuthNotice(`Create a free account or sign in to unlock Step ${stepId} and save your progress.`);
+      setAuthNotice('Create a free account or sign in to unlock Step 6 (AI Teaser & downloadable outputs).');
       setStage('auth_gate');
       scrollToFormTop();
       return;
@@ -317,7 +319,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
   const handlePreviousStep = () => {
     if (stage === 'auth_gate') {
-      setStage(2);
+      setStage('collect_financials');
       scrollToFormTop();
       return;
     }
@@ -334,7 +336,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
   const handleGoBack = () => {
     if (stage === 'auth_gate') {
-      setStage(2);
+      setStage('collect_financials');
       scrollToFormTop();
       return;
     }
@@ -723,7 +725,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       });
       setQuotaStatus(result);
       if (result.allowed && autoAdvanceFromGate) {
-        setStage(3);
+        setStage('final_assessment_results');
         scrollToFormTop();
       }
       return result;
@@ -770,7 +772,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       }
       if (draft.stage && draft.stage !== 'final_assessment_results') {
         const restoredIdx = getStepIndex(draft.stage as AssessmentStage);
-        if (!activeUser && restoredIdx >= 3) {
+        if (!activeUser && restoredIdx >= 6) {
           setStage('auth_gate');
         } else {
           setStage(draft.stage as AssessmentStage);
@@ -991,39 +993,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         totalMeansOfFinance: currentCost > 0 ? currentCost.toFixed(2) : prev.totalMeansOfFinance
       }));
 
-      // Progressive Step-Gate: lock Step 3+ until the user has a verified account
-      if (!activeUser && !editingProject) {
-        if (!inlineEmail && formData.email) setInlineEmail(formData.email.trim().toLowerCase());
-        if (!inlineName && formData.fullName) setInlineName(sanitizePersonNameInput(formData.fullName, 80).trim());
-        if (!inlinePhone && formData.mobile) setInlinePhone(sanitizeIndianPhoneInput(formData.mobile));
-        saveAssessmentDraft(
-          {
-            clientProjectId: clientProjectIdRef.current,
-            formData,
-            financials,
-            riskProfileData,
-            numPromoters,
-            additionalPromoters,
-            stage: 'auth_gate',
-            completedSteps: completedSteps.includes(2) ? completedSteps : [...completedSteps, 2],
-          },
-          null
-        );
-        setAuthNotice('Your Step 1 & Step 2 progress is safely saved. Create a free account or sign in to unlock Step 3 and your free bankability assessment.');
-        setStage('auth_gate');
-        scrollToFormTop();
-        return;
-      }
-
-      if (!editingProject && isQuotaBlocked) {
-        showToast('Your 1 free project assessment is already used. View your existing project in Dashboard or upgrade to evaluate another project.', {
-          type: 'warning',
-          title: 'Free Assessment Limit Reached',
-        });
-        scrollToFormTop();
-        return;
-      }
-
+      // Allow smooth continuation through Steps 3, 4, and 5; only Step 6 (AI Teaser & Outputs) is gated.
       setStage(3);
       scrollToFormTop();
     } else if (stage === 3) {
@@ -1334,8 +1304,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       return;
     }
 
-    // Only persist immediately if we are already on the final results screen
-    if (stage === 'final_assessment_results') {
+    // Persist immediately when unlocking Step 6 from auth_gate or on final_assessment_results
+    if (stage === 'auth_gate' || stage === 'final_assessment_results') {
       const computed = computeResults();
       const activeBankability = riskProfileData ? String(comprehensiveRisk.scoreOutOf10) : String(computed.bankabilityRating);
       const systemDscr = calculateSystemDscr({ industry: formData.industry });
@@ -1345,9 +1315,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         projectName: formData.projectName || 'Greenfield Project',
         industry: formData.industry,
         location: formData.location,
-        totalCostCr: formData.totalCostCr,
-        promoterContribCr: formData.promoterContribCr,
-        loanRequiredCr: formData.loanRequiredCr,
+        totalCostCr: financials.totalProjectCost || formData.totalCostCr,
+        promoterContribCr: financials.promoterContributionCr || formData.promoterContribCr,
+        loanRequiredCr: financials.termLoanCr || formData.loanRequiredCr,
         landStatus: formData.landStatus,
         collateralStatus: formData.collateralStatus,
         promoterExp: formData.promoterExp,
@@ -1388,6 +1358,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             isSavingRef.current = false;
           }
         }
+        setIsDataSaved(true);
+        markStepComplete(5);
+        markStepComplete(6);
       } catch (saveErr: any) {
         if (saveErr?.code === FREE_ASSESSMENT_LIMIT_CODE || saveErr?.status === 403) {
           setQuotaStatus({
@@ -1407,7 +1380,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
     setInlineAuthSuccess(
       stage === 'auth_gate'
-        ? `Welcome, ${loggedUser.name}! Step 3 is now unlocked and your draft is saved.`
+        ? `Welcome, ${loggedUser.name}! Your AI Teaser & downloadable outputs are now unlocked.`
         : `Signed in successfully as ${loggedUser.name}! Your project has been saved to your dashboard.`
     );
   };
@@ -1465,7 +1438,11 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
         if (data.data?.otp) setInlineDevOtpHint(String(data.data.otp));
-        setInlineAuthSuccess(`A fresh 6-digit verification code has been sent to ${emailTarget}.`);
+        setInlineAuthSuccess(
+          data.data?.message
+            ? maskEmailsInText(data.data.message)
+            : `A fresh 6-digit verification code has been sent to ${maskEmail(emailTarget)}.`
+        );
       } else {
         setInlineAuthError(data.message || 'Could not resend verification code.');
       }
@@ -1536,7 +1513,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           setInlinePendingEmail(emailToUse);
           setInlineDevOtpHint(regData.data?.otp ? String(regData.data.otp) : '');
           setInlineAuthSuccess(
-            regData.data?.message || `We sent a 6-digit verification code to ${emailToUse}. Enter it below to unlock Step 3.`
+            regData.data?.message
+              ? maskEmailsInText(regData.data.message)
+              : `We sent a 6-digit verification code to ${maskEmail(emailToUse)}. Enter it below to unlock your AI Teaser & outputs.`
           );
           return;
         }
@@ -1554,7 +1533,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             setInlineNeedsOtp(true);
             setInlinePendingEmail(emailToUse);
             setInlineDevOtpHint(loginData.data.otp ? String(loginData.data.otp) : '');
-            setInlineAuthSuccess(`Please enter the 6-digit verification code sent to ${emailToUse}.`);
+            setInlineAuthSuccess(`Please enter the 6-digit verification code sent to ${maskEmail(emailToUse)}.`);
             return;
           }
           userData = loginData.data;
@@ -1579,7 +1558,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           setInlinePendingEmail(emailToUse);
           setInlineDevOtpHint(loginData.data.otp ? String(loginData.data.otp) : '');
           setInlineAuthSuccess(
-            loginData.data.message || `Email verification required. Enter the 6-digit code sent to ${emailToUse}.`
+            loginData.data.message
+              ? maskEmailsInText(loginData.data.message)
+              : `Email verification required. Enter the 6-digit code sent to ${maskEmail(emailToUse)}.`
           );
           return;
         }
@@ -1701,7 +1682,24 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       return;
     }
     if (!activeUser && !editingProject) {
-      setAuthNotice('Please sign in or create a free account before saving and generating your Project Teaser.');
+      if (!inlineEmail && formData.email) setInlineEmail(formData.email.trim().toLowerCase());
+      if (!inlineName && formData.fullName) setInlineName(sanitizePersonNameInput(formData.fullName, 80).trim());
+      if (!inlinePhone && formData.mobile) setInlinePhone(sanitizeIndianPhoneInput(formData.mobile));
+      markStepComplete(5);
+      saveAssessmentDraft(
+        {
+          clientProjectId: clientProjectIdRef.current,
+          formData,
+          financials,
+          riskProfileData,
+          numPromoters,
+          additionalPromoters,
+          stage: 'auth_gate',
+          completedSteps: completedSteps.includes(5) ? completedSteps : [...completedSteps, 5],
+        },
+        null
+      );
+      setAuthNotice('Your Steps 1–5 project details are safely saved. Create a free account or sign in to unlock your AI Teaser & downloadable outputs.');
       setStage('auth_gate');
       scrollToFormTop();
       return;
@@ -1989,13 +1987,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
   return (
     <div className="h-full min-h-0 flex flex-col lg:flex-row bg-slate-50 font-inter overflow-y-auto lg:overflow-hidden">
-      {/* LEFT PANEL: Vertical Step Menu */}
-      <aside className="w-full lg:w-72 xl:w-80 bg-slate-900 text-white shrink-0 p-5 lg:p-6 flex flex-col justify-between border-r border-slate-800 overflow-y-auto max-h-full">
-        <div className="space-y-6">
+      {/* LEFT PANEL: Vertical Step Menu on Desktop / Compact Horizontal Step Bar on Mobile */}
+      <aside className="w-full lg:w-72 xl:w-80 bg-slate-900 text-white shrink-0 p-3.5 sm:p-4 lg:p-6 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-800 lg:overflow-y-auto lg:max-h-full">
+        <div className="space-y-3 lg:space-y-6">
           {/* Brand & Mode Header */}
-          <div className="space-y-2 pb-4 border-b border-slate-800">
+          <div className="flex items-center justify-between lg:block lg:space-y-2 lg:pb-4 lg:border-b lg:border-slate-800">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs">
+              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
                 <Award className="w-4 h-4" />
               </div>
               <div>
@@ -2003,20 +2001,20 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <span className="text-[10px] font-bold text-blue-400 tracking-wider uppercase">Project Assessment</span>
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 pt-1">
+            <p className="text-[11px] text-slate-400 lg:pt-1 hidden sm:block">
               {editingProject ? 'Interactive Assessment Editing' : '100% Free First Project Assessment'}
             </p>
           </div>
 
-          {/* Vertical List of Existing Steps */}
+          {/* Step List: Horizontal Scrollable Strip on Mobile, Vertical Menu on Desktop */}
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 px-1">
+            <div className="hidden lg:block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 px-1">
               Assessment Steps
             </div>
-            <nav className="space-y-1.5">
+            <nav className="flex lg:flex-col gap-1.5 overflow-x-auto pb-1 lg:pb-0 -mx-1 px-1 lg:mx-0 lg:px-0">
               {ASSESSMENT_STEPS.map((s) => {
                 const isCurrent = currentStep === s.id;
-                const isLocked = isStepLockedForGuest(s.id) || (isQuotaBlocked && s.id >= 3);
+                const isLocked = isStepLockedForGuest(s.id) || (isQuotaBlocked && s.id >= 6);
                 const isCompleted = !isLocked && isStepCompleted(s.id) && !isCurrent;
 
                 return (
@@ -2024,14 +2022,14 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     key={s.id}
                     type="button"
                     onClick={() => handleStepSelect(s.id)}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs text-left transition-all cursor-pointer ${
+                    className={`shrink-0 lg:shrink lg:w-full min-h-[40px] flex items-center gap-2 lg:gap-3 px-3 lg:px-3.5 py-2 lg:py-3 rounded-xl text-xs text-left transition-all cursor-pointer ${
                       isCurrent
                         ? 'bg-blue-600 text-white font-bold shadow-xs ring-1 ring-blue-400'
                         : isLocked
-                        ? 'text-slate-500 hover:bg-slate-800/60 font-medium opacity-80'
+                        ? 'text-slate-400 bg-slate-800/40 lg:bg-transparent hover:bg-slate-800/60 font-medium opacity-90'
                         : isCompleted
-                        ? 'text-slate-200 hover:bg-slate-800/80 font-medium'
-                        : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 font-medium'
+                        ? 'text-slate-200 bg-slate-800/40 lg:bg-transparent hover:bg-slate-800/80 font-medium'
+                        : 'text-slate-400 bg-slate-800/30 lg:bg-transparent hover:bg-slate-800/80 hover:text-slate-200 font-medium'
                     }`}
                   >
                     <div
@@ -2055,10 +2053,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="truncate leading-tight">{s.name}</div>
-                      <div className="text-[10px] opacity-75 truncate">
+                      <div className="whitespace-nowrap lg:truncate leading-tight">{s.name}</div>
+                      <div className="hidden lg:block text-[10px] opacity-75 truncate">
                         {isCurrent && stage === 'auth_gate'
-                          ? 'Account Required'
+                          ? 'Sign in to unlock outputs'
                           : isCurrent
                           ? 'In Progress'
                           : isLocked
@@ -2113,7 +2111,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <span className="text-slate-300">•</span>
                 <span className="text-xs text-slate-500 font-medium">
                   {stage === 'auth_gate'
-                    ? 'Unlock Free Assessment'
+                    ? 'Unlock AI Teaser & Outputs'
                     : ASSESSMENT_STEPS.find(s => s.id === currentStep)?.name}
                 </span>
               </div>
@@ -2223,7 +2221,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           )}
 
           {/* ========================================================================= */}
-          {/* PROGRESSIVE STEP-GATE: LOCK STEP 3+ UNTIL REGISTERED / SIGNED IN          */}
+          {/* FINAL SECTION GATE: LOCK ONLY STEP 6 (AI TEASER & OUTPUTS)                */}
           {/* ========================================================================= */}
           {stage === 'auth_gate' && !activeUser && (
             <div className="max-w-xl mx-auto space-y-5 animate-in fade-in duration-300">
@@ -2232,7 +2230,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <div className="space-y-0.5">
                   <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Steps 1 &amp; 2 Draft Saved Automatically</span>
+                    <span>Steps 1–5 Details Saved Automatically</span>
                   </div>
                   <div className="text-sm font-bold text-white font-manrope">
                     {formData.projectName || 'Your Greenfield Project'}
@@ -2242,34 +2240,34 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setStage(2);
+                    setStage('collect_financials');
                     scrollToFormTop();
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  className="min-h-[38px] px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Back to Step 2</span>
+                  <span>Back to Step 5</span>
                 </button>
               </div>
 
               {/* Gate Auth / OTP Card */}
-              <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-lg space-y-5">
+              <div className="bg-white p-5 sm:p-7 rounded-3xl border border-slate-200 shadow-lg space-y-5">
                 <div className="text-center space-y-1.5">
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto text-blue-600">
                     <Lock className="w-5 h-5" />
                   </div>
                   <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 font-manrope">
                     {inlineNeedsOtp
-                      ? 'Verify Your Email to Unlock Step 3'
+                      ? 'Verify Your Email to Unlock AI Teaser & Outputs'
                       : inlineAuthMode === 'signup'
-                      ? 'Create Your Free Account to Continue'
-                      : 'Sign In to Continue Your Assessment'}
+                      ? 'Create Your Free Account to Unlock Final Outputs'
+                      : 'Sign In to View Your AI Teaser & Outputs'}
                   </h2>
                   <p className="text-xs text-slate-600 max-w-md mx-auto leading-relaxed">
                     {inlineNeedsOtp
-                      ? `Enter the 6-digit verification code sent to ${inlinePendingEmail || inlineEmail}. Your Step 1 & 2 details are safely preserved.`
+                      ? `Enter the 6-digit verification code sent to ${maskEmail(inlinePendingEmail || inlineEmail)}. Your project inputs are safely preserved.`
                       : authNotice ||
-                        'Every verified promoter gets 1 complete free project assessment and bank-ready Teaser download. Sign up or sign in to unlock Step 3 onwards.'}
+                        'Every verified promoter gets 1 complete free project assessment with AI Teaser PDF & DOCX downloads. Sign up or sign in to unlock Step 6.'}
                   </p>
                 </div>
 
@@ -2414,7 +2412,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           <span>Verifying account...</span>
                         ) : (
                           <>
-                            <span>{inlineAuthMode === 'signup' ? 'Create Account & Unlock Step 3' : 'Sign In & Unlock Step 3'}</span>
+                            <span>{inlineAuthMode === 'signup' ? 'Create Free Account & Unlock Outputs' : 'Sign In & Unlock Outputs'}</span>
                             <ArrowRight className="w-4 h-4" />
                           </>
                         )}
@@ -2460,10 +2458,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     <button
                       type="submit"
                       disabled={inlineAuthLoading}
-                      className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full min-h-[44px] py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>{inlineAuthLoading ? 'Verifying...' : 'Verify Email & Continue to Step 3'}</span>
+                      <span>{inlineAuthLoading ? 'Verifying...' : 'Verify Email & Unlock AI Teaser'}</span>
                     </button>
 
                     <div className="flex items-center justify-between text-xs pt-1">
@@ -2495,7 +2493,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           {/* ========================================================================= */}
           {/* STAGE 1: STEPS 1, 2, 3 FORM                                                */}
           {/* ========================================================================= */}
-          {(stage === 1 || stage === 2 || (stage === 3 && !isQuotaBlocked)) && (
+          {(stage === 1 || stage === 2 || stage === 3) && (
             <form onSubmit={handleNextStep} noValidate className="w-full space-y-6 animate-in fade-in duration-300">
               {/* STEP 1: PROJECT DETAILS */}
               {stage === 1 && (
@@ -2741,9 +2739,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                             <Coins className="w-5 h-5" />
                           </div>
                           <div className="space-y-1">
-                            <h4 className="text-sm font-bold text-gray-900">
+                            <h3 className="text-sm font-bold text-gray-900">
                               Need Support for Promoter Contribution?
-                            </h4>
+                            </h3>
                             <p className="text-xs text-gray-600 leading-relaxed">
                               Promoter contribution is an important part of project funding. If you need support in arranging your promoter fund, Inisio can help connect you with suitable funding assistance options.
                             </p>
@@ -4030,9 +4028,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         })()}
 
         {/* ========================================================================= */}
-        {/* STAGE 4: FINAL ASSESSMENT RESULTS & DOWNLOADS                              */}
+        {/* STAGE 4: FINAL ASSESSMENT RESULTS & DOWNLOADS (GATED TO VERIFIED / QUOTA)  */}
         {/* ========================================================================= */}
-        {stage === 'final_assessment_results' && (() => {
+        {stage === 'final_assessment_results' && (Boolean(editingProject) || (Boolean(activeUser) && !isQuotaBlocked)) && (() => {
           const finResolved = reconcileProjectFinancials({
             totalCostCr: formData.totalCostCr,
             loanRequiredCr: formData.loanRequiredCr,

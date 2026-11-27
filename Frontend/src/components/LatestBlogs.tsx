@@ -149,8 +149,11 @@ export const LatestBlogs: React.FC<LatestBlogsProps> = ({ onNavigateToBlogs }) =
                         {coverUrl ? (
                           <img
                             src={coverUrl}
-                            alt={blog.title}
+                            alt={`${blog.title} — Inisio Capital project finance guide`}
+                            width={400}
+                            height={144}
                             loading="lazy"
+                            decoding="async"
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />

@@ -41,13 +41,16 @@ import {
 } from '../utils/leadStore';
 import { UISelect } from './ui/Select';
 import { useToast } from './ui/Toast';
+import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
 import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import { DashboardLayout, DashboardNavItem } from './dashboard/DashboardLayout';
 import {
   DASHBOARD_TABLE,
+  DashboardBottomSheet,
   DashboardCard,
   DashboardCardHeader,
   DashboardEmptyState,
+  DashboardFilterButton,
   DashboardKpiCard,
   DashboardLoadingState,
   DashboardStatusBadge,
@@ -303,6 +306,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
   // Currency Display Unit
   const [currencyUnit, setCurrencyUnit] = useState<CurrencyUnit>('Cr');
+  const [isProjectOptionsOpen, setIsProjectOptionsOpen] = useState(false);
 
   // Selected Project for details view
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -556,7 +560,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
     setAuthLoading(true);
     const detected = validateAdminEmail(cleanEmail);
     if (!detected.allowed) {
-      setAuthError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
+      setAuthError(detected.error || 'Access Denied: This Gmail address is not an authorized administrator account.');
       setAuthLoading(false);
       return;
     }
@@ -605,7 +609,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       }
 
       if (backendRole !== 'admin' && backendRole !== 'superadmin') {
-        setAuthError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
+        setAuthError('Access Denied: Administrative privileges required.');
         return;
       }
 
@@ -661,7 +665,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
       const resData = await response.json().catch(() => ({}));
       if (response.ok && resData.success) {
         setAuthSuccess(
-          resData.message || `A 6-digit password reset code has been sent to ${cleanEmail}.`
+          resData.message
+            ? maskEmailsInText(resData.message)
+            : `A 6-digit password reset code has been sent to ${maskEmail(cleanEmail)}.`
         );
         setResendCooldown(30);
         setAuthView('reset');
@@ -1096,11 +1102,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const adminNavItems: DashboardNavItem[] = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'projects', label: 'Projects', icon: Building2, count: projects.length },
-    { id: 'dpr', label: 'DPR Requests', icon: FileText, count: dprRequests.length },
-    { id: 'consultations', label: 'Consultations', icon: PhoneCall, count: consultations.length },
-    { id: 'visitors', label: 'Visitors', icon: Globe, count: visitors.length },
+    { id: 'overview', label: 'Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
+    { id: 'projects', label: 'Projects', mobileLabel: 'Projects', icon: Building2, count: projects.length },
+    { id: 'dpr', label: 'DPR Requests', mobileLabel: 'DPR', icon: FileText, count: dprRequests.length },
+    { id: 'consultations', label: 'Consultations', mobileLabel: 'Consults', icon: PhoneCall, count: consultations.length },
+    { id: 'visitors', label: 'Visitors', mobileLabel: 'Visitors', icon: Globe, count: visitors.length },
   ];
 
   const pageTitleMap: Record<typeof activeTab, string> = {
@@ -1112,11 +1118,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 w-screen h-screen bg-slate-50 flex flex-col font-inter overflow-hidden animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 w-screen h-screen supports-[height:100dvh]:h-[100dvh] bg-slate-50 flex flex-col font-inter overflow-hidden animate-in fade-in duration-150">
       {/* State 1: Admin Login Gate */}
       {!activeRole ? (
-        <div className="flex-1 flex items-center justify-center p-6 bg-slate-100">
-          <div className="w-full max-w-sm bg-white rounded-xl p-6 border border-slate-200 shadow-lg space-y-4">
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-6 bg-slate-100 overflow-y-auto">
+          <div className="w-full max-w-sm bg-white rounded-xl p-5 sm:p-6 border border-slate-200 shadow-lg space-y-4 my-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
@@ -1136,10 +1142,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer -mr-1.5"
                 aria-label="Close admin login"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1393,7 +1399,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
+                  className="w-full min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   {authLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Enter Desk</span>}
                 </button>
@@ -1414,39 +1420,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
           activeTab={activeTab}
           onSelectTab={(tabId) => setActiveTab(tabId as typeof activeTab)}
           pageTitle={pageTitleMap[activeTab]}
-          pageBreadcrumb="Admin Operations"
+          pageBreadcrumb={activeTab !== 'overview' ? 'Overview' : 'Admin Operations'}
+          showBackButton={activeTab !== 'overview'}
+          onGoBack={() => setActiveTab('overview')}
           onLogout={handleSignOut}
           onCloseOverlay={onClose}
           closeOverlayLabel="Close (Esc)"
+          mobileStickyAction={
+            (activeTab === 'overview' || activeTab === 'projects') && canEdit ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeTab !== 'projects') setActiveTab('projects');
+                  setShowNewProjectModal(true);
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 shrink-0" />
+                <span>New Project</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={loadAllAdminData}
+                disabled={dataLoading}
+                className="w-full min-h-[44px] px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 shrink-0 ${dataLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            )
+          }
           headerActions={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               {isViewOnly && (
-                <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap shrink-0">
+                <span className="hidden sm:inline-flex px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap shrink-0">
                   View-Only
                 </span>
               )}
               {savingId && (
-                <span className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                <span className="px-2 py-1 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
                   <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Saving</span>
+                  <span className="hidden sm:inline">Saving</span>
                 </span>
               )}
               <button
                 type="button"
                 onClick={loadAllAdminData}
                 disabled={dataLoading}
-                className="px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                aria-label="Refresh admin data"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${dataLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${dataLoading ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors shrink-0"
+                className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1.5 flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors shrink-0"
                 aria-label="Close admin panel"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
             </div>
           }
@@ -1460,7 +1494,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={loadAllAdminData}
-                className="px-3 py-1.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 cursor-pointer shrink-0 whitespace-nowrap"
+                className="min-h-[44px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 cursor-pointer shrink-0 whitespace-nowrap"
               >
                 Retry
               </button>
@@ -1469,8 +1503,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
           {/* 1. Dashboard Overview */}
           {activeTab === 'overview' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-5 sm:space-y-6">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <DashboardKpiCard
                   label="Total Projects"
                   value={projects.length}
@@ -1518,7 +1552,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           setActiveTab('projects');
                           setShowNewProjectModal(true);
                         }}
-                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                        className="hidden lg:inline-flex px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>New Project</span>
@@ -1539,51 +1573,99 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     }
                   />
                 ) : (
-                  <div className={DASHBOARD_TABLE.wrapper}>
-                    <table className={DASHBOARD_TABLE.table}>
-                      <thead className={DASHBOARD_TABLE.thead}>
-                        <tr>
-                          <th className={DASHBOARD_TABLE.th}>Project</th>
-                          <th className={DASHBOARD_TABLE.th}>Promoters</th>
-                          <th className={DASHBOARD_TABLE.th}>Capex</th>
-                          <th className={DASHBOARD_TABLE.th}>Probability</th>
-                          <th className={`${DASHBOARD_TABLE.th} text-right`}>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className={DASHBOARD_TABLE.tbody}>
-                        {projects.map((proj) => {
-                          const capex = proj.costComponents.reduce((acc, c) => acc + (c.amountCr || 0), 0);
-                          return (
-                            <tr
-                              key={proj.id}
-                              onClick={() => {
-                                setSelectedProjectId(proj.id);
-                                setActiveTab('projects');
-                              }}
-                              className={`${DASHBOARD_TABLE.tr} cursor-pointer`}
-                            >
-                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>
-                                {proj.name}
-                                <div className="text-[11px] font-normal text-slate-500 mt-0.5">{proj.industry}</div>
-                              </td>
-                              <td className={`${DASHBOARD_TABLE.td} text-slate-700 tabular-nums`}>
-                                {proj.promoters.length} {proj.promoters.length === 1 ? 'Promoter' : 'Promoters'}
-                              </td>
-                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900 tabular-nums`}>
-                                ₹ {capex.toFixed(1)} Cr
-                              </td>
-                              <td className={`${DASHBOARD_TABLE.td} font-semibold text-blue-600 tabular-nums`}>
-                                {proj.isFunded ? '100%' : '25%'}
-                              </td>
-                              <td className={`${DASHBOARD_TABLE.td} text-right`}>
-                                <DashboardStatusBadge status={proj.isFunded ? 'Funded' : proj.status || 'In Appraisal'} />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    {/* Mobile Stacked Cards */}
+                    <div className="md:hidden divide-y divide-slate-100">
+                      {projects.map((proj) => {
+                        const capex = proj.costComponents.reduce((acc, c) => acc + (c.amountCr || 0), 0);
+                        return (
+                          <button
+                            key={proj.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProjectId(proj.id);
+                              setActiveTab('projects');
+                            }}
+                            className="w-full text-left p-4 space-y-2.5 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-900 text-sm">{proj.name}</div>
+                                <div className="text-xs text-slate-500 mt-0.5">{proj.industry}</div>
+                              </div>
+                              <DashboardStatusBadge status={proj.isFunded ? 'Funded' : proj.status || 'In Appraisal'} />
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                              <div>
+                                <div className="text-[11px] text-slate-500">Promoters</div>
+                                <div className="font-semibold text-slate-800 tabular-nums mt-0.5">
+                                  {proj.promoters.length}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-slate-500">Capex</div>
+                                <div className="font-bold text-slate-900 tabular-nums mt-0.5">
+                                  ₹ {capex.toFixed(1)} Cr
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-slate-500">Probability</div>
+                                <div className="font-bold text-blue-600 tabular-nums mt-0.5">
+                                  {proj.isFunded ? '100%' : '25%'}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
+                      <table className={DASHBOARD_TABLE.table}>
+                        <thead className={DASHBOARD_TABLE.thead}>
+                          <tr>
+                            <th className={DASHBOARD_TABLE.th}>Project</th>
+                            <th className={DASHBOARD_TABLE.th}>Promoters</th>
+                            <th className={DASHBOARD_TABLE.th}>Capex</th>
+                            <th className={DASHBOARD_TABLE.th}>Probability</th>
+                            <th className={`${DASHBOARD_TABLE.th} text-right`}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className={DASHBOARD_TABLE.tbody}>
+                          {projects.map((proj) => {
+                            const capex = proj.costComponents.reduce((acc, c) => acc + (c.amountCr || 0), 0);
+                            return (
+                              <tr
+                                key={proj.id}
+                                onClick={() => {
+                                  setSelectedProjectId(proj.id);
+                                  setActiveTab('projects');
+                                }}
+                                className={`${DASHBOARD_TABLE.tr} cursor-pointer`}
+                              >
+                                <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>
+                                  {proj.name}
+                                  <div className="text-[11px] font-normal text-slate-500 mt-0.5">{proj.industry}</div>
+                                </td>
+                                <td className={`${DASHBOARD_TABLE.td} text-slate-700 tabular-nums`}>
+                                  {proj.promoters.length} {proj.promoters.length === 1 ? 'Promoter' : 'Promoters'}
+                                </td>
+                                <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900 tabular-nums`}>
+                                  ₹ {capex.toFixed(1)} Cr
+                                </td>
+                                <td className={`${DASHBOARD_TABLE.td} font-semibold text-blue-600 tabular-nums`}>
+                                  {proj.isFunded ? '100%' : '25%'}
+                                </td>
+                                <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                                  <DashboardStatusBadge status={proj.isFunded ? 'Funded' : proj.status || 'In Appraisal'} />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </DashboardCard>
             </div>
@@ -1591,22 +1673,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
           {/* 2. Projects */}
           {activeTab === 'projects' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200">
-                <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-                  <UISelect
-                    value={currentProject?.id || selectedProjectId}
-                    onValueChange={setSelectedProjectId}
-                    options={projects.map((p) => ({ value: p.id, label: p.name }))}
-                    placeholder={projects.length === 0 ? 'No projects' : 'Select project'}
-                    triggerClassName="h-9 px-3 py-1.5 text-xs font-semibold bg-slate-50 border-slate-200 min-w-[210px]"
-                  />
+            <div className="space-y-5 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200">
+                <div className="flex items-center gap-2 sm:flex-wrap sm:gap-2.5 min-w-0 w-full sm:w-auto">
+                  <div className="flex-1 sm:flex-none min-w-0">
+                    <UISelect
+                      value={currentProject?.id || selectedProjectId}
+                      onValueChange={setSelectedProjectId}
+                      options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                      placeholder={projects.length === 0 ? 'No projects' : 'Select project'}
+                      triggerClassName="min-h-[44px] sm:min-h-0 sm:h-9 px-3 py-1.5 text-sm sm:text-xs font-semibold bg-slate-50 border-slate-200 w-full sm:min-w-[210px]"
+                    />
+                  </div>
+                  <div className="sm:hidden shrink-0">
+                    <DashboardFilterButton
+                      label="Options"
+                      activeCount={currencyUnit !== 'Cr' ? 1 : 0}
+                      onClick={() => setIsProjectOptionsOpen(true)}
+                    />
+                  </div>
                   {currentProject?.location && (
-                    <span className="text-xs text-slate-500 font-medium shrink-0">{currentProject.location}</span>
+                    <span className="hidden sm:inline text-xs text-slate-500 font-medium shrink-0">{currentProject.location}</span>
                   )}
 
                   {canEdit && currentProject && (
-                    <>
+                    <div className="hidden sm:flex items-center gap-1">
                       <button
                         type="button"
                         onClick={handleOpenEditProject}
@@ -1623,14 +1714,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </>
+                    </div>
                   )}
 
                   {canEdit && (
                     <button
                       type="button"
                       onClick={() => setShowNewProjectModal(true)}
-                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                      className="hidden lg:inline-flex px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>New Project</span>
@@ -1638,7 +1729,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   )}
                 </div>
 
-                <div className="inline-flex items-center gap-1 bg-slate-100 p-1 rounded-lg self-start sm:self-auto shrink-0">
+                {currentProject?.location && (
+                  <div className="sm:hidden flex items-center justify-between text-xs text-slate-500 px-0.5">
+                    <span>{currentProject.location}</span>
+                    <span className="font-semibold text-slate-700">Unit: INR {currencyUnit}</span>
+                  </div>
+                )}
+
+                <div className="hidden sm:inline-flex items-center gap-1 bg-slate-100 p-1 rounded-lg self-start sm:self-auto shrink-0">
                   <button
                     type="button"
                     onClick={() => setCurrencyUnit('Cr')}
@@ -1690,7 +1788,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
               ) : (
                 <>
                   {/* Probability Meter */}
-                  <DashboardCard className="p-5 space-y-3">
+                  <DashboardCard className="p-4 sm:p-5 space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1706,7 +1804,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           <button
                             type="button"
                             onClick={handleToggleFunded}
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                            className={`min-h-[44px] sm:min-h-0 px-3.5 sm:px-3 py-2 sm:py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                               currentProject?.isFunded
                                 ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                                 : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
@@ -1732,49 +1830,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     </div>
 
                     {/* Quick Document Preview & Offline Download Actions */}
-                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2.5">
                       <span className="text-[11px] font-semibold text-slate-500">
                         Project Teaser &amp; DPR Documents
                       </span>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => handleAdminProjectDocument(currentProject.id, 'teaser', 'preview', currentProject)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          className="min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
                           <span>Preview Teaser</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAdminProjectDocument(currentProject.id, 'teaser', 'download', currentProject)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          className="min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          <Download className="w-3.5 h-3.5 shrink-0" />
                           <span>Teaser PDF</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAdminDownloadDocx(currentProject.id, currentProject)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          className="min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-white border border-slate-200 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                         >
-                          <FileCode className="w-3.5 h-3.5" />
+                          <FileCode className="w-3.5 h-3.5 shrink-0" />
                           <span>Teaser DOCX</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAdminProjectDocument(currentProject.id, 'dpr', 'preview', currentProject)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          className="min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                         >
-                          <Eye className="w-3.5 h-3.5" />
+                          <Eye className="w-3.5 h-3.5 shrink-0" />
                           <span>Preview DPR</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAdminProjectDocument(currentProject.id, 'dpr', 'download', currentProject)}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          className="col-span-2 sm:col-span-1 min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          <Download className="w-3.5 h-3.5 shrink-0" />
                           <span>DPR PDF</span>
                         </button>
                       </div>
@@ -1790,7 +1888,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           <button
                             type="button"
                             onClick={() => setShowAddPromoterForm(!showAddPromoterForm)}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                            className="min-h-[44px] sm:min-h-0 px-3.5 sm:px-3 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             <span>Add Promoter</span>
@@ -1802,7 +1900,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     {showAddPromoterForm && canEdit && (
                       <form
                         onSubmit={handleAddPromoter}
-                        className="m-5 p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs"
+                        className="m-4 sm:m-5 p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-5 gap-3 text-xs"
                       >
                         <input
                           type="text"
@@ -1810,28 +1908,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           required
                           value={newPromoterName}
                           onChange={(e) => setNewPromoterName(e.target.value)}
-                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          className="min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                         />
                         <input
                           type="text"
                           placeholder="Experience"
                           value={newPromoterExp}
                           onChange={(e) => setNewPromoterExp(e.target.value)}
-                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          className="min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                         />
                         <input
                           type="text"
                           placeholder="Qualification"
                           value={newPromoterQual}
                           onChange={(e) => setNewPromoterQual(e.target.value)}
-                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          className="min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                         />
                         <input
                           type="number"
                           placeholder="Share %"
                           value={newPromoterShare}
                           onChange={(e) => setNewPromoterShare(e.target.value)}
-                          className="px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 tabular-nums"
+                          className="min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 tabular-nums"
                         />
                         <div className="flex gap-2">
                           <input
@@ -1839,11 +1937,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             placeholder="Role"
                             value={newPromoterRole}
                             onChange={(e) => setNewPromoterRole(e.target.value)}
-                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className="w-full min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                           />
                           <button
                             type="submit"
-                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
+                            className="min-h-[44px] sm:min-h-0 px-4 sm:px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
                           >
                             Save
                           </button>
@@ -1851,7 +1949,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       </form>
                     )}
 
-                    <div className={DASHBOARD_TABLE.wrapper}>
+                    {/* Mobile Stacked Cards */}
+                    <div className="md:hidden divide-y divide-slate-100">
+                      {currentProject?.promoters.map((p) => (
+                        <div key={p.id} className="p-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-900 text-sm">{p.name}</div>
+                              <div className="text-xs text-slate-600 mt-0.5">{p.role}</div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-bold tabular-nums">
+                                {p.shareholdingPct}%
+                              </span>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePromoter(p.id)}
+                                  aria-label={`Delete promoter ${p.name}`}
+                                  className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors -mr-2"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 rounded-lg p-2.5 border border-slate-200/70">
+                            <div>
+                              <span className="text-[11px] text-slate-500 block">Experience</span>
+                              <span className="font-medium text-slate-800">{p.experience}</span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] text-slate-500 block">Qualification</span>
+                              <span className="font-medium text-slate-800">{p.qualification}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
                       <table className={DASHBOARD_TABLE.table}>
                         <thead className={DASHBOARD_TABLE.thead}>
                           <tr>
@@ -1892,9 +2029,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </DashboardCard>
 
                   {/* Project Cost and Means of Finance */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
                     {/* Project Cost Components */}
-                    <DashboardCard className="p-5 space-y-4">
+                    <DashboardCard className="p-4 sm:p-5 space-y-4">
                       <div className="flex items-center justify-between gap-3">
                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider tabular-nums">
                           Project Cost ({formatCurrency(totalCostCr)})
@@ -1903,7 +2040,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                           <button
                             type="button"
                             onClick={() => setShowAddCostForm(!showAddCostForm)}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                            className="min-h-[44px] sm:min-h-0 px-3 py-2 sm:py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                           >
                             <Plus className="w-3.5 h-3.5" />
                             <span>Add Component</span>
@@ -1914,7 +2051,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       {showAddCostForm && canEdit && (
                         <form
                           onSubmit={handleAddCostComponent}
-                          className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap sm:flex-nowrap gap-2 text-xs"
+                          className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row gap-2 text-xs"
                         >
                           <input
                             type="text"
@@ -1922,23 +2059,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             required
                             value={newCostCat}
                             onChange={(e) => setNewCostCat(e.target.value)}
-                            className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className="flex-1 min-w-0 min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                           />
-                          <input
-                            type="number"
-                            step="0.1"
-                            placeholder="Amount (₹ Cr)"
-                            required
-                            value={newCostAmount}
-                            onChange={(e) => setNewCostAmount(e.target.value)}
-                            className="w-28 px-3 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 tabular-nums"
-                          />
-                          <button
-                            type="submit"
-                            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
-                          >
-                            Add
-                          </button>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              step="0.1"
+                              placeholder="Amount (₹ Cr)"
+                              required
+                              value={newCostAmount}
+                              onChange={(e) => setNewCostAmount(e.target.value)}
+                              className="flex-1 sm:w-28 min-h-[44px] sm:min-h-0 px-3 py-2 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 tabular-nums"
+                            />
+                            <button
+                              type="submit"
+                              className="min-h-[44px] sm:min-h-0 px-4 sm:px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer whitespace-nowrap shrink-0"
+                            >
+                              Add
+                            </button>
+                          </div>
                         </form>
                       )}
 
@@ -1949,7 +2088,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                             className="flex items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200/70 rounded-lg text-xs"
                           >
                             <span className="font-medium text-slate-800">{comp.category}</span>
-                            <div className="flex items-center gap-3 shrink-0">
+                            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                               <span className="font-semibold text-slate-900 tabular-nums">
                                 {formatCurrency(comp.amountCr)}
                               </span>
@@ -1957,9 +2096,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteCostComponent(comp.id)}
-                                  className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                                  aria-label={`Remove ${comp.category}`}
+                                  className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center text-slate-400 hover:text-rose-600 cursor-pointer -mr-2 sm:mr-0"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                 </button>
                               )}
                             </div>
@@ -1969,7 +2109,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     </DashboardCard>
 
                     {/* Means of Finance */}
-                    <DashboardCard className="p-5 space-y-4">
+                    <DashboardCard className="p-4 sm:p-5 space-y-4">
                       <div className="flex items-center justify-between">
                         <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider tabular-nums">
                           Means of Finance ({formatCurrency(totalMeansOfFinanceCr)})
@@ -1985,7 +2125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                               step="0.1"
                               value={currentProject?.meansOfFinance.equityCr}
                               onChange={(e) => handleUpdateFinance('equityCr', parseFloat(e.target.value) || 0)}
-                              className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-right font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              className="w-28 min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg text-right font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
                             />
                           ) : (
                             <span className="font-semibold text-slate-900 tabular-nums">
@@ -2002,7 +2142,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                               step="0.1"
                               value={currentProject?.meansOfFinance.debtCr}
                               onChange={(e) => handleUpdateFinance('debtCr', parseFloat(e.target.value) || 0)}
-                              className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-right font-semibold text-blue-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              className="w-28 min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg text-right font-semibold text-blue-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
                             />
                           ) : (
                             <span className="font-semibold text-blue-600 tabular-nums">
@@ -2019,7 +2159,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                               step="0.1"
                               value={currentProject?.meansOfFinance.subsidyCr}
                               onChange={(e) => handleUpdateFinance('subsidyCr', parseFloat(e.target.value) || 0)}
-                              className="w-28 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-right font-semibold text-emerald-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              className="w-28 min-h-[44px] sm:min-h-0 px-2.5 py-2 sm:py-1.5 text-sm sm:text-xs bg-white border border-slate-200 rounded-lg text-right font-semibold text-emerald-600 tabular-nums focus:outline-none focus:ring-2 focus:ring-blue-600"
                             />
                           ) : (
                             <span className="font-semibold text-emerald-600 tabular-nums">
@@ -2032,13 +2172,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </div>
 
                   {/* Checklist */}
-                  <DashboardCard className="p-5 space-y-3">
+                  <DashboardCard className="p-4 sm:p-5 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                         Checklist
                       </h3>
                       {canEdit && (
-                        <label className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                        <label className="min-h-[44px] sm:min-h-0 px-3 py-2 sm:py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
                           <Upload className="w-3.5 h-3.5" />
                           <span>Upload Checklist</span>
                           <input
@@ -2050,14 +2190,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                       )}
                     </div>
 
-                    <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
+                    <div className="p-3 bg-slate-50 border border-slate-200/70 rounded-lg flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
                         <CheckCircle2
                           className={`w-4 h-4 shrink-0 ${
                             currentProject?.checklistUploaded ? 'text-emerald-600' : 'text-slate-300'
                           }`}
                         />
-                        <span className="font-medium text-slate-800">
+                        <span className="font-medium text-slate-800 truncate">
                           {currentProject?.checklistUploaded
                             ? currentProject.checklistFileName || 'Generic Checklist Document'
                             : 'No checklist uploaded'}
@@ -2074,7 +2214,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   </DashboardCard>
 
                   {/* Documents */}
-                  <DashboardCard className="p-5 space-y-4">
+                  <DashboardCard className="p-4 sm:p-5 space-y-4">
                     <div>
                       <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                         Documents (Optional Uploads)
@@ -2112,16 +2252,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                                     <button
                                       type="button"
                                       onClick={() => handleRemoveDocument(doc.key)}
-                                      className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                                      aria-label={`Remove ${doc.label}`}
+                                      className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:p-1 flex items-center justify-center text-slate-400 hover:text-rose-600 cursor-pointer -mr-2 sm:mr-0"
                                     >
-                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                     </button>
                                   )}
                                 </>
                               ) : (
                                 canEdit && (
-                                  <label className="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
-                                    <Upload className="w-3 h-3" />
+                                  <label className="min-h-[44px] sm:min-h-0 px-3 sm:px-2.5 py-2 sm:py-1.5 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg cursor-pointer text-xs sm:text-[11px] font-semibold text-slate-700 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
+                                    <Upload className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                                     <span>Upload</span>
                                     <input
                                       type="file"
@@ -2156,82 +2297,149 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   description="DPR preparation requests submitted by promoters will appear here."
                 />
               ) : (
-                <div className={DASHBOARD_TABLE.wrapper}>
-                  <table className={DASHBOARD_TABLE.table}>
-                    <thead className={DASHBOARD_TABLE.thead}>
-                      <tr>
-                        <th className={DASHBOARD_TABLE.th}>Project / Promoter</th>
-                        <th className={DASHBOARD_TABLE.th}>Contact</th>
-                        <th className={DASHBOARD_TABLE.th}>Status</th>
-                        <th className={DASHBOARD_TABLE.th}>Date</th>
-                        <th className={DASHBOARD_TABLE.th}>Assigned Consultant</th>
-                        <th className={`${DASHBOARD_TABLE.th} text-right`}>Documents</th>
-                      </tr>
-                    </thead>
-                    <tbody className={DASHBOARD_TABLE.tbody}>
-                      {dprRequests.map((req) => (
-                        <tr key={req.id} className={DASHBOARD_TABLE.tr}>
-                          <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>
-                            {req.projectName}
-                            <div className="text-[11px] text-slate-500 font-normal mt-0.5">{req.promoterName}</div>
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>
-                            <div>{req.email}</div>
-                            <div className="text-[11px] text-slate-400 tabular-nums">{req.phone}</div>
-                          </td>
-                          <td className={DASHBOARD_TABLE.td}>
-                            <DashboardStatusBadge status={req.status || 'Active Lead'} />
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
-                            {req.date}
-                          </td>
-                          <td className={DASHBOARD_TABLE.td}>
-                            {canEdit ? (
-                              <UISelect
-                                value={req.assignedConsultant || ''}
-                                onValueChange={(val) => handleAssignDprConsultant(req.id, val)}
-                                placeholder="Unassigned"
-                                options={[
-                                  { value: '', label: 'Unassigned' },
-                                  { value: 'DPR Consultant 1', label: 'DPR Consultant 1' },
-                                  { value: 'DPR Consultant 2', label: 'DPR Consultant 2' },
-                                  { value: 'DPR Consultant 3', label: 'DPR Consultant 3' },
-                                  { value: 'DPR Consultant 4', label: 'DPR Consultant 4' },
-                                ]}
-                                triggerClassName="h-8 px-2.5 py-1 text-xs bg-slate-50 border-slate-200"
-                              />
-                            ) : (
-                              <span className="font-semibold text-slate-800">
-                                {req.assignedConsultant || 'Unassigned'}
-                              </span>
-                            )}
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} text-right`}>
-                            <div className="inline-flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'preview')}
-                                title="Preview DPR PDF"
-                                className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>DPR</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'download')}
-                                title="Download DPR PDF"
-                                className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                              </button>
+                <>
+                  {/* Mobile Stacked Cards */}
+                  <div className="md:hidden divide-y divide-slate-100">
+                    {dprRequests.map((req) => (
+                      <div key={req.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 text-sm">{req.projectName}</div>
+                            <div className="text-xs text-slate-600 mt-0.5">{req.promoterName}</div>
+                            <div className="text-xs text-slate-500 mt-0.5 break-all">
+                              {req.email} · {req.phone}
                             </div>
-                          </td>
+                          </div>
+                          <DashboardStatusBadge status={req.status || 'Active Lead'} />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <span>Date</span>
+                          <span className="font-medium text-slate-700 tabular-nums">{req.date}</span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-semibold text-slate-500 block">Assigned Consultant</span>
+                          {canEdit ? (
+                            <UISelect
+                              value={req.assignedConsultant || ''}
+                              onValueChange={(val) => handleAssignDprConsultant(req.id, val)}
+                              placeholder="Unassigned"
+                              options={[
+                                { value: '', label: 'Unassigned' },
+                                { value: 'DPR Consultant 1', label: 'DPR Consultant 1' },
+                                { value: 'DPR Consultant 2', label: 'DPR Consultant 2' },
+                                { value: 'DPR Consultant 3', label: 'DPR Consultant 3' },
+                                { value: 'DPR Consultant 4', label: 'DPR Consultant 4' },
+                              ]}
+                              triggerClassName="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 border-slate-200"
+                            />
+                          ) : (
+                            <div className="text-xs font-semibold text-slate-800 px-3 py-2.5 bg-slate-50 rounded-lg border border-slate-200/70">
+                              {req.assignedConsultant || 'Unassigned'}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'preview')}
+                            className="min-h-[44px] px-3 py-2 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                          >
+                            <Eye className="w-4 h-4 shrink-0" />
+                            <span>DPR</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'download')}
+                            className="min-h-[44px] px-3 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                          >
+                            <Download className="w-4 h-4 shrink-0" />
+                            <span>Download</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
+                    <table className={DASHBOARD_TABLE.table}>
+                      <thead className={DASHBOARD_TABLE.thead}>
+                        <tr>
+                          <th className={DASHBOARD_TABLE.th}>Project / Promoter</th>
+                          <th className={DASHBOARD_TABLE.th}>Contact</th>
+                          <th className={DASHBOARD_TABLE.th}>Status</th>
+                          <th className={DASHBOARD_TABLE.th}>Date</th>
+                          <th className={DASHBOARD_TABLE.th}>Assigned Consultant</th>
+                          <th className={`${DASHBOARD_TABLE.th} text-right`}>Documents</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className={DASHBOARD_TABLE.tbody}>
+                        {dprRequests.map((req) => (
+                          <tr key={req.id} className={DASHBOARD_TABLE.tr}>
+                            <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>
+                              {req.projectName}
+                              <div className="text-[11px] text-slate-500 font-normal mt-0.5">{req.promoterName}</div>
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>
+                              <div>{req.email}</div>
+                              <div className="text-[11px] text-slate-400 tabular-nums">{req.phone}</div>
+                            </td>
+                            <td className={DASHBOARD_TABLE.td}>
+                              <DashboardStatusBadge status={req.status || 'Active Lead'} />
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                              {req.date}
+                            </td>
+                            <td className={DASHBOARD_TABLE.td}>
+                              {canEdit ? (
+                                <UISelect
+                                  value={req.assignedConsultant || ''}
+                                  onValueChange={(val) => handleAssignDprConsultant(req.id, val)}
+                                  placeholder="Unassigned"
+                                  options={[
+                                    { value: '', label: 'Unassigned' },
+                                    { value: 'DPR Consultant 1', label: 'DPR Consultant 1' },
+                                    { value: 'DPR Consultant 2', label: 'DPR Consultant 2' },
+                                    { value: 'DPR Consultant 3', label: 'DPR Consultant 3' },
+                                    { value: 'DPR Consultant 4', label: 'DPR Consultant 4' },
+                                  ]}
+                                  triggerClassName="h-8 px-2.5 py-1 text-xs bg-slate-50 border-slate-200"
+                                />
+                              ) : (
+                                <span className="font-semibold text-slate-800">
+                                  {req.assignedConsultant || 'Unassigned'}
+                                </span>
+                              )}
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'preview')}
+                                  title="Preview DPR PDF"
+                                  className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>DPR</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdminProjectDocument(req.id, 'dpr', 'download')}
+                                  title="Download DPR PDF"
+                                  className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </DashboardCard>
           )}
@@ -2250,49 +2458,86 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   description="Scheduled promoter consultations will appear here."
                 />
               ) : (
-                <div className={DASHBOARD_TABLE.wrapper}>
-                  <table className={DASHBOARD_TABLE.table}>
-                    <thead className={DASHBOARD_TABLE.thead}>
-                      <tr>
-                        <th className={DASHBOARD_TABLE.th}>Client Name</th>
-                        <th className={DASHBOARD_TABLE.th}>Contact</th>
-                        <th className={DASHBOARD_TABLE.th}>Category / Slot</th>
-                        <th className={DASHBOARD_TABLE.th}>Date</th>
-                        <th className={`${DASHBOARD_TABLE.th} text-right`}>Assignment</th>
-                      </tr>
-                    </thead>
-                    <tbody className={DASHBOARD_TABLE.tbody}>
-                      {consultations.map((c) => (
-                        <tr key={c.id} className={DASHBOARD_TABLE.tr}>
-                          <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>{c.clientName}</td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>
-                            <div>{c.email}</div>
-                            <div className="text-[11px] text-slate-400 tabular-nums">{c.phone}</div>
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} font-medium text-slate-800`}>{c.projectCategory}</td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                <>
+                  {/* Mobile Stacked Cards */}
+                  <div className="md:hidden divide-y divide-slate-100">
+                    {consultations.map((c) => (
+                      <div key={c.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 text-sm">{c.clientName}</div>
+                            <div className="text-xs font-medium text-slate-700 mt-0.5">{c.projectCategory}</div>
+                            <div className="text-xs text-slate-500 mt-0.5 break-all">
+                              {c.email} · {c.phone}
+                            </div>
+                          </div>
+                          <span className="text-[11px] text-slate-500 whitespace-nowrap tabular-nums shrink-0">
                             {c.date}
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} text-right`}>
-                            {c.assignedTo === 'Prosync' ? (
-                              <DashboardStatusBadge status="Assigned to Prosync" />
-                            ) : canEdit ? (
-                              <button
-                                type="button"
-                                onClick={() => handleAssignConsultationToProsync(c.id)}
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg cursor-pointer whitespace-nowrap"
-                              >
-                                Assign to Prosync
-                              </button>
-                            ) : (
-                              <span className="text-slate-500 font-medium text-xs">{c.status || 'Unassigned'}</span>
-                            )}
-                          </td>
+                          </span>
+                        </div>
+                        <div>
+                          {c.assignedTo === 'Prosync' ? (
+                            <DashboardStatusBadge status="Assigned to Prosync" />
+                          ) : canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => handleAssignConsultationToProsync(c.id)}
+                              className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg cursor-pointer"
+                            >
+                              Assign to Prosync
+                            </button>
+                          ) : (
+                            <span className="text-slate-500 font-medium text-xs">{c.status || 'Unassigned'}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
+                    <table className={DASHBOARD_TABLE.table}>
+                      <thead className={DASHBOARD_TABLE.thead}>
+                        <tr>
+                          <th className={DASHBOARD_TABLE.th}>Client Name</th>
+                          <th className={DASHBOARD_TABLE.th}>Contact</th>
+                          <th className={DASHBOARD_TABLE.th}>Category / Slot</th>
+                          <th className={DASHBOARD_TABLE.th}>Date</th>
+                          <th className={`${DASHBOARD_TABLE.th} text-right`}>Assignment</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className={DASHBOARD_TABLE.tbody}>
+                        {consultations.map((c) => (
+                          <tr key={c.id} className={DASHBOARD_TABLE.tr}>
+                            <td className={`${DASHBOARD_TABLE.td} font-semibold text-slate-900`}>{c.clientName}</td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-600`}>
+                              <div>{c.email}</div>
+                              <div className="text-[11px] text-slate-400 tabular-nums">{c.phone}</div>
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} font-medium text-slate-800`}>{c.projectCategory}</td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                              {c.date}
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} text-right`}>
+                              {c.assignedTo === 'Prosync' ? (
+                                <DashboardStatusBadge status="Assigned to Prosync" />
+                              ) : canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAssignConsultationToProsync(c.id)}
+                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg cursor-pointer whitespace-nowrap"
+                                >
+                                  Assign to Prosync
+                                </button>
+                              ) : (
+                                <span className="text-slate-500 font-medium text-xs">{c.status || 'Unassigned'}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </DashboardCard>
           )}
@@ -2316,63 +2561,161 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   description="Client session visits will appear here once traffic is logged."
                 />
               ) : (
-                <div className={DASHBOARD_TABLE.wrapper}>
-                  <table className={DASHBOARD_TABLE.table}>
-                    <thead className={DASHBOARD_TABLE.thead}>
-                      <tr>
-                        <th className={DASHBOARD_TABLE.th}>Session ID</th>
-                        <th className={DASHBOARD_TABLE.th}>Page Visited</th>
-                        <th className={DASHBOARD_TABLE.th}>Timestamp</th>
-                        <th className={DASHBOARD_TABLE.th}>Device / OS</th>
-                        <th className={DASHBOARD_TABLE.th}>Browser</th>
-                        <th className={DASHBOARD_TABLE.th}>Location</th>
-                      </tr>
-                    </thead>
-                    <tbody className={DASHBOARD_TABLE.tbody}>
-                      {visitors.map((v) => (
-                        <tr key={v.id} className={DASHBOARD_TABLE.tr}>
-                          <td className={`${DASHBOARD_TABLE.td} font-mono text-[11px] text-slate-600`}>
-                            {v.sessionId}
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} font-medium text-slate-900`}>{v.path}</td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                <>
+                  {/* Mobile Stacked Cards */}
+                  <div className="md:hidden divide-y divide-slate-100">
+                    {visitors.map((v) => (
+                      <div key={v.id} className="p-4 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 text-sm break-all">{v.path}</div>
+                            <div className="font-mono text-[11px] text-slate-500 mt-0.5 truncate">{v.sessionId}</div>
+                          </div>
+                          <span className="text-[11px] text-slate-500 whitespace-nowrap tabular-nums shrink-0">
                             {new Date(v.timestamp).toLocaleTimeString([], {
                               hour: '2-digit',
                               minute: '2-digit',
                               second: '2-digit',
                             })}
-                          </td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>{v.device}</td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>{v.browser}</td>
-                          <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>
-                            {v.location || 'Local / Inferred'}
-                          </td>
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                          <div>
+                            <div className="text-[11px] text-slate-500">Device</div>
+                            <div className="font-medium text-slate-800 truncate mt-0.5">{v.device}</div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-slate-500">Browser</div>
+                            <div className="font-medium text-slate-800 truncate mt-0.5">{v.browser}</div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-slate-500">Location</div>
+                            <div className="font-medium text-slate-800 truncate mt-0.5">{v.location || 'Local'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
+                    <table className={DASHBOARD_TABLE.table}>
+                      <thead className={DASHBOARD_TABLE.thead}>
+                        <tr>
+                          <th className={DASHBOARD_TABLE.th}>Session ID</th>
+                          <th className={DASHBOARD_TABLE.th}>Page Visited</th>
+                          <th className={DASHBOARD_TABLE.th}>Timestamp</th>
+                          <th className={DASHBOARD_TABLE.th}>Device / OS</th>
+                          <th className={DASHBOARD_TABLE.th}>Browser</th>
+                          <th className={DASHBOARD_TABLE.th}>Location</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className={DASHBOARD_TABLE.tbody}>
+                        {visitors.map((v) => (
+                          <tr key={v.id} className={DASHBOARD_TABLE.tr}>
+                            <td className={`${DASHBOARD_TABLE.td} font-mono text-[11px] text-slate-600`}>
+                              {v.sessionId}
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} font-medium text-slate-900`}>{v.path}</td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-500 whitespace-nowrap tabular-nums`}>
+                              {new Date(v.timestamp).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                              })}
+                            </td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>{v.device}</td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>{v.browser}</td>
+                            <td className={`${DASHBOARD_TABLE.td} text-slate-700`}>
+                              {v.location || 'Local / Inferred'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </DashboardCard>
           )}
         </DashboardLayout>
       )}
 
+      {/* Mobile Bottom Sheet: Project Options & Currency Unit */}
+      <DashboardBottomSheet
+        open={isProjectOptionsOpen}
+        onClose={() => setIsProjectOptionsOpen(false)}
+        title="Project Options"
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-slate-700">Currency Display Unit</div>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: 'Cr' as CurrencyUnit, label: 'INR Crores' },
+                { value: 'Lakhs' as CurrencyUnit, label: 'INR Lakhs' },
+                { value: 'Millions' as CurrencyUnit, label: 'INR Millions' },
+              ]).map((unit) => (
+                <button
+                  key={unit.value}
+                  type="button"
+                  onClick={() => setCurrencyUnit(unit.value)}
+                  className={`min-h-[44px] px-2.5 py-2 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                    currencyUnit === unit.value
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {unit.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {canEdit && currentProject && (
+            <div className="pt-3 border-t border-slate-200 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProjectOptionsOpen(false);
+                  handleOpenEditProject();
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Edit3 className="w-4 h-4 shrink-0" />
+                <span>Edit Project Details</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsProjectOptionsOpen(false);
+                  handleDeleteProject(currentProject.id);
+                }}
+                className="w-full min-h-[44px] px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-lg inline-flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4 shrink-0" />
+                <span>Delete Project</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </DashboardBottomSheet>
+
       {/* Modal: Admin New Project Creation */}
       {showNewProjectModal && canEdit && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center sm:p-4">
+          <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 overflow-hidden max-h-[90dvh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
               <h3 className="text-sm font-bold text-slate-900 font-manrope">Create New Project</h3>
               <button
                 type="button"
                 onClick={() => setShowNewProjectModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                aria-label="Close create project modal"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer -mr-2"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateProject} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleCreateProject} className="p-5 space-y-3.5 text-xs overflow-y-auto">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Project Name *</label>
                 <input
@@ -2381,7 +2724,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   value={newProjName}
                   onChange={(e) => setNewProjName(e.target.value)}
                   placeholder="e.g. Solar Park Alpha"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                 />
               </div>
               <div>
@@ -2392,7 +2735,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   value={newProjPromoter}
                   onChange={(e) => setNewProjPromoter(e.target.value)}
                   placeholder="e.g. Rajesh Verma"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -2404,7 +2747,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     value={newProjIndustry}
                     onChange={(e) => setNewProjIndustry(e.target.value)}
                     placeholder="e.g. Renewable Energy"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   />
                 </div>
                 <div>
@@ -2414,11 +2757,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     value={newProjLocation}
                     onChange={(e) => setNewProjLocation(e.target.value)}
                     placeholder="e.g. Gujarat, India"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">Email</label>
                   <input
@@ -2426,7 +2769,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     value={newProjEmail}
                     onChange={(e) => setNewProjEmail(e.target.value)}
                     placeholder="promoter@company.in"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   />
                 </div>
                 <div>
@@ -2436,7 +2779,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     value={newProjMobile}
                     onChange={(e) => setNewProjMobile(e.target.value)}
                     placeholder="10-digit mobile"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900"
                   />
                 </div>
               </div>
@@ -2449,7 +2792,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     required
                     value={newProjCapex}
                     onChange={(e) => setNewProjCapex(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 tabular-nums"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 tabular-nums"
                   />
                 </div>
                 <div>
@@ -2460,7 +2803,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                     required
                     value={newProjLoan}
                     onChange={(e) => setNewProjLoan(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 tabular-nums"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 text-slate-900 tabular-nums"
                   />
                 </div>
               </div>
@@ -2468,14 +2811,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                 <button
                   type="button"
                   onClick={() => setShowNewProjectModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingProject}
-                  className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
                   {creatingProject ? 'Creating...' : 'Create Project'}
                 </button>
@@ -2487,19 +2830,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
 
       {/* Modal: Admin Edit Project Details */}
       {showEditProjectModal && canEdit && currentProject && (
-        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div className="fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center sm:p-4">
+          <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-xl shadow-xl border border-slate-200 overflow-hidden max-h-[90dvh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 sm:py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
               <h3 className="text-sm font-bold text-slate-900 font-manrope">Edit Project Details</h3>
               <button
                 type="button"
                 onClick={() => setShowEditProjectModal(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                aria-label="Close edit project modal"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer -mr-2"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
             </div>
-            <form onSubmit={handleSaveProjectDetails} className="p-5 space-y-3.5 text-xs">
+            <form onSubmit={handleSaveProjectDetails} className="p-5 space-y-3.5 text-xs overflow-y-auto">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">Project Name *</label>
                 <input
@@ -2507,7 +2851,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   required
                   value={editProjData.name}
                   onChange={(e) => setEditProjData({ ...editProjData, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
               <div>
@@ -2516,7 +2860,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   type="text"
                   value={editProjData.promoterName}
                   onChange={(e) => setEditProjData({ ...editProjData, promoterName: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
               <div>
@@ -2525,7 +2869,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   type="text"
                   value={editProjData.industry}
                   onChange={(e) => setEditProjData({ ...editProjData, industry: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
               <div>
@@ -2534,20 +2878,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ isOpen, onClose }) => {
                   type="text"
                   value={editProjData.location}
                   onChange={(e) => setEditProjData({ ...editProjData, location: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowEditProjectModal(false)}
-                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-4 py-2 border border-slate-200 rounded-lg text-slate-600 font-semibold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 cursor-pointer whitespace-nowrap"
                 >
                   Save Changes
                 </button>

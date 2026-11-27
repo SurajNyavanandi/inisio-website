@@ -10,12 +10,12 @@ import {
   updateLeadProgress,
 } from '../controllers/leadController.js';
 import { authenticateUser, authorizeRoles, restrictSuperAdminViewer, optionalAuth } from '../middleware/authMiddleware.js';
-import { validateBody, validateIndianPhone } from '../middleware/validateMiddleware.js';
+import { validateSchema, leadCreateSchema, validateIndianPhone } from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
 // Public submission
-router.post('/', optionalAuth, validateBody(['fullName', 'mobile', 'email']), validateIndianPhone('mobile'), createLead);
+router.post('/', optionalAuth, validateSchema(leadCreateSchema), validateIndianPhone('mobile'), createLead);
 
 // Lead retrieval & management (Authenticated - scoped by role: Admins, CAs, DPR, Prosync, or own leads for user)
 router.get('/', authenticateUser, getLeads);

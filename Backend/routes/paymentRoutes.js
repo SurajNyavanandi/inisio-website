@@ -8,6 +8,11 @@ import {
   handleWebhook,
 } from '../controllers/paymentController.js';
 import { authenticateUser, optionalAuth } from '../middleware/authMiddleware.js';
+import {
+  validateSchema,
+  createOrderSchema,
+  verifyPaymentSchema,
+} from '../middleware/validateMiddleware.js';
 
 const router = express.Router();
 
@@ -15,10 +20,10 @@ const router = express.Router();
 router.get('/config', getGatewayConfig);
 
 // Create checkout order
-router.post('/create-order', optionalAuth, createCheckoutOrder);
+router.post('/create-order', optionalAuth, validateSchema(createOrderSchema), createCheckoutOrder);
 
 // Verify signature and fulfill payment
-router.post('/verify-signature', optionalAuth, verifyPaymentSignature);
+router.post('/verify-signature', optionalAuth, validateSchema(verifyPaymentSchema), verifyPaymentSignature);
 
 // Payment history (Authenticated - strictly scoped by user or admin)
 router.get('/history', authenticateUser, getPaymentHistory);

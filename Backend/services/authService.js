@@ -31,6 +31,7 @@ import {
   isAdminTestPasswordMatch,
 } from '../utils/memoryUserStore.js';
 import { generateOtp, verifyOtpCode } from '../utils/otpService.js';
+import { maskEmail } from '../utils/privacyMask.js';
 import bcrypt from 'bcryptjs';
 
 const generateUnusableRandomPassword = () => crypto.randomBytes(24).toString('hex');
@@ -224,7 +225,8 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
             isVerified: false,
             requiresVerification: true,
             otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
-            message: `A 6-digit verification code has been sent to ${cleanEmail}. Please enter it to activate your account.`,
+            maskedEmail: maskEmail(cleanEmail),
+            message: `A 6-digit verification code has been sent to ${maskEmail(cleanEmail)}. Please enter it to activate your account.`,
           };
         }
 
@@ -268,7 +270,8 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         isVerified: false,
         requiresVerification: true,
         otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
-        message: `A 6-digit verification code has been sent to ${cleanEmail}. Please enter it to activate your account.`,
+        maskedEmail: maskEmail(cleanEmail),
+        message: `A 6-digit verification code has been sent to ${maskEmail(cleanEmail)}. Please enter it to activate your account.`,
       };
     } catch (err) {
       if (err.statusCode || err.message.includes('already') || err.message.includes('valid') || err.message.includes('Password')) {
@@ -315,7 +318,8 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         isVerified: false,
         requiresVerification: true,
         otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
-        message: `Account is pending verification. A fresh 6-digit code has been sent to ${cleanEmail}.`,
+        maskedEmail: maskEmail(cleanEmail),
+        message: `Account is pending verification. A fresh 6-digit code has been sent to ${maskEmail(cleanEmail)}.`,
       };
     }
 
@@ -350,12 +354,14 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
     'We could not send your verification code right now. Please try again shortly.'
   );
 
-  const feedbackMessage = `Account created! A 6-digit verification code has been sent to ${cleanEmail}. Please enter it to activate your account.`;
+  const maskedEmail = maskEmail(cleanEmail);
+  const feedbackMessage = `Account created! A 6-digit verification code has been sent to ${maskedEmail}. Please enter it to activate your account.`;
 
   return {
     _id: newUser._id,
     name: newUser.name,
     email: newUser.email,
+    maskedEmail,
     role: newUser.role,
     company: newUser.company,
     phone: newUser.phone,
@@ -609,9 +615,11 @@ export const sendVerificationOtp = async (email) => {
     'We could not send a verification email right now. Please try again in a moment.'
   );
 
+  const maskedEmail = maskEmail(cleanEmail);
   return {
     email: cleanEmail,
-    message: `A new 6-digit verification code has been sent to ${cleanEmail}.`,
+    maskedEmail,
+    message: `A new 6-digit verification code has been sent to ${maskedEmail}.`,
     expiresIn: '15 minutes',
     otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
   };
@@ -700,7 +708,8 @@ export const loginUser = async ({ email, password, req }) => {
             isVerified: false,
             requiresVerification: true,
             otp: shouldExposeDevOtp(mailResult) ? freshOtp : undefined,
-            message: `Please verify your email first. We sent a fresh 6-digit code to ${cleanEmail}.`,
+            maskedEmail: maskEmail(cleanEmail),
+            message: `Please verify your email first. We sent a fresh 6-digit code to ${maskEmail(cleanEmail)}.`,
           };
         }
 
@@ -821,7 +830,8 @@ export const loginUser = async ({ email, password, req }) => {
       isVerified: false,
       requiresVerification: true,
       otp: shouldExposeDevOtp(mailResult) ? freshOtp : undefined,
-      message: `Please verify your email first. We sent a fresh 6-digit code to ${cleanEmail}.`,
+      maskedEmail: maskEmail(cleanEmail),
+      message: `Please verify your email first. We sent a fresh 6-digit code to ${maskEmail(cleanEmail)}.`,
     };
   }
 
@@ -1074,7 +1084,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     'We could not send the password reset email right now. Please try again in a moment.'
   );
 
-  const maskedEmail = cleanEmail.replace(/^(.{2})(.*)(@.*)$/, '$1***$3');
+  const maskedEmail = maskEmail(cleanEmail);
   return {
     message: `Password reset link and 6-digit code sent to ${maskedEmail}.`,
     email: cleanEmail,
@@ -1318,7 +1328,7 @@ export const adminLogin = async ({ email, password, req }) => {
   const isAllowedCaAdmin = isAuthorizedCaAdminGmail(cleanEmail);
 
   if (!isAllowedAdmin && !isAllowedCaAdmin) {
-    const error = new Error('Access Denied: Only authorized administrators are permitted to log in through the Admin Portal. If you are a client or promoter, please use the main website login.');
+    const error = new Error('Access Denied: This Gmail address is not an authorized administrator account.');
     error.statusCode = 403;
     throw error;
   }
@@ -1351,7 +1361,7 @@ export const adminLogin = async ({ email, password, req }) => {
       let user = await User.findOne({ email: cleanEmail }).select('+password');
       if (user && NON_ADMIN_PORTAL_ROLES.includes(user.role)) {
         const error = new Error(
-          'Access Denied: Only authorized administrators are permitted to log in through the Admin Portal. If you are a client or promoter, please use the main website login.'
+          'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
         );
         error.statusCode = 403;
         throw error;
@@ -1445,7 +1455,7 @@ export const adminLogin = async ({ email, password, req }) => {
   let memUser = findMemoryUserByEmail(cleanEmail);
   if (memUser && NON_ADMIN_PORTAL_ROLES.includes(memUser.role)) {
     const error = new Error(
-      'Access Denied: Only authorized administrators are permitted to log in through the Admin Portal. If you are a client or promoter, please use the main website login.'
+      'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
     );
     error.statusCode = 403;
     throw error;

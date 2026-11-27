@@ -7,8 +7,9 @@
 }
 
 @layer base {
-  html, body {
-    -webkit-tap-highlight-color: transparent;
+  html,
+  body {
+    overflow-x: clip;
   }
 
   body {

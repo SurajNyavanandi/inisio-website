@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Check, Crown, ShieldCheck, Zap, ArrowRight, Star } from 'lucide-react';
+import { X, Check, Crown } from 'lucide-react';
 import { AuthUser } from '../types';
+import { MEMBERSHIP_PLAN_TIERS, hasActivePaidMembership } from '../utils/membershipStore';
 
 interface MembershipPlansModalProps {
   isOpen: boolean;
@@ -17,140 +18,128 @@ export const MembershipPlansModal: React.FC<MembershipPlansModalProps> = ({
   currentUser,
   onOpenAuth,
   onOpenConsultation,
-  initialReason
+  initialReason,
 }) => {
   if (!isOpen) return null;
 
-  const plans = [
-    {
-      id: 'free',
-      name: 'Standard Feasibility',
-      price: 'Free',
-      period: 'lifetime',
-      description: 'Instant institutional bankability score, preliminary DSCR test, and summary project teaser.',
-      features: [
-        'Instant Feasibility & Bankability Scoring',
-        'Preliminary DSCR & Means of Finance Breakdown',
-        'Summary Project Teaser PDF Preview',
-        'Access to Sector Benchmark Guidelines'
-      ],
-      current: true,
-      buttonText: 'Current Plan'
-    },
-    {
-      id: 'pro',
-      name: 'Institutional DPR & CMA',
-      price: '₹ 45,000',
-      period: 'per project',
-      description: 'Comprehensive 85-page bankable DPR, 7-year detailed CMA data, and direct CA sign-off.',
-      features: [
-        'Complete 80+ Page Bank-Ready DPR (DOCX & PDF)',
-        '7-Year Audited CMA Model with Sensitivity Analysis',
-        'Chartered Accountant (CA/CMA) Review & Ratio Sign-off',
-        'Subsidy & Incentive Claim Roadmap',
-        'Techno-Economic Viability (TEV) Checklist'
-      ],
-      popular: true,
-      buttonText: 'Request Institutional Plan'
-    },
-    {
-      id: 'enterprise',
-      name: 'Full Debt Syndication',
-      price: 'Custom / Retainer',
-      period: 'success-aligned',
-      description: 'End-to-end debt structuring, multi-bank committee presentation, and sanction letter facilitation.',
-      features: [
-        'Everything in Institutional DPR & CMA',
-        'Direct Liaison with Empaneled PSU & Private Banks',
-        'Credit Committee Query Resolution Support',
-        'Collateral Optimization & Interest Subvention Structuring',
-        'Dedicated Senior Banking Advisor & Partner Desk'
-      ],
-      buttonText: 'Consult Partner Desk'
-    }
-  ];
+  const isPaid = hasActivePaidMembership(currentUser);
+  const currentTier = String(
+    (currentUser as any)?.membershipTier || currentUser?.membershipPlan || ''
+  )
+    .trim()
+    .toLowerCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs font-inter overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-white rounded-3xl p-6 sm:p-10 shadow-2xl border border-slate-200 my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs font-inter">
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div className="relative z-10 w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-2xl border border-slate-200">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+          aria-label="Close membership plans"
+          className="absolute top-3 right-3 sm:top-5 sm:right-5 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="text-center max-w-2xl mx-auto mb-10 space-y-2">
+        <div className="text-center max-w-xl mx-auto mb-6 sm:mb-8 pt-2 sm:pt-0 space-y-2 pr-6 sm:pr-0">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
             <Crown className="w-3.5 h-3.5" />
-            <span>Advisory &amp; Syndication Tiers</span>
+            <span>Simple &amp; Affordable Plans</span>
           </div>
-          <h2 className="font-manrope text-2xl sm:text-3xl font-extrabold text-slate-900">
-            Institutional Debt Syndication Services
+          <h2 className="font-manrope text-xl sm:text-3xl font-extrabold text-slate-900">
+            Choose Your Assessment Plan
           </h2>
           <p className="text-xs sm:text-sm text-slate-500">
-            {initialReason || 'Select an advisory tier to accelerate your greenfield project credit sanction.'}
+            {initialReason || 'Transparent, everyday Indian pricing built for individual founders and growing MSMEs.'}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {plans.map((p) => (
-            <div
-              key={p.id}
-              className={`rounded-2xl p-6 flex flex-col justify-between transition-all ${
-                p.popular
-                  ? 'border-2 border-blue-600 bg-blue-50/20 shadow-md relative'
-                  : 'border border-slate-200 bg-white hover:border-slate-300'
-              }`}
-            >
-              {p.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-extrabold uppercase px-3 py-0.5 rounded-full tracking-wider">
-                  Most Recommended
-                </span>
-              )}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+          {MEMBERSHIP_PLAN_TIERS.map((plan) => {
+            const isCurrentFree = plan.id === 'free_starter' && !isPaid;
+            const isCurrentPaid =
+              plan.id !== 'free_starter' &&
+              currentTier !== '' &&
+              (currentTier === plan.name.toLowerCase() || currentTier === plan.id);
+            const isCurrent = isCurrentFree || isCurrentPaid;
 
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-manrope font-bold text-lg text-slate-900">{p.name}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{p.description}</p>
-                </div>
+            const handlePlanClick = () => {
+              if (plan.id === 'free_starter') {
+                if (!currentUser && onOpenAuth) {
+                  onClose();
+                  onOpenAuth('signup');
+                  return;
+                }
+                onClose();
+                return;
+              }
+              if (onOpenConsultation) {
+                onOpenConsultation();
+              } else if (!currentUser && onOpenAuth) {
+                onOpenAuth('signup');
+              }
+              onClose();
+            };
 
-                <div className="pt-2 border-t border-slate-100">
-                  <div className="flex items-baseline gap-1">
-                    <span className="font-manrope text-2xl sm:text-3xl font-black text-slate-900">{p.price}</span>
-                    <span className="text-xs text-slate-400">/{p.period}</span>
+            return (
+              <div
+                key={plan.id}
+                className={`rounded-2xl p-5 sm:p-6 flex flex-col justify-between transition-all ${
+                  plan.popular
+                    ? 'border-2 border-blue-600 bg-blue-50/20 shadow-md relative'
+                    : 'border border-slate-200 bg-white hover:border-slate-300'
+                }`}
+              >
+                {plan.popular && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-extrabold uppercase px-3 py-0.5 rounded-full tracking-wider whitespace-nowrap">
+                    Most Popular
+                  </span>
+                )}
+
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-manrope font-bold text-lg text-slate-900">{plan.name}</h3>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">{plan.description}</p>
                   </div>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-manrope text-2xl sm:text-3xl font-black text-slate-900">
+                        {plan.priceLabel}
+                      </span>
+                      <span className="text-xs text-slate-500">/{plan.period}</span>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-2.5 pt-1 text-xs text-slate-600">
+                    {plan.features.map((feature, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
-                <ul className="space-y-2.5 pt-2 text-xs text-slate-600">
-                  {p.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="pt-5 mt-4">
+                  <button
+                    type="button"
+                    onClick={handlePlanClick}
+                    className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        : plan.popular
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        : 'bg-slate-900 hover:bg-slate-800 text-white'
+                    }`}
+                  >
+                    {isCurrent ? 'Current Plan' : plan.buttonText}
+                  </button>
+                </div>
               </div>
-
-              <div className="pt-6 mt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (onOpenConsultation) onOpenConsultation();
-                    onClose();
-                  }}
-                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    p.popular
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white'
-                  }`}
-                >
-                  {p.buttonText}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

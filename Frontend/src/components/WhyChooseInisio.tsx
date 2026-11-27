@@ -15,14 +15,17 @@ import { Reveal, StaggerGroup, StaggerItem } from './ui/MotionPrimitives';
 interface WhyChooseInisioProps {
   onOpenAssessment?: () => void;
   onOpenConsultation?: () => void;
+  onNavigateToPage?: (tab: string) => void;
   isStandalone?: boolean;
 }
 
 export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
   onOpenAssessment,
   onOpenConsultation,
+  onNavigateToPage,
   isStandalone = false,
 }) => {
+  const CardHeading = isStandalone ? 'h2' : 'h3';
   return (
     <section className="py-16 sm:py-24 bg-slate-50/60 relative font-inter overflow-hidden border-t border-slate-200/80">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-14 sm:space-y-16">
@@ -66,9 +69,9 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                     Bank-Grade DPR &amp; CMA Financial Modeling
-                  </h3>
+                  </CardHeading>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Lenders scrutinize capex structure, sensitivity margins, and debt service coverage capacity (DSCR). We prepare credit-grade Detailed Project Reports (DPR) and CMA data aligned strictly with PSU &amp; Private commercial bank norms.
                   </p>
@@ -121,9 +124,9 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                     Multi-Bank Syndication Liaison
-                  </h3>
+                  </CardHeading>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Instead of single-bank dependency, we connect your project to an active network of 30+ leading PSU banks, private institutions, and specialized clean-tech infrastructure funds (IREDA, REC, PFC, SIDBI).
                   </p>
@@ -168,9 +171,9 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                     Transparent Promoter Tracking Desk
-                  </h3>
+                  </CardHeading>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Track every stage of your project finance lifecycle through a real-time dashboard. Receive live updates on technical appraisals, CA sign-offs, document compliance, and lender reviews.
                   </p>
@@ -208,9 +211,9 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
                     Capital Structuring &amp; State/Central Subsidies
-                  </h3>
+                  </CardHeading>
                   <p className="text-sm text-slate-600 leading-relaxed">
                     Optimize your capital outlays through eligible central and state incentives, including PMKSY, PM-KUSUM, TUFS textile schemes, interest subventions, and capital investment subsidies (up to 35%–50%).
                   </p>
@@ -258,6 +261,11 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
         {/* 2. Structured Process Narrative Strip */}
         <Reveal>
           <div className="rounded-3xl bg-slate-950 bg-section-grid-dark text-white p-6 sm:p-10 border border-slate-800 shadow-[0_20px_50px_-20px_rgba(15,23,42,0.4)]">
+            {isStandalone && (
+              <h2 className="sr-only">
+                Four-Stage Institutional Project Appraisal and Loan Sanction Process
+              </h2>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 lg:gap-8 text-left">
               <div className="space-y-2 border-b md:border-b-0 md:border-r border-slate-800 pb-5 md:pb-0 md:pr-6">
                 <span className="font-manrope text-xs font-bold text-blue-400 tabular-nums">
@@ -339,6 +347,55 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
             </div>
           </div>
         </Reveal>
+
+        {isStandalone && onNavigateToPage && (
+          <nav aria-label="Related advisory pages" className="pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+            {onOpenAssessment && (
+              <a
+                href="/assessment"
+                onClick={(e) => { e.preventDefault(); onOpenAssessment(); }}
+                className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                Free Bankability Scorecard
+              </a>
+            )}
+            <a
+              href="/how-it-works"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('how-it-works'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              6-Step Funding Process
+            </a>
+            <a
+              href="/industries"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('industries'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Explore Priority Sectors
+            </a>
+            <a
+              href="/blogs"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('blogs'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Advisory Blogs &amp; Research
+            </a>
+            <a
+              href="/faq"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('faq'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Greenfield Funding FAQs
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('contact'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Contact Hyderabad Advisory Desk
+            </a>
+          </nav>
+        )}
       </div>
     </section>
   );

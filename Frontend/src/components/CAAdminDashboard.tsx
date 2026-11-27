@@ -25,11 +25,12 @@ import {
   EyeOff,
   KeyRound,
   RotateCw,
-  X,
-  Scan,
+  Crop,
 } from 'lucide-react';
 import { resolveApiUrl } from '../utils/apiClient';
 import { isValidGmail, validateCaAdminEmail } from '../config/adminAccess';
+import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
+import { VisitingCardCropper } from './VisitingCardCropper';
 import {
   scanBusinessCardLocally,
   rotateImageDataUrl,
@@ -48,9 +49,11 @@ import {
 import { CaActivationModal } from './CaActivationModal';
 import { DashboardLayout } from './dashboard/DashboardLayout';
 import {
+  DashboardBottomSheet,
   DashboardCard,
   DashboardCardHeader,
   DashboardEmptyState,
+  DashboardFilterButton,
   DashboardKpiCard,
   DashboardSearchInput,
   DashboardStatusBadge,
@@ -66,6 +69,52 @@ interface CAAdminDashboardProps {
 type CAAdminTab = 'card-registration' | 'reporting' | 'email-templates';
 
 const STORAGE_KEY_CA_ADMIN_SESSION = 'inisio_ca_admin_session';
+
+const escapePreviewHtml = (value: string): string =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const renderEmailTemplatePreview = (
+  subjectTpl: string,
+  htmlTpl: string,
+  vars: {
+    name: string;
+    firmName: string;
+    email: string;
+    claimUrl: string;
+    loginUrl: string;
+    sourceTag: string;
+    expiryDays: string;
+  }
+) => {
+  const apply = (tpl: string, isHtml: boolean) => {
+    const v = (s: string) => (isHtml ? escapePreviewHtml(s) : s);
+    return String(tpl || '')
+      .replace(/\{\{\s*name\s*\}\}|\{\s*name\s*\}/gi, v(vars.name))
+      .replace(/\{\{\s*firmName\s*\}\}|\{\s*firmName\s*\}/gi, v(vars.firmName))
+      .replace(/\{\{\s*email\s*\}\}|\{\s*email\s*\}/gi, v(vars.email))
+      .replace(/\{\{\s*claimUrl\s*\}\}|\{\s*claimUrl\s*\}/gi, v(vars.claimUrl))
+      .replace(/\{\{\s*loginUrl\s*\}\}|\{\s*loginUrl\s*\}/gi, v(vars.loginUrl))
+      .replace(/\{\{\s*sourceTag\s*\}\}|\{\s*sourceTag\s*\}/gi, v(vars.sourceTag))
+      .replace(/\{\{\s*expiryDays\s*\}\}|\{\s*expiryDays\s*\}/gi, v(vars.expiryDays));
+  };
+
+  const renderedSubject = apply(subjectTpl, false);
+  const renderedHtml = apply(htmlTpl, true);
+  const unresolvedMatches = [
+    ...(renderedSubject.match(/\{\{[^}]+\}\}/g) || []),
+    ...(renderedHtml.match(/\{\{[^}]+\}\}/g) || []),
+  ];
+  return {
+    subject: renderedSubject,
+    html: renderedHtml,
+    unresolvedPlaceholders: Array.from(new Set(unresolvedMatches)),
+  };
+};
 
 export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   user,
@@ -106,8 +155,11 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   const [loading, setLoading] = useState(false);
 
   const [registrationStep, setRegistrationStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [rawCardImage, setRawCardImage] = useState<string>('');
+  const [showCropper, setShowCropper] = useState<boolean>(false);
   const [cardImagePreview, setCardImagePreview] = useState<string>('');
   const [cardFileName, setCardFileName] = useState<string>('');
+  const [showEmailPreviewPane, setShowEmailPreviewPane] = useState<boolean>(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -135,66 +187,9 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   const [profileSubmitError, setProfileSubmitError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
 
-  // Mobile Live Viewfinder Camera State & Handlers
-  const [isLiveCameraOpen, setIsLiveCameraOpen] = useState(false);
-  const liveVideoRef = useRef<HTMLVideoElement>(null);
-  const liveStreamRef = useRef<MediaStream | null>(null);
-
-  const startLiveCamera = async () => {
-    setOcrError('');
-    setIsLiveCameraOpen(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-      });
-      liveStreamRef.current = stream;
-      if (liveVideoRef.current) {
-        liveVideoRef.current.srcObject = stream;
-        await liveVideoRef.current.play();
-      }
-    } catch (err) {
-      console.warn('Live camera stream not supported or rejected, falling back to camera input:', err);
-      stopLiveCamera();
-      cameraInputRef.current?.click();
-    }
-  };
-
-  const stopLiveCamera = () => {
-    if (liveStreamRef.current) {
-      liveStreamRef.current.getTracks().forEach((track) => track.stop());
-      liveStreamRef.current = null;
-    }
-    setIsLiveCameraOpen(false);
-  };
-
-  const captureLiveFrame = () => {
-    if (!liveVideoRef.current) return;
-    const video = liveVideoRef.current;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    stopLiveCamera();
-    setCardImagePreview(dataUrl);
-    setCardFileName(`mobile-card-${Date.now()}.jpg`);
-    setScanMode('auto');
-    setAlternatePhones([]);
-    triggerOcrExtraction(dataUrl, 'auto');
-  };
-
   useEffect(() => {
     return () => {
       void terminateCardOcrWorker();
-      if (liveStreamRef.current) {
-        liveStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
     };
   }, []);
 
@@ -214,6 +209,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   const [profileSearch, setProfileSearch] = useState('');
   const [profileStatusFilter, setProfileStatusFilter] = useState('ALL');
   const [profileTagFilter, setProfileTagFilter] = useState('ALL');
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
 
   const [emailTemplates, setEmailTemplates] = useState<any>(null);
   const [editingTemplateType, setEditingTemplateType] = useState<'claimInvitation' | 'activationConfirmation'>('claimInvitation');
@@ -261,21 +257,20 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   }, [caAdminSession]);
 
   useEffect(() => {
-    if (activeTab === 'email-templates' && caAdminSession) {
-      fetch(resolveApiUrl('/ca-admin/templates'), { headers: getAuthHeaders(false) })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.success && data.data) {
-            setEmailTemplates(data.data);
-            const activeTpl = data.data[editingTemplateType];
-            if (activeTpl) {
-              setTemplateSubject(activeTpl.subject || '');
-              setTemplateHtml(activeTpl.html || activeTpl.body || '');
-            }
+    if (!caAdminSession) return;
+    fetch(resolveApiUrl('/ca-admin/templates'), { headers: getAuthHeaders(false) })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.data) {
+          setEmailTemplates(data.data);
+          const activeTpl = data.data[editingTemplateType];
+          if (activeTpl) {
+            setTemplateSubject(activeTpl.subject || '');
+            setTemplateHtml(activeTpl.html || activeTpl.body || '');
           }
-        })
-        .catch(() => {});
-    }
+        }
+      })
+      .catch(() => {});
   }, [activeTab, editingTemplateType, caAdminSession]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -348,7 +343,10 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
-        setLoginSuccess(data.message || `A 6-digit password reset code has been sent to ${clean}.`);
+        const maskedNotice = data.message
+          ? maskEmailsInText(data.message)
+          : `A 6-digit password reset code has been sent to ${maskEmail(clean)}.`;
+        setLoginSuccess(maskedNotice);
         setResendCooldown(30);
         setAuthView('reset');
       } else {
@@ -440,12 +438,21 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
         setOcrError('Image could not be loaded. Please try again or fill the form manually.');
         return;
       }
-      setCardImagePreview(result);
+      setRawCardImage(result);
+      setCardImagePreview('');
+      setShowCropper(true);
       setScanMode('auto');
       setAlternatePhones([]);
-      triggerOcrExtraction(result, 'auto');
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleConfirmCropAndScan = (croppedDataUrl: string) => {
+    setShowCropper(false);
+    setCardImagePreview(croppedDataUrl);
+    setScanMode('auto');
+    setAlternatePhones([]);
+    triggerOcrExtraction(croppedDataUrl, 'auto');
   };
 
   const triggerOcrExtraction = async (imageData: string, modeOverride?: CardOcrMode) => {
@@ -703,6 +710,14 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
       });
       const data = await res.json();
       if (data.success) {
+        setEmailTemplates((prev: any) => ({
+          ...(prev || {}),
+          [editingTemplateType]: {
+            ...(prev?.[editingTemplateType] || {}),
+            subject: templateSubject,
+            html: templateHtml,
+          },
+        }));
         setTemplateSavedBanner(true);
         setTimeout(() => setTemplateSavedBanner(false), 3000);
       }
@@ -1006,12 +1021,14 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
   }
 
   const navItems = [
-    { id: 'card-registration' as CAAdminTab, label: 'Card Registration', icon: CreditCard },
-    { id: 'reporting' as CAAdminTab, label: 'Profiles & Tag Reporting', icon: LayoutDashboard, count: allProfiles.length },
-    { id: 'email-templates' as CAAdminTab, label: 'Email Templates', icon: Mail },
+    { id: 'card-registration' as CAAdminTab, label: 'Card Registration', mobileLabel: 'Card Scan', icon: CreditCard },
+    { id: 'reporting' as CAAdminTab, label: 'Profiles & Tag Reporting', mobileLabel: 'Reporting', icon: LayoutDashboard, count: allProfiles.length },
+    { id: 'email-templates' as CAAdminTab, label: 'Email Templates', mobileLabel: 'Templates', icon: Mail },
   ];
 
   const uniqueTags = Array.from(new Set(allProfiles.map((p) => p.sourceTag).filter(Boolean)));
+  const activeFilterCount =
+    (profileStatusFilter !== 'ALL' ? 1 : 0) + (profileTagFilter !== 'ALL' ? 1 : 0);
 
   const filteredProfiles = allProfiles.filter((p) => {
     if (profileStatusFilter !== 'ALL' && (p.status || '').toLowerCase() !== profileStatusFilter.toLowerCase()) {
@@ -1039,6 +1056,121 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
     'email-templates': 'Email Notification Templates',
   };
 
+  const renderMobileStickyAction = () => {
+    if (activeTab === 'card-registration') {
+      if (registrationStep === 1 && !showCropper) {
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex-1 min-h-[44px] px-3 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Camera className="w-4 h-4 shrink-0" />
+              <span>Capture from Camera</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="min-h-[44px] px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <Upload className="w-4 h-4 shrink-0" />
+              <span>Upload</span>
+            </button>
+          </div>
+        );
+      }
+      if (registrationStep === 2) {
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setRegistrationStep(1)}
+              className="min-h-[44px] px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer shrink-0"
+            >
+              Back
+            </button>
+            <button
+              type="submit"
+              form="ca-card-review-form"
+              disabled={loading}
+              className="flex-1 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {loading ? 'Saving Profile...' : 'Save as Pending Profile'}
+            </button>
+          </div>
+        );
+      }
+      if (registrationStep === 3 && createdProfile) {
+        return (
+          <button
+            type="button"
+            onClick={() => handleDispatchClaimInvitation(createdProfile._id || createdProfile.id)}
+            disabled={claimDispatchLoading}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <Send className="w-4 h-4 shrink-0" />
+            <span>{claimDispatchLoading ? 'Dispatching...' : 'Verified — Send Claim Invitation Email'}</span>
+          </button>
+        );
+      }
+      if (registrationStep === 4 && claimDispatchResult) {
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              setRegistrationStep(1);
+              setRawCardImage('');
+              setShowCropper(false);
+              setCardImagePreview('');
+              setCardFileName('');
+              setAlternatePhones([]);
+              setScanMode('auto');
+              setCreatedProfile(null);
+              setClaimDispatchResult(null);
+            }}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2"
+          >
+            <CreditCard className="w-4 h-4 shrink-0" />
+            <span>Scan Another Card</span>
+          </button>
+        );
+      }
+      return undefined;
+    }
+
+    if (activeTab === 'reporting') {
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab('card-registration');
+            setRegistrationStep(1);
+          }}
+          className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2"
+        >
+          <CreditCard className="w-4 h-4 shrink-0" />
+          <span>Scan Visiting Card</span>
+        </button>
+      );
+    }
+
+    if (activeTab === 'email-templates') {
+      return (
+        <button
+          type="button"
+          onClick={handleSaveTemplate}
+          disabled={templateSaving}
+          className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <Save className="w-4 h-4 shrink-0" />
+          <span>{templateSaving ? 'Saving...' : 'Save Template Updates'}</span>
+        </button>
+      );
+    }
+    return undefined;
+  };
+
   return (
     <>
       <DashboardLayout
@@ -1051,40 +1183,31 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
         activeTab={activeTab}
         onSelectTab={(tab) => setActiveTab(tab as CAAdminTab)}
         pageTitle={pageTitles[activeTab]}
+        pageBreadcrumb={activeTab !== 'card-registration' ? 'Card Registration' : undefined}
+        showBackButton={activeTab !== 'card-registration'}
+        onGoBack={() => setActiveTab('card-registration')}
         onNavigateHome={onNavigateHome}
         homeLabel="Public Website"
         onLogout={handleSignOut}
         logoutLabel="Sign Out"
+        mobileStickyAction={renderMobileStickyAction()}
         headerActions={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('card-registration');
-                setRegistrationStep(1);
-                setTimeout(() => cameraInputRef.current?.click(), 80);
-              }}
-              className="sm:hidden px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors shrink-0"
-            >
-              <Camera className="w-3.5 h-3.5" />
-              <span>Scan Card</span>
-            </button>
-            <button
-              type="button"
-              onClick={fetchDashboardData}
-              disabled={loading}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={fetchDashboardData}
+            disabled={loading}
+            aria-label="Refresh"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap shrink-0 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
         }
       >
         {/* SECTION 1: BUSINESS CARD REGISTRATION */}
         {activeTab === 'card-registration' && (
-          <div className="space-y-6 w-full">
-            <DashboardCard className="p-3 sm:p-4">
+          <div className="space-y-5 sm:space-y-6 w-full">
+            <DashboardCard className="p-2.5 sm:p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                 {[
                   { num: 1, label: '1. Scan & OCR' },
@@ -1096,7 +1219,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                     key={s.num}
                     type="button"
                     onClick={() => setRegistrationStep(s.num as any)}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                    className={`min-h-[44px] sm:min-h-[38px] py-2 px-2.5 sm:px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap truncate ${
                       registrationStep === s.num
                         ? 'bg-blue-600 text-white'
                         : registrationStep > s.num
@@ -1123,18 +1246,43 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                   </p>
                 </div>
 
-                {cardImagePreview ? (
+                {showCropper && rawCardImage ? (
+                  <div className="max-w-2xl mx-auto text-left">
+                    <VisitingCardCropper
+                      imageSrc={rawCardImage}
+                      isProcessing={ocrLoading}
+                      onConfirmCrop={handleConfirmCropAndScan}
+                      onCancel={() => {
+                        setShowCropper(false);
+                        setRawCardImage('');
+                        setCardImagePreview('');
+                        setCardFileName('');
+                      }}
+                    />
+                  </div>
+                ) : cardImagePreview ? (
                   <div className="space-y-4 max-w-md mx-auto">
                     <div className="relative rounded-xl overflow-hidden border border-slate-200 max-h-56 bg-slate-950 flex items-center justify-center">
                       <img src={cardImagePreview} alt="Scanned Card Preview" className="max-h-56 object-contain" />
                     </div>
                     <div className="text-xs text-slate-500 font-medium">{cardFileName}</div>
                     <div className="flex flex-wrap items-center justify-center gap-2">
+                      {rawCardImage && (
+                        <button
+                          type="button"
+                          disabled={ocrLoading}
+                          onClick={() => setShowCropper(true)}
+                          className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                        >
+                          <Crop className="w-3.5 h-3.5" />
+                          <span>Adjust Crop</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={ocrLoading}
                         onClick={handleRotateAndRescan}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer disabled:opacity-50"
                       >
                         <RotateCw className="w-3.5 h-3.5" />
                         <span>Rotate 90&deg;</span>
@@ -1151,7 +1299,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           type="button"
                           disabled={ocrLoading}
                           onClick={() => handleScanModeChange(opt.id)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
+                          className={`min-h-[44px] sm:min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
                             scanMode === opt.id
                               ? 'bg-blue-600 text-white border-blue-600'
                               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
@@ -1164,49 +1312,28 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setRawCardImage('');
+                        setShowCropper(false);
                         setCardImagePreview('');
                         setCardFileName('');
                         setAlternatePhones([]);
                         setScanMode('auto');
                       }}
-                      className="text-xs text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+                      className="min-h-[44px] px-3 text-xs text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
                     >
                       Remove and re-scan photo
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-w-lg mx-auto pt-2">
-                    {/* Primary Mobile Camera Action Card */}
-                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                          <Camera className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-bold">Mobile Camera Scanner</div>
-                          <div className="text-xs text-blue-100">
-                            Snap visiting card from your device to auto-fill details
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <button
-                          type="button"
-                          onClick={() => cameraInputRef.current?.click()}
-                          className="flex-1 sm:flex-none px-4 py-2.5 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer text-center whitespace-nowrap"
-                        >
-                          Open Camera
-                        </button>
-                        <button
-                          type="button"
-                          onClick={startLiveCamera}
-                          className="px-3 py-2.5 bg-blue-700/80 hover:bg-blue-800 text-white font-semibold text-xs rounded-xl transition-colors cursor-pointer whitespace-nowrap border border-white/20"
-                          title="Interactive camera preview"
-                        >
-                          <Scan className="w-4 h-4 inline mr-1" />
-                          <span>Viewfinder</span>
-                        </button>
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mx-auto pt-2">
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="p-6 rounded-xl border-2 border-dashed border-blue-300 hover:border-blue-600 hover:bg-blue-50/40 transition-colors flex flex-col items-center gap-2 cursor-pointer group"
+                    >
+                      <Camera className="w-7 h-7 text-blue-600" />
+                      <span className="text-xs font-semibold text-slate-800">Capture from Camera</span>
+                      <span className="text-[11px] text-slate-500">Mobile Camera Capture</span>
                       <input
                         ref={cameraInputRef}
                         type="file"
@@ -1215,48 +1342,24 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                         onChange={handleFileSelect}
                         className="hidden"
                       />
-                    </div>
+                    </button>
 
-                    {/* Secondary Desktop / File Upload Card */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-slate-50 transition-colors flex items-center gap-3 cursor-pointer group text-left"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0">
-                          <Upload className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-slate-800">Upload from Gallery</div>
-                          <div className="text-[11px] text-slate-500">JPG, PNG, or WEBP image</div>
-                        </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileSelect}
-                          className="hidden"
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOcrError('');
-                          setRegistrationStep(2);
-                        }}
-                        className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-slate-50 transition-colors flex items-center gap-3 cursor-pointer group text-left"
-                      >
-                        <div className="w-10 h-10 rounded-lg bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center shrink-0">
-                          <CheckCircle2 className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-slate-800">Manual Entry</div>
-                          <div className="text-[11px] text-slate-500">Fill CA profile without photo</div>
-                        </div>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-600 hover:bg-slate-50 transition-colors flex flex-col items-center gap-2 cursor-pointer group"
+                    >
+                      <Upload className="w-7 h-7 text-slate-600" />
+                      <span className="text-xs font-semibold text-slate-800">Upload Card Photo</span>
+                      <span className="text-[11px] text-slate-500">PNG, JPG, or WEBP file</span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+                    </button>
                   </div>
                 )}
 
@@ -1372,14 +1475,28 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {rawCardImage && (
+                        <button
+                          type="button"
+                          disabled={ocrLoading}
+                          onClick={() => {
+                            setShowCropper(true);
+                            setRegistrationStep(1);
+                          }}
+                          className="inline-flex items-center gap-1 min-h-[44px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs sm:text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                        >
+                          <Crop className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                          <span>Re-crop</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={ocrLoading}
                         onClick={handleRotateAndRescan}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                        className="inline-flex items-center gap-1 min-h-[44px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-[11px] font-semibold cursor-pointer disabled:opacity-50"
                       >
-                        <RotateCw className="w-3 h-3" />
+                        <RotateCw className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                         <span>Rotate 90&deg;</span>
                       </button>
                       {(
@@ -1394,7 +1511,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           type="button"
                           disabled={ocrLoading}
                           onClick={() => handleScanModeChange(opt.id)}
-                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
+                          className={`min-h-[44px] sm:min-h-[34px] px-3 sm:px-2.5 py-1.5 rounded-lg text-xs sm:text-[11px] font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
                             scanMode === opt.id
                               ? 'bg-blue-600 text-white border-blue-600'
                               : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -1442,7 +1559,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                   </div>
                 )}
 
-                <form onSubmit={handleCreatePendingProfile} noValidate className="space-y-4">
+                <form id="ca-card-review-form" onSubmit={handleCreatePendingProfile} noValidate className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-slate-700">CA Full Name *</label>
@@ -1460,7 +1577,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           setCardTouched((prev) => ({ ...prev, name: true }));
                         }}
                         placeholder="e.g. Rajesh Kulkarni"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
                           shouldShowCardError('name')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1484,7 +1601,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           setCardTouched((prev) => ({ ...prev, firmName: true }));
                         }}
                         placeholder="e.g. Kulkarni & Associates"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
                           shouldShowCardError('firmName')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1513,7 +1630,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           }
                         }}
                         placeholder="ca.name@firm.in"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
                           shouldShowCardError('email')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1545,7 +1662,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           }
                         }}
                         placeholder="10-digit Indian mobile (e.g. 9876543210)"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white tabular-nums ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white tabular-nums ${
                           shouldShowCardError('phone')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1575,7 +1692,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                                   checkDuplicates(cardFormData.email, altPhone, cardFormData.membershipNumber);
                                 }
                               }}
-                              className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-[11px] font-semibold tabular-nums cursor-pointer transition-colors"
+                              className="min-h-[36px] px-2.5 py-1 rounded-md bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-semibold tabular-nums cursor-pointer transition-colors"
                             >
                               {altPhone}
                             </button>
@@ -1601,7 +1718,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           }
                         }}
                         placeholder="e.g. FCA-048291"
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white font-mono"
+                        className="w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white font-mono"
                       />
                     </div>
 
@@ -1618,7 +1735,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           setCardTouched((prev) => ({ ...prev, sourceTag: true }));
                         }}
                         placeholder="e.g. WOFA-2026, ICAI-SUMMIT-2026"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white font-mono ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white font-mono ${
                           shouldShowCardError('sourceTag')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1643,7 +1760,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           setCardTouched((prev) => ({ ...prev, city: true }));
                         }}
                         placeholder="e.g. Hyderabad"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
                           shouldShowCardError('city')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1668,7 +1785,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                           setCardTouched((prev) => ({ ...prev, state: true }));
                         }}
                         placeholder="e.g. Telangana"
-                        className={`w-full px-3.5 py-2 text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
+                        className={`w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border rounded-lg focus:outline-none focus:ring-2 focus:bg-white ${
                           shouldShowCardError('state')
                             ? 'border-rose-400 focus:ring-rose-500'
                             : 'border-slate-200 focus:ring-blue-600'
@@ -1680,18 +1797,18 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-4 flex items-center justify-end gap-3">
+                  <div className="pt-4 hidden lg:flex items-center justify-end gap-3">
                     <button
                       type="button"
                       onClick={() => setRegistrationStep(1)}
-                      className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                      className="min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
                     >
                       Back
                     </button>
                     <button
                       type="submit"
                       disabled={loading}
-                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                      className="min-h-[40px] px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                     >
                       {loading ? 'Saving Profile...' : 'Save as Pending Profile'}
                     </button>
@@ -1700,77 +1817,150 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
               </DashboardCard>
             )}
 
-            {registrationStep === 3 && createdProfile && (
-              <DashboardCard className="p-6 sm:p-8 space-y-6 text-center max-w-xl mx-auto">
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto border border-emerald-200">
-                  <CheckCircle2 className="w-6 h-6" />
-                </div>
+            {registrationStep === 3 && createdProfile && (() => {
+              const originBase =
+                typeof window !== 'undefined' ? window.location.origin : 'https://inisio.in';
+              const sampleClaimUrl = `${originBase}/?action=activate-ca&token=clm_generated_on_send`;
+              const claimTpl = emailTemplates?.claimInvitation;
+              const previewData = renderEmailTemplatePreview(
+                claimTpl?.subject || 'Claim Your Chartered Accountant Profile on Inisio ({{sourceTag}})',
+                claimTpl?.html ||
+                  `<div style="font-family:sans-serif;padding:24px;color:#1e293b;"><h2>Dear {{name}},</h2><p>Your CA profile for <strong>{{firmName}}</strong> is ready on Inisio Capital.</p><p><a href="{{claimUrl}}">Claim &amp; Activate CA Profile</a></p></div>`,
+                {
+                  name: createdProfile.name || 'Partner',
+                  firmName: createdProfile.firmName || 'Chartered Accountancy Practice',
+                  email: createdProfile.email || '',
+                  claimUrl: sampleClaimUrl,
+                  loginUrl: `${originBase}/#ca-login`,
+                  sourceTag: createdProfile.sourceTag || 'WOFA-2026',
+                  expiryDays: '7',
+                }
+              );
 
-                <div className="space-y-1">
-                  <h2 className="text-xl font-bold text-slate-900 font-manrope">Pending Profile Created</h2>
-                  <p className="text-xs text-slate-500">
-                    The CA profile has been recorded with status <strong>Pending</strong>. No active login account exists yet.
-                  </p>
-                </div>
+              return (
+                <DashboardCard className="p-5 sm:p-8 space-y-6 max-w-3xl mx-auto">
+                  <div className="text-center space-y-2">
+                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto border border-emerald-200">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900 font-manrope">
+                      Pending Profile Created — Verify Invitation Email
+                    </h2>
+                    <p className="text-xs text-slate-500 max-w-lg mx-auto">
+                      Inspect the exact invitation email content and recipient details below before sending the activation link.
+                    </p>
+                  </div>
 
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-left space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Name:</span>
-                    <span className="font-semibold text-slate-900">{createdProfile.name}</span>
+                  {/* Recipient & Profile Summary */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-500">Recipient Name:</span>
+                        <span className="font-semibold text-slate-900 text-right">{createdProfile.name}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-500">Practice / Firm:</span>
+                        <span className="font-semibold text-slate-900 text-right">
+                          {createdProfile.firmName || '—'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-500">Recipient Email:</span>
+                        <span className="font-semibold text-slate-900 text-right break-all">
+                          {createdProfile.email}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 sm:border-l sm:border-slate-200 sm:pl-4">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-slate-500">Reference Tag:</span>
+                        <span className="font-semibold text-blue-700 font-mono">{createdProfile.sourceTag}</span>
+                      </div>
+                      <div className="flex justify-between gap-2 items-center">
+                        <span className="text-slate-500">Status:</span>
+                        <DashboardStatusBadge status="Pending" />
+                      </div>
+                      <div className="flex justify-between gap-2 items-center">
+                        <span className="text-slate-500">Template Check:</span>
+                        {previewData.unresolvedPlaceholders.length === 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            All fields verified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Check: {previewData.unresolvedPlaceholders.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Firm:</span>
-                    <span className="font-semibold text-slate-900">{createdProfile.firmName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Email:</span>
-                    <span className="font-semibold text-slate-900">{createdProfile.email}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Conference Tag:</span>
-                    <span className="font-semibold text-blue-700 font-mono">{createdProfile.sourceTag}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500">Status:</span>
-                    <DashboardStatusBadge status="Pending" />
-                  </div>
-                </div>
 
-                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleDispatchClaimInvitation(createdProfile._id || createdProfile.id)}
-                    disabled={claimDispatchLoading}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {claimDispatchLoading ? 'Dispatching...' : 'Send Claim Invitation Email'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRegistrationStep(1);
-                      setCardImagePreview('');
-                      setCardFileName('');
-                      setAlternatePhones([]);
-                      setScanMode('auto');
-                      setCreatedProfile(null);
-                      setClaimDispatchResult(null);
-                    }}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Camera className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Scan Another Card</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('reporting')}
-                    className="w-full sm:w-auto px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer"
-                  >
-                    View in Reporting Table
-                  </button>
-                </div>
-              </DashboardCard>
-            )}
+                  {/* Inline Rendered Email Preview */}
+                  <div className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                          Email Preview Before Dispatch
+                        </div>
+                        <div className="text-xs font-semibold text-slate-900 truncate">
+                          Subject: {previewData.subject}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('email-templates')}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 rounded-lg border border-blue-200 cursor-pointer"
+                        >
+                          Edit Template
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowEmailPreviewPane((prev) => !prev)}
+                          className="px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-200/70 rounded-lg border border-slate-200 cursor-pointer"
+                        >
+                          {showEmailPreviewPane ? 'Hide Preview' : 'Show Preview'}
+                        </button>
+                      </div>
+                    </div>
+                    {showEmailPreviewPane && (
+                      <div className="bg-slate-100 p-2 sm:p-3">
+                        <iframe
+                          title="Claim Invitation Email Preview"
+                          sandbox=""
+                          srcDoc={previewData.html}
+                          className="w-full h-[360px] sm:h-[420px] bg-white rounded-lg border border-slate-200"
+                        />
+                        <p className="text-[11px] text-slate-500 mt-2 px-1">
+                          A unique 7-day activation link will be generated automatically when you click Send Claim Invitation Email.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-1 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleDispatchClaimInvitation(createdProfile._id || createdProfile.id)}
+                      disabled={claimDispatchLoading}
+                      className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{claimDispatchLoading ? 'Dispatching...' : 'Verified — Send Claim Invitation Email'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('reporting')}
+                      className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg cursor-pointer"
+                    >
+                      View in Reporting Table
+                    </button>
+                  </div>
+                </DashboardCard>
+              );
+            })()}
 
             {registrationStep === 4 && claimDispatchResult && (
               <DashboardCard className="p-6 sm:p-8 space-y-6 text-center max-w-xl mx-auto">
@@ -1839,8 +2029,8 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
 
         {/* SECTION 2: CA PROFILES & CONFERENCE TAG REPORTING */}
         {activeTab === 'reporting' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-5 sm:space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <DashboardKpiCard
                 label="Total CA Profiles"
                 value={sourceTagReports.totals?.totalProfiles || allProfiles.length}
@@ -1877,7 +2067,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
               />
             </div>
 
-            <DashboardCard className="p-5 sm:p-6 space-y-4">
+            <DashboardCard className="p-4 sm:p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                 <h2 className="text-sm font-bold text-slate-900 font-manrope">Profiles by Conference Tag</h2>
                 <span className="text-xs text-slate-500 tabular-nums">Total tags: {uniqueTags.length}</span>
@@ -1888,12 +2078,12 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                   No conference tags registered yet. Tag names set during business card scan (e.g. <code>WOFA-2026</code>) will appear here.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                   {uniqueTags.map((tag) => {
                     const tagProfiles = allProfiles.filter((p) => p.sourceTag === tag);
                     const activated = tagProfiles.filter((p) => p.status === 'activated').length;
                     return (
-                      <div key={tag} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                      <div key={tag} className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 font-mono">
                             {tag}
@@ -1918,42 +2108,128 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                 title="CA Profiles Directory"
                 description="Listing of all CA profiles created via visiting card registration. Filter by status or conference tag."
                 actions={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={profileStatusFilter}
-                      onChange={(e) => setProfileStatusFilter(e.target.value)}
-                      className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium text-slate-800"
-                    >
-                      <option value="ALL">All Statuses</option>
-                      <option value="pending">Pending</option>
-                      <option value="invited">Invited</option>
-                      <option value="activated">Activated</option>
-                    </select>
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    {/* Mobile Filter Bottom Sheet Trigger */}
+                    <div className="md:hidden flex items-center gap-2 w-full">
+                      <DashboardSearchInput
+                        value={profileSearch}
+                        onChange={setProfileSearch}
+                        placeholder="Search CA profiles..."
+                        className="flex-1"
+                      />
+                      <DashboardFilterButton
+                        onClick={() => setIsFilterSheetOpen(true)}
+                        activeCount={activeFilterCount}
+                      />
+                    </div>
 
-                    <select
-                      value={profileTagFilter}
-                      onChange={(e) => setProfileTagFilter(e.target.value)}
-                      className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium text-slate-800"
-                    >
-                      <option value="ALL">All Tags</option>
-                      {uniqueTags.map((tag) => (
-                        <option key={tag} value={tag}>
-                          {tag}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Desktop Inline Filters */}
+                    <div className="hidden md:flex flex-wrap items-center gap-2">
+                      <select
+                        value={profileStatusFilter}
+                        onChange={(e) => setProfileStatusFilter(e.target.value)}
+                        className="min-h-[40px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium text-slate-800"
+                      >
+                        <option value="ALL">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="invited">Invited</option>
+                        <option value="activated">Activated</option>
+                      </select>
 
-                    <DashboardSearchInput
-                      value={profileSearch}
-                      onChange={setProfileSearch}
-                      placeholder="Search CA profiles..."
-                      className="sm:w-48"
-                    />
+                      <select
+                        value={profileTagFilter}
+                        onChange={(e) => setProfileTagFilter(e.target.value)}
+                        className="min-h-[40px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium text-slate-800"
+                      >
+                        <option value="ALL">All Tags</option>
+                        {uniqueTags.map((tag) => (
+                          <option key={tag} value={tag}>
+                            {tag}
+                          </option>
+                        ))}
+                      </select>
+
+                      <DashboardSearchInput
+                        value={profileSearch}
+                        onChange={setProfileSearch}
+                        placeholder="Search CA profiles..."
+                        className="sm:w-48"
+                      />
+                    </div>
                   </div>
                 }
               />
 
-              <div className={DASHBOARD_TABLE.wrapper}>
+              {/* Mobile Stacked Cards */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {filteredProfiles.length === 0 ? (
+                  <DashboardEmptyState
+                    icon={CreditCard}
+                    title="No CA profiles yet"
+                    description="Scan and register visiting cards in the Card Registration tab to populate profiles and track conference tags here."
+                  />
+                ) : (
+                  filteredProfiles.map((p) => {
+                    const statusLower = (p.status || '').toLowerCase();
+                    return (
+                      <div key={p._id || p.id} className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 text-sm">{p.name}</div>
+                            <div className="text-xs text-slate-600 mt-0.5">{p.firmName}</div>
+                            <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                              {p.membershipNumber || 'Reg Pending'}
+                            </div>
+                          </div>
+                          <DashboardStatusBadge status={p.status || 'Pending'} />
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>{p.city ? `${p.city}, ${p.state || 'India'}` : 'India'}</span>
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 font-mono">
+                            {p.sourceTag || 'WOFA-2026'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <span className="text-[11px] text-slate-500 tabular-nums">
+                            {p.claimedAt
+                              ? new Date(p.claimedAt).toLocaleDateString()
+                              : p.createdAt
+                              ? new Date(p.createdAt).toLocaleDateString()
+                              : 'Recent'}
+                          </span>
+                          {statusLower === 'pending' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDispatchClaimInvitation(p._id || p.id)}
+                              className="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors cursor-pointer text-xs whitespace-nowrap"
+                            >
+                              Send Invite
+                            </button>
+                          ) : statusLower === 'invited' || statusLower === 'claimed' ? (
+                            <button
+                              type="button"
+                              onClick={() => setTestClaimToken(p.claimToken)}
+                              className="min-h-[44px] px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg transition-colors cursor-pointer text-xs whitespace-nowrap"
+                            >
+                              Test Claim
+                            </button>
+                          ) : (
+                            <span className="text-xs font-semibold text-emerald-600">Active</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Table */}
+              <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
                 <table className={DASHBOARD_TABLE.table}>
                   <thead className={DASHBOARD_TABLE.thead}>
                     <tr>
@@ -2039,6 +2315,64 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                 </table>
               </div>
             </DashboardCard>
+
+            {/* Mobile Filter Bottom Sheet */}
+            <DashboardBottomSheet
+              open={isFilterSheetOpen}
+              onClose={() => setIsFilterSheetOpen(false)}
+              title="Filter CA Profiles"
+              description="Filter by status or conference tag."
+              footer={
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileStatusFilter('ALL');
+                      setProfileTagFilter('ALL');
+                    }}
+                    className="min-h-[44px] px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-semibold cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterSheetOpen(false)}
+                    className="flex-1 min-h-[44px] px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold cursor-pointer"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              }
+            >
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 block">Status</label>
+                <select
+                  value={profileStatusFilter}
+                  onChange={(e) => setProfileStatusFilter(e.target.value)}
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium text-slate-800"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="invited">Invited</option>
+                  <option value="activated">Activated</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 block">Conference Tag</label>
+                <select
+                  value={profileTagFilter}
+                  onChange={(e) => setProfileTagFilter(e.target.value)}
+                  className="w-full min-h-[44px] px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 font-medium text-slate-800"
+                >
+                  <option value="ALL">All Tags</option>
+                  {uniqueTags.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </DashboardBottomSheet>
           </div>
         )}
 
@@ -2053,7 +2387,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg shrink-0">
+              <div className="grid grid-cols-2 sm:flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-full sm:w-auto shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -2063,7 +2397,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       setTemplateHtml(emailTemplates.claimInvitation.html || '');
                     }
                   }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
                     editingTemplateType === 'claimInvitation'
                       ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -2080,7 +2414,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                       setTemplateHtml(emailTemplates.activationConfirmation.html || '');
                     }
                   }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`min-h-[44px] sm:min-h-[34px] px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
                     editingTemplateType === 'activationConfirmation'
                       ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -2105,7 +2439,7 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                   type="text"
                   value={templateSubject}
                   onChange={(e) => setTemplateSubject(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white font-medium"
+                  className="w-full min-h-[44px] sm:min-h-[38px] px-3.5 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white font-medium"
                 />
               </div>
 
@@ -2113,8 +2447,18 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="text-xs font-semibold text-slate-700">Email HTML Content</label>
                   <span className="text-[11px] text-slate-500">
-                    Variables: <code>&#123;name&#125;</code>, <code>&#123;firmName&#125;</code>,{' '}
-                    <code>&#123;claimUrl&#125;</code>, <code>&#123;sourceTag&#125;</code>
+                    Variables: <code>&#123;&#123;name&#125;&#125;</code>, <code>&#123;&#123;firmName&#125;&#125;</code>,{' '}
+                    <code>&#123;&#123;email&#125;&#125;</code>,{' '}
+                    {editingTemplateType === 'claimInvitation' ? (
+                      <>
+                        <code>&#123;&#123;claimUrl&#125;&#125;</code>, <code>&#123;&#123;expiryDays&#125;&#125;</code>,{' '}
+                      </>
+                    ) : (
+                      <>
+                        <code>&#123;&#123;loginUrl&#125;&#125;</code>,{' '}
+                      </>
+                    )}
+                    <code>&#123;&#123;sourceTag&#125;&#125;</code>
                   </span>
                 </div>
                 <textarea
@@ -2125,12 +2469,43 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
                 />
               </div>
 
+              {/* Live Sandboxed Preview */}
+              {(() => {
+                const samplePreview = renderEmailTemplatePreview(templateSubject, templateHtml, {
+                  name: createdProfile?.name || 'CA Rajesh Kulkarni',
+                  firmName: createdProfile?.firmName || 'Kulkarni & Associates',
+                  email: createdProfile?.email || 'ca.rajesh@example.com',
+                  claimUrl: 'https://inisio.in/?action=activate-ca&token=sample_preview_token',
+                  loginUrl: 'https://inisio.in/#ca-login',
+                  sourceTag: createdProfile?.sourceTag || 'WOFA-2026',
+                  expiryDays: '7',
+                });
+                return (
+                  <div className="space-y-2 pt-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-700">Live Rendered Preview</span>
+                      <span className="text-[11px] text-slate-500 truncate max-w-full">
+                        Subject: <strong className="text-slate-800">{samplePreview.subject}</strong>
+                      </span>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-100 p-2">
+                      <iframe
+                        title="Email Template Live Preview"
+                        sandbox=""
+                        srcDoc={samplePreview.html}
+                        className="w-full h-[340px] bg-white rounded-lg border border-slate-200"
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
               <div className="pt-2 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={handleSaveTemplate}
                   disabled={templateSaving}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+                  className="min-h-[44px] px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
                 >
                   <Save className="w-4 h-4" />
                   <span>{templateSaving ? 'Saving...' : 'Save Template Updates'}</span>
@@ -2151,98 +2526,6 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
             fetchDashboardData();
           }}
         />
-      )}
-
-      {/* Mobile Floating Action Button (FAB): One-tap visiting card scan on mobile */}
-      <button
-        type="button"
-        onClick={() => {
-          setActiveTab('card-registration');
-          setRegistrationStep(1);
-          setTimeout(() => cameraInputRef.current?.click(), 80);
-        }}
-        className="sm:hidden fixed bottom-6 right-5 z-40 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-3 rounded-full shadow-2xl shadow-blue-900/50 flex items-center gap-2 cursor-pointer transition-all border-2 border-white/90"
-        title="Scan Visiting Card from Mobile Camera"
-        aria-label="Scan Visiting Card from Mobile Camera"
-      >
-        <Camera className="w-5 h-5 shrink-0" />
-        <span className="text-xs font-bold whitespace-nowrap">Scan Card</span>
-      </button>
-
-      {/* Live Mobile Camera Viewfinder Modal */}
-      {isLiveCameraOpen && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col justify-between p-4 font-inter animate-in fade-in">
-          {/* Header */}
-          <div className="flex items-center justify-between text-white pt-2">
-            <div className="text-sm font-bold flex items-center gap-2">
-              <Camera className="w-4 h-4 text-blue-400" />
-              <span>Align Visiting Card in Box</span>
-            </div>
-            <button
-              type="button"
-              onClick={stopLiveCamera}
-              className="p-2 rounded-full bg-slate-800 text-slate-300 hover:text-white cursor-pointer"
-              aria-label="Close Camera"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Viewfinder frame */}
-          <div className="relative flex-1 flex items-center justify-center my-4 overflow-hidden rounded-2xl bg-slate-950">
-            <video
-              ref={liveVideoRef}
-              playsInline
-              autoPlay
-              muted
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            {/* Card alignment overlay (standard ~1.58:1 ratio) */}
-            <div className="relative w-[88%] max-w-sm aspect-[1.58/1] rounded-xl border-2 border-blue-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] pointer-events-none flex items-center justify-center">
-              <div className="absolute inset-x-4 top-2 text-center text-[11px] font-semibold text-blue-200 bg-black/60 px-2 py-0.5 rounded-full">
-                Hold card flat &amp; steady
-              </div>
-              <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-blue-400 -mt-1 -ml-1 rounded-tl" />
-              <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-blue-400 -mt-1 -mr-1 rounded-tr" />
-              <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-blue-400 -mb-1 -ml-1 rounded-bl" />
-              <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-blue-400 -mb-1 -mr-1 rounded-br" />
-            </div>
-          </div>
-
-          {/* Controls Footer */}
-          <div className="flex items-center justify-around pb-6 text-white">
-            <button
-              type="button"
-              onClick={() => {
-                stopLiveCamera();
-                cameraInputRef.current?.click();
-              }}
-              className="text-xs text-slate-300 hover:text-white underline cursor-pointer"
-            >
-              Use Phone Camera App
-            </button>
-
-            {/* Shutter Button */}
-            <button
-              type="button"
-              onClick={captureLiveFrame}
-              className="w-16 h-16 rounded-full border-4 border-white bg-blue-600 active:scale-90 flex items-center justify-center shadow-lg cursor-pointer transition-transform"
-              aria-label="Capture Card Photo"
-            >
-              <div className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-blue-600">
-                <Camera className="w-5 h-5" />
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={stopLiveCamera}
-              className="text-xs text-slate-300 hover:text-white cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
       )}
     </>
   );

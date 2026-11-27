@@ -9,11 +9,32 @@ export const escapeRegex = (string = '') => {
 };
 
 /**
+ * Recursively strips MongoDB operator keys ($...) and prototype pollution keys from plain objects
+ */
+export const stripUnsafeKeys = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(stripUnsafeKeys);
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    const clean = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k.startsWith('$') || k === '__proto__' || k === 'constructor' || k === 'prototype') {
+        continue;
+      }
+      clean[k] = stripUnsafeKeys(v);
+    }
+    return clean;
+  }
+  return value;
+};
+
+/**
  * Middleware factory to validate req.body against a Zod schema
  */
 export const validateSchema = (schema) => {
   return (req, res, next) => {
-    const result = schema.safeParse(req.body);
+    const sanitizedBody = stripUnsafeKeys(req.body || {});
+    const result = schema.safeParse(sanitizedBody);
     if (!result.success) {
       const issues = result.error.issues.map((i) => `${i.path.join('.') || 'body'}: ${i.message}`);
       return sendError(
@@ -92,6 +113,63 @@ export const updateProfileSchema = z
   })
   .strict();
 
+export const createOrderSchema = z
+  .object({
+    amount: z.coerce.number().positive('Payment amount must be greater than zero').max(10000000),
+    currency: z.string().min(3).max(6).default('INR').optional(),
+    userEmail: z.string().email('Invalid email address').toLowerCase().trim().optional().or(z.literal('')),
+    userName: z.string().max(120).optional(),
+    userPhone: z.string().max(24).optional(),
+    itemType: z.string().max(60).optional(),
+    itemId: z.string().max(100).optional(),
+    planName: z.string().max(120).optional(),
+    billingCycle: z.string().max(40).optional(),
+  })
+  .passthrough();
+
+export const verifyPaymentSchema = z
+  .object({
+    razorpay_order_id: z.string().trim().min(1, 'Order ID is required').max(120),
+    razorpay_payment_id: z.string().trim().min(1, 'Payment ID is required').max(120),
+    razorpay_signature: z.string().max(256).optional(),
+    userEmail: z.string().email('Invalid email address').toLowerCase().trim().optional().or(z.literal('')),
+    planName: z.string().max(120).optional(),
+    paymentMethod: z.string().max(60).optional(),
+  })
+  .passthrough();
+
+export const caProfileCreateSchema = z
+  .object({
+    name: z.string().trim().min(2, 'CA name is required').max(120),
+    email: z.string().email('Valid email address is required').toLowerCase().trim(),
+    phone: z.string().max(30).optional(),
+    firmName: z.string().max(160).optional(),
+    membershipNumber: z.string().max(60).optional(),
+    city: z.string().max(80).optional(),
+    state: z.string().max(80).optional(),
+    sourceTag: z.string().max(80).optional(),
+  })
+  .passthrough();
+
+export const activateCaSchema = z
+  .object({
+    token: z.string().trim().min(10, 'Invalid activation token').max(256),
+    password: z.string().min(6, 'Password must be at least 6 characters').max(100),
+    name: z.string().trim().min(2).max(120).optional(),
+    phone: z.string().max(30).optional(),
+    firmName: z.string().max(160).optional(),
+    city: z.string().max(80).optional(),
+  })
+  .passthrough();
+
+export const leadCreateSchema = z
+  .object({
+    fullName: z.string().trim().min(1, 'Full name is required').max(150),
+    email: z.string().email('Valid email address is required').toLowerCase().trim(),
+    mobile: z.string().trim().min(10, 'Valid mobile number is required').max(24),
+  })
+  .passthrough();
+
 /**
  * Validate required fields in request body (legacy helper)
  */
@@ -152,6 +230,7 @@ export const validateIndianPhone = (field) => {
 
 export default {
   validateSchema,
+  stripUnsafeKeys,
   escapeRegex,
   registerSchema,
   loginSchema,
@@ -160,6 +239,11 @@ export default {
   emailOnlySchema,
   resetPasswordSchema,
   updateProfileSchema,
+  createOrderSchema,
+  verifyPaymentSchema,
+  caProfileCreateSchema,
+  activateCaSchema,
+  leadCreateSchema,
   validateBody,
   validateIndianPhone,
 };

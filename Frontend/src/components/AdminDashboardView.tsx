@@ -168,9 +168,9 @@ export const AdminDashboardView: React.FC<{
   const totalLoanSum = leads.reduce((acc, curr) => acc + (Number(curr.proposedLoan || curr.loanRequiredCr) || 0), 0);
 
   const navItems = [
-    { id: 'overview' as AdminDeskTab, label: 'All Projects & Leads', icon: LayoutDashboard, count: leads.length },
-    { id: 'under-review' as AdminDeskTab, label: 'In Appraisal', icon: Clock, count: reviewLeads.length },
-    { id: 'funded' as AdminDeskTab, label: 'Funded & Sanctioned', icon: CheckCircle2, count: fundedLeads.length },
+    { id: 'overview' as AdminDeskTab, label: 'All Projects & Leads', mobileLabel: 'All Leads', icon: LayoutDashboard, count: leads.length },
+    { id: 'under-review' as AdminDeskTab, label: 'In Appraisal', mobileLabel: 'Appraisal', icon: Clock, count: reviewLeads.length },
+    { id: 'funded' as AdminDeskTab, label: 'Funded & Sanctioned', mobileLabel: 'Funded', icon: CheckCircle2, count: fundedLeads.length },
   ];
 
   const activeNav = navItems.find((i) => i.id === activeTab);
@@ -205,12 +205,48 @@ export const AdminDashboardView: React.FC<{
               setCreateError('');
               setShowCreateModal(true);
             }}
-            className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
+            className="w-full min-h-[44px] lg:min-h-0 py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5 shrink-0" />
             <span>New Project</span>
           </button>
         ) : undefined
+      }
+      mobileStickyAction={
+        !isReadOnly ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCreateError('');
+                setShowCreateModal(true);
+              }}
+              className="flex-1 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>New Project</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => exportLeadsToCSV(leads)}
+              disabled={leads.length === 0}
+              className="min-h-[44px] px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span>Export CSV</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => exportLeadsToCSV(leads)}
+            disabled={leads.length === 0}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span>Export CSV</span>
+          </button>
+        )
       }
       headerActions={
         <div className="flex items-center gap-2">
@@ -221,7 +257,7 @@ export const AdminDashboardView: React.FC<{
                 setCreateError('');
                 setShowCreateModal(true);
               }}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
+              className="hidden lg:flex px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New Project</span>
@@ -231,20 +267,21 @@ export const AdminDashboardView: React.FC<{
             type="button"
             onClick={loadLeads}
             disabled={loading}
-            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+            aria-label="Refresh database records"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
             title="Refresh database records"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">Refresh</span>
           </button>
           <button
             type="button"
             onClick={() => exportLeadsToCSV(leads)}
             disabled={leads.length === 0}
-            className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+            className="hidden lg:flex px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Export CSV</span>
+            <span>Export CSV</span>
           </button>
         </div>
       }
@@ -262,7 +299,7 @@ export const AdminDashboardView: React.FC<{
         title={activeNav?.label || 'Admin Project & Lead Management'}
         description="Real-time pipeline monitoring, project tracking, and institutional syndication dispatch from live database records."
         actions={
-          <>
+          <div className="hidden lg:flex items-center gap-2.5">
             {!isReadOnly && (
               <button
                 type="button"
@@ -294,7 +331,7 @@ export const AdminDashboardView: React.FC<{
               <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
             </button>
-          </>
+          </div>
         }
       />
 
@@ -307,14 +344,14 @@ export const AdminDashboardView: React.FC<{
           <button
             type="button"
             onClick={loadLeads}
-            className="px-3 py-1.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 cursor-pointer shrink-0"
+            className="min-h-[44px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 cursor-pointer shrink-0"
           >
             Retry
           </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <DashboardKpiCard
           label="Total Records"
           value={leads.length}
@@ -361,7 +398,87 @@ export const AdminDashboardView: React.FC<{
           }
         />
 
-        <div className={DASHBOARD_TABLE.wrapper}>
+        {/* Mobile Stacked Cards */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {loading ? (
+            <DashboardLoadingState label="Loading real records from database..." />
+          ) : !loadError && filtered.length === 0 ? (
+            <DashboardEmptyState
+              icon={FolderOpen}
+              title="No submissions found"
+              description="There are currently no matching projects or leads in this view. New borrower assessments and consultation requests will appear here in real time."
+            />
+          ) : (
+            filtered.map((l) => (
+              <div key={l.id || l._id} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900 text-sm">
+                      {l.projectName || 'Greenfield Project'}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-0.5">{l.fullName || 'N/A'}</div>
+                    <div className="text-xs text-slate-500 mt-0.5 break-all">
+                      {l.email || 'No email'} · {l.phone || l.mobile || 'N/A'}
+                    </div>
+                  </div>
+                  <DashboardStatusBadge status={l.status || 'Active Lead'} />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                  <div>
+                    <div className="text-[11px] text-slate-500">Sector</div>
+                    <div className="font-medium text-slate-800 truncate mt-0.5">{l.industry || 'General'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-500">Cost (Cr)</div>
+                    <div className="font-bold text-slate-900 tabular-nums mt-0.5">
+                      ₹ {l.projectCost || l.totalCostCr || '0'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-500">Loan (Cr)</div>
+                    <div className="font-bold text-blue-700 tabular-nums mt-0.5">
+                      ₹ {l.proposedLoan || l.loanRequiredCr || '0'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`grid gap-2 ${isReadOnly ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTarget(l)}
+                    className="min-h-[44px] px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                  >
+                    <Eye className="w-3.5 h-3.5 shrink-0" />
+                    <span>View</span>
+                  </button>
+                  {!isReadOnly && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEditTarget(l)}
+                        className="min-h-[44px] px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTargetId(l.id || l._id || '')}
+                        className="min-h-[44px] px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Delete</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
           <table className={DASHBOARD_TABLE.table}>
             <thead className={DASHBOARD_TABLE.thead}>
               <tr>
@@ -419,7 +536,7 @@ export const AdminDashboardView: React.FC<{
                         <button
                           type="button"
                           onClick={() => setDetailTarget(l)}
-                          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                           title="View details"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -429,7 +546,7 @@ export const AdminDashboardView: React.FC<{
                             <button
                               type="button"
                               onClick={() => setEditTarget(l)}
-                              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                               title="Edit record"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
@@ -437,7 +554,7 @@ export const AdminDashboardView: React.FC<{
                             <button
                               type="button"
                               onClick={() => setDeleteTargetId(l.id || l._id || '')}
-                              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                               title="Delete record"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -474,17 +591,18 @@ export const AdminDashboardView: React.FC<{
       />
 
       {showCreateModal && !isReadOnly && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs font-inter">
-          <div className="relative w-full max-w-lg bg-white rounded-xl p-6 shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/50 backdrop-blur-xs font-inter">
+          <div className="relative w-full sm:max-w-lg bg-white rounded-t-2xl sm:rounded-xl p-5 sm:p-6 shadow-2xl border border-slate-200 max-h-[90dvh] overflow-y-auto">
             <button
               type="button"
               onClick={() => setShowCreateModal(false)}
-              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Close create project modal"
+              className="absolute top-3 right-3 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
             <form onSubmit={handleCreateProject} className="space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 font-manrope">Create Project Record</h2>
+              <h2 className="text-lg font-bold text-slate-900 font-manrope pr-10">Create Project Record</h2>
               {createError && (
                 <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">
                   {createError}
@@ -498,7 +616,7 @@ export const AdminDashboardView: React.FC<{
                     required
                     value={newProject.projectName}
                     onChange={(e) => setNewProject({ ...newProject, projectName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                     placeholder="e.g. Solar Park Alpha"
                   />
                 </div>
@@ -509,7 +627,7 @@ export const AdminDashboardView: React.FC<{
                     required
                     value={newProject.promoterName}
                     onChange={(e) => setNewProject({ ...newProject, promoterName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                     placeholder="e.g. Ramesh Kumar"
                   />
                 </div>
@@ -522,7 +640,7 @@ export const AdminDashboardView: React.FC<{
                     required
                     value={newProject.industry}
                     onChange={(e) => setNewProject({ ...newProject, industry: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                   />
                 </div>
                 <div className="space-y-1">
@@ -531,18 +649,18 @@ export const AdminDashboardView: React.FC<{
                     type="text"
                     value={newProject.location}
                     onChange={(e) => setNewProject({ ...newProject, location: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-700 block">Email</label>
                   <input
                     type="email"
                     value={newProject.email}
                     onChange={(e) => setNewProject({ ...newProject, email: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                   />
                 </div>
                 <div className="space-y-1">
@@ -551,7 +669,7 @@ export const AdminDashboardView: React.FC<{
                     type="text"
                     value={newProject.mobile}
                     onChange={(e) => setNewProject({ ...newProject, mobile: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white"
                   />
                 </div>
               </div>
@@ -564,7 +682,7 @@ export const AdminDashboardView: React.FC<{
                     required
                     value={newProject.capexCr}
                     onChange={(e) => setNewProject({ ...newProject, capexCr: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white tabular-nums"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white tabular-nums"
                   />
                 </div>
                 <div className="space-y-1">
@@ -575,14 +693,14 @@ export const AdminDashboardView: React.FC<{
                     required
                     value={newProject.loanCr}
                     onChange={(e) => setNewProject({ ...newProject, loanCr: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white tabular-nums"
+                    className="w-full min-h-[44px] sm:min-h-[38px] px-3 py-2 text-sm sm:text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white tabular-nums"
                   />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={creating}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Create Project</span>}
               </button>

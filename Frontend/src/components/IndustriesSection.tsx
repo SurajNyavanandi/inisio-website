@@ -25,6 +25,7 @@ interface IndustriesSectionProps {
   onOpenAssessment: () => void;
   onOpenConsultation: () => void;
   selectedIndustryName?: string;
+  onNavigateToPage?: (tab: string) => void;
   isStandalone?: boolean;
 }
 
@@ -47,8 +48,10 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
   onSelectIndustryForAssessment,
   onOpenAssessment,
   selectedIndustryName,
+  onNavigateToPage,
   isStandalone = false,
 }) => {
+  const SectorHeading = isStandalone ? 'h2' : 'h3';
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [industriesList, setIndustriesList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -231,9 +234,9 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
                       </div>
 
                       <div>
-                        <h3 className="font-manrope font-bold text-base sm:text-lg text-slate-900 leading-snug group-hover:text-blue-700 transition-colors">
+                        <SectorHeading className="font-manrope font-bold text-base sm:text-lg text-slate-900 leading-snug group-hover:text-blue-700 transition-colors">
                           {item.name}
-                        </h3>
+                        </SectorHeading>
                         <p className="font-inter text-xs sm:text-sm text-slate-600 mt-1.5 line-clamp-2 leading-relaxed">
                           {item.description}
                         </p>
@@ -277,6 +280,53 @@ export const IndustriesSection: React.FC<IndustriesSectionProps> = ({
           <div className="bg-slate-50 rounded-2xl border border-slate-200 p-12 text-center text-slate-500 text-sm">
             No industry sectors available for the selected category.
           </div>
+        )}
+
+        {isStandalone && onNavigateToPage && (
+          <nav aria-label="Related advisory pages" className="mt-12 pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+            <a
+              href="/assessment"
+              onClick={(e) => { e.preventDefault(); onOpenAssessment(); }}
+              className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              Free Bankability Scorecard
+            </a>
+            <a
+              href="/how-it-works"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('how-it-works'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              6-Step Funding Process
+            </a>
+            <a
+              href="/about"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('about'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Why Choose Inisio Capital
+            </a>
+            <a
+              href="/blogs"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('blogs'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Advisory Blogs &amp; Research
+            </a>
+            <a
+              href="/faq"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('faq'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Greenfield Funding FAQs
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('contact'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Contact Hyderabad Advisory Desk
+            </a>
+          </nav>
         )}
       </div>
     </section>

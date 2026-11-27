@@ -16,14 +16,12 @@ interface FooterProps {
   onSelectTab?: (tab: string) => void;
   onOpenAssessment: () => void;
   onOpenConsultation: () => void;
-  onOpenAdminPortal?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onSelectTab,
   onOpenAssessment,
   onOpenConsultation,
-  onOpenAdminPortal,
 }) => {
   const handleNav = (target: string, e?: React.MouseEvent) => {
     if (e) e.preventDefault();
@@ -85,7 +83,7 @@ export const Footer: React.FC<FooterProps> = ({
             </h2>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <a href="/#solutions" onClick={(e) => handleNav('solutions', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/how-it-works" onClick={(e) => handleNav('how-it-works', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>6-Step Debt Syndication Process</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
@@ -103,7 +101,7 @@ export const Footer: React.FC<FooterProps> = ({
                 </a>
               </li>
               <li>
-                <a href="/#solutions" onClick={(e) => handleNav('solutions', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/how-it-works" onClick={(e) => handleNav('how-it-works', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>Bank-Grade DPR &amp; CMA Modeling</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
@@ -115,7 +113,7 @@ export const Footer: React.FC<FooterProps> = ({
                 </button>
               </li>
               <li>
-                <a href="/#contact" onClick={(e) => handleNav('contact', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
+                <a href="/contact" onClick={(e) => handleNav('contact', e)} className="hover:text-white transition-colors cursor-pointer text-left flex items-center gap-1 group">
                   <span>Contact Hyderabad Advisory Desk</span>
                   <ArrowUpRight className="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </a>
@@ -131,22 +129,22 @@ export const Footer: React.FC<FooterProps> = ({
             </h2>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>
-                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Food Processing &amp; Agri
                 </a>
               </li>
               <li>
-                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Solar &amp; Clean Energy
                 </a>
               </li>
               <li>
-                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Hospitals &amp; Healthcare
                 </a>
               </li>
               <li>
-                <a href="/#industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
+                <a href="/industries" onClick={(e) => handleNav('industries', e)} className="hover:text-white transition-colors cursor-pointer text-left block">
                   Warehousing &amp; Cold Storage
                 </a>
               </li>
@@ -156,7 +154,7 @@ export const Footer: React.FC<FooterProps> = ({
                 </a>
               </li>
               <li>
-                <a href="/#faqs" onClick={(e) => handleNav('faqs', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
+                <a href="/faq" onClick={(e) => handleNav('faq', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
                   Greenfield Funding FAQs
                 </a>
               </li>
@@ -219,24 +217,7 @@ export const Footer: React.FC<FooterProps> = ({
 
         {/* Regulatory Disclaimer & Copyright Bar */}
         <div className="pt-6 border-t border-slate-900 flex flex-col md:flex-row items-center justify-between gap-3 text-[11px] text-slate-400">
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <p>© {new Date().getFullYear()} Inisio Greenfield Advisory Platform. All rights reserved.</p>
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenAdminPortal) {
-                  onOpenAdminPortal();
-                } else if (onSelectTab) {
-                  onSelectTab('admin-dashboard');
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800/80 transition-colors cursor-pointer text-[11px] font-semibold"
-              title="Authorized Executive Admin Console"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-              <span>Admin Portal Shortcut</span>
-            </button>
-          </div>
+          <p>© {new Date().getFullYear()} Inisio Greenfield Advisory Platform. All rights reserved.</p>
 
           <p className="text-slate-400 text-center md:text-right max-w-xl text-[10px] leading-relaxed">
             Inisio is an independent private project consultancy &amp; debt syndication platform. Feasibility assessments and scorecards are analytical estimates based on standard bank credit underwriting criteria.

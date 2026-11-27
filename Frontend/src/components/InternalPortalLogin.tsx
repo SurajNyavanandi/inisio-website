@@ -3,6 +3,7 @@ import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft, Loader2, KeyRound, Chec
 import { AuthUser } from '../types';
 import api from '../utils/apiClient';
 import { validateAdminEmail, validateCaAdminEmail } from '../config/adminAccess';
+import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
 
 interface InternalPortalLoginProps {
   portalType: 'admin' | 'ca' | 'prosync' | 'dpr' | 'ca-admin';
@@ -78,7 +79,7 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
     if (portalType === 'admin') {
       const check = validateAdminEmail(cleanEmail);
       if (!check.allowed) {
-        setError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
+        setError(check.error || 'Access Denied: Only authorized admin @gmail.com accounts are permitted.');
         return;
       }
     } else if (portalType === 'ca-admin') {
@@ -98,7 +99,9 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
       const resData = await response.json().catch(() => ({}));
       if (response.ok && resData.success) {
         setSuccessMessage(
-          resData.message || `A password reset link and 6-digit code have been sent to ${cleanEmail}.`
+          resData.message
+            ? maskEmailsInText(resData.message)
+            : `A password reset link and 6-digit code have been sent to ${maskEmail(cleanEmail)}.`
         );
         setResendCooldown(30);
         setView('reset');
@@ -167,7 +170,7 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
     if (portalType === 'admin') {
       const check = validateAdminEmail(cleanEmail);
       if (!check.allowed) {
-        setError('Access Denied: Only authorized administrators are permitted to sign in through the Admin Portal. If you are a client or promoter, please use the main website login.');
+        setError(check.error || 'Access Denied: Only authorized admin @gmail.com accounts are permitted.');
         return;
       }
     } else if (portalType === 'ca-admin') {

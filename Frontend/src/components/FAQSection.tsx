@@ -12,13 +12,16 @@ import { Reveal } from './ui/MotionPrimitives';
 
 interface FAQSectionProps {
   onOpenConsultation: () => void;
+  onNavigateToPage?: (tab: string) => void;
   isStandalone?: boolean;
 }
 
 export const FAQSection: React.FC<FAQSectionProps> = ({
   onOpenConsultation,
+  onNavigateToPage,
   isStandalone = false,
 }) => {
+  const CtaHeading = isStandalone ? 'h2' : 'h3';
   const [faqs, setFaqs] = useState<FAQItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string>('');
@@ -127,9 +130,9 @@ export const FAQSection: React.FC<FAQSectionProps> = ({
                 <MessageCircle className="w-5 h-5" />
               </div>
               <div className="space-y-0.5">
-                <h3 className="font-manrope font-bold text-slate-900 text-sm sm:text-base">
+                <CtaHeading className="font-manrope font-bold text-slate-900 text-sm sm:text-base">
                   Have a specific question about your project?
-                </h3>
+                </CtaHeading>
                 <p className="font-inter text-xs sm:text-sm text-slate-600">
                   Speak directly with our senior greenfield advisory desk in Hyderabad.
                 </p>
@@ -146,6 +149,53 @@ export const FAQSection: React.FC<FAQSectionProps> = ({
             </button>
           </div>
         </Reveal>
+
+        {isStandalone && onNavigateToPage && (
+          <nav aria-label="Related advisory pages" className="mt-10 pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+            <a
+              href="/assessment"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('assessment'); }}
+              className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+            >
+              Free Bankability Scorecard
+            </a>
+            <a
+              href="/how-it-works"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('how-it-works'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              6-Step Funding Process
+            </a>
+            <a
+              href="/about"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('about'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Why Choose Inisio Capital
+            </a>
+            <a
+              href="/industries"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('industries'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Explore Priority Sectors
+            </a>
+            <a
+              href="/blogs"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('blogs'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Advisory Blogs &amp; Research
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('contact'); }}
+              className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              Contact Hyderabad Advisory Desk
+            </a>
+          </nav>
+        )}
       </div>
     </section>
   );

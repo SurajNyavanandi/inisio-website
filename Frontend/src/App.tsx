@@ -101,7 +101,11 @@ export default function App() {
       return 'blogs';
     }
     if (path === '/assessment') return 'assessment';
+    if (path === '/how-it-works') return 'how-it-works';
     if (path === '/about') return 'about';
+    if (path === '/industries') return 'industries';
+    if (path === '/faq') return 'faq';
+    if (path === '/contact') return 'contact';
     return 'home';
   });
 
@@ -111,11 +115,6 @@ export default function App() {
     if (['solutions', 'industries', 'faqs', 'contact'].includes(hash)) return hash;
     if (hash === 'how-it-works') return 'solutions';
     if (hash === 'faq') return 'faqs';
-    const path = window.location.pathname;
-    if (path === '/how-it-works') return 'solutions';
-    if (path === '/industries') return 'industries';
-    if (path === '/faq') return 'faqs';
-    if (path === '/contact') return 'contact';
     return '';
   });
 
@@ -144,7 +143,14 @@ export default function App() {
     return null;
   });
 
-  const [selectedIndustryForAssessment, setSelectedIndustryForAssessment] = useState<string>('');
+  const [selectedIndustryForAssessment, setSelectedIndustryForAssessment] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      return new URLSearchParams(window.location.search).get('industry') || '';
+    } catch {
+      return '';
+    }
+  });
   const [editingProjectForAssessment, setEditingProjectForAssessment] = useState<any>(null);
 
   const [authPrefill, setAuthPrefill] = useState<{ email?: string; name?: string; phone?: string; otp?: string }>({});
@@ -208,20 +214,12 @@ export default function App() {
         setIsAdminPanelOpen(true);
       }
       const hashAnchor = window.location.hash.replace('#', '');
-      const pathAnchor =
-        path === '/how-it-works'
-          ? 'solutions'
-          : path === '/industries'
-          ? 'industries'
-          : path === '/faq'
-          ? 'faqs'
-          : path === '/contact'
-          ? 'contact'
-          : '';
-      const rawAnchor = hashAnchor || pathAnchor;
       const normalizedAnchor =
-        rawAnchor === 'how-it-works' ? 'solutions' : rawAnchor === 'faq' ? 'faqs' : rawAnchor;
-      if (['solutions', 'industries', 'faqs', 'contact'].includes(normalizedAnchor)) {
+        hashAnchor === 'how-it-works' ? 'solutions' : hashAnchor === 'faq' ? 'faqs' : hashAnchor;
+      if (
+        (path === '/' || path === '') &&
+        ['solutions', 'industries', 'faqs', 'contact'].includes(normalizedAnchor)
+      ) {
         setActiveTab('home');
         setActiveHomeSection(normalizedAnchor);
         setTimeout(() => {
@@ -293,23 +291,20 @@ export default function App() {
       } else if (path === '/assessment') {
         setActiveTab('assessment');
       } else if (path === '/how-it-works') {
-        setActiveTab('home');
-        setActiveHomeSection('solutions');
-        setTimeout(() => scrollToAnchor('solutions'), 80);
+        setActiveHomeSection('');
+        setActiveTab('how-it-works');
       } else if (path === '/about') {
+        setActiveHomeSection('');
         setActiveTab('about');
       } else if (path === '/industries') {
-        setActiveTab('home');
-        setActiveHomeSection('industries');
-        setTimeout(() => scrollToAnchor('industries'), 80);
+        setActiveHomeSection('');
+        setActiveTab('industries');
       } else if (path === '/contact') {
-        setActiveTab('home');
-        setActiveHomeSection('contact');
-        setTimeout(() => scrollToAnchor('contact'), 80);
+        setActiveHomeSection('');
+        setActiveTab('contact');
       } else if (path === '/faq') {
-        setActiveTab('home');
-        setActiveHomeSection('faqs');
-        setTimeout(() => scrollToAnchor('faqs'), 80);
+        setActiveHomeSection('');
+        setActiveTab('faq');
       } else if (path === '/' || path === '') {
         setActiveTab('home');
         const hashAnchor = window.location.hash.replace('#', '');
@@ -403,35 +398,36 @@ export default function App() {
     localStorage.setItem('inisio_active_user', JSON.stringify(user));
     recordUserLogin(user);
 
-    // Synchronize administrative sessions for immediate workspace access
-    if (user.role === 'admin' || user.role === 'superadmin') {
-      localStorage.setItem('inisio_active_admin_session', JSON.stringify({ email: user.email, role: user.role }));
-    }
-    if (user.role === 'ca_admin') {
-      localStorage.setItem(
-        'inisio_ca_admin_session',
-        JSON.stringify({ email: user.email, token: user.token })
-      );
-    }
-
     if (activeTab === 'assessment') {
       // Stay on assessment page so user's outputs unlock immediately
       return;
     }
 
-    // Role-based routing: Admins to Admin Dashboard, CA Admin to CA Admin Portal, CA to CA Desk, Normal Users to User Dashboard
-    const targetDashboard = getDashboardTabForRole(user.role);
-    setActiveTab(targetDashboard);
+    // Route to the correct dashboard based on the user's role
+    const role = user.role;
+    let targetTab = 'user-dashboard';
+    let targetPath = '/dashboard';
 
-    const pathMap: Record<string, string> = {
-      'user-dashboard': '/dashboard',
-      'admin-dashboard': '/admin',
-      'ca-admin-dashboard': '/ca-admin',
-      'ca-dashboard': '/ca-dashboard',
-      'dpr-dashboard': '/dpr-dashboard',
-      'prosync-dashboard': '/prosync-dashboard',
-    };
-    const targetPath = pathMap[targetDashboard] || `/${targetDashboard}`;
+    if (role === 'superadmin' || role === 'admin' || role === 'admin1' || role === 'admin2' || role === 'admin3') {
+      targetTab = 'admin-dashboard';
+      targetPath = '/admin';
+      localStorage.setItem('inisio_active_admin_session', 'true');
+    } else if (role === 'ca_admin') {
+      targetTab = 'ca-admin-dashboard';
+      targetPath = '/ca-admin';
+      localStorage.setItem('inisio_ca_admin_session', 'true');
+    } else if (role === 'ca') {
+      targetTab = 'ca-dashboard';
+      targetPath = '/ca-dashboard';
+    } else if (role === 'dpr_consultant') {
+      targetTab = 'dpr-dashboard';
+      targetPath = '/dpr-dashboard';
+    } else if (role === 'prosync_admin' || role === 'prosync') {
+      targetTab = 'prosync-dashboard';
+      targetPath = '/prosync-dashboard';
+    }
+
+    setActiveTab(targetTab);
     window.history.pushState({}, '', targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -506,11 +502,9 @@ export default function App() {
 
   const HOME_ANCHOR_MAP: Record<string, string> = {
     solutions: 'solutions',
-    'how-it-works': 'solutions',
-    industries: 'industries',
+    'home-industries': 'industries',
     faqs: 'faqs',
-    faq: 'faqs',
-    contact: 'contact',
+    'home-contact': 'contact',
   };
 
   const handleSelectTab = (tab: string, blogSlug?: string) => {
@@ -734,7 +728,7 @@ export default function App() {
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto">
                   <Shield className="w-6 h-6" />
                 </div>
-                <h2 className="text-xl font-black text-slate-900 font-manrope">Sign In to Promoter Portal</h2>
+                <h1 className="text-xl font-black text-slate-900 font-manrope">Sign In to Promoter Portal</h1>
                 <p className="text-sm text-slate-600 font-inter">
                   Please log in with your promoter account credentials to access your live project appraisals and financial models.
                 </p>
@@ -934,6 +928,7 @@ export default function App() {
                   onOpenConsultation={() => setConsultationModalOpen(true)}
                   onOpenAssessment={() => handleOpenAssessment()}
                   onNavigateToContact={() => handleSelectTab('contact')}
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
                 />
               </div>
             </Suspense>
@@ -946,6 +941,7 @@ export default function App() {
                   isStandalone
                   onOpenAssessment={() => handleOpenAssessment()}
                   onOpenConsultation={() => setConsultationModalOpen(true)}
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
                 />
               </div>
             </Suspense>
@@ -960,6 +956,7 @@ export default function App() {
                   onOpenAssessment={() => handleOpenAssessment()}
                   onOpenConsultation={() => setConsultationModalOpen(true)}
                   selectedIndustryName={selectedIndustryForAssessment}
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
                 />
               </div>
             </Suspense>
@@ -994,7 +991,10 @@ export default function App() {
           {activeTab === 'contact' && (
             <Suspense fallback={<DashboardSkeleton />}>
               <div className="animate-in fade-in duration-300">
-                <ContactSection isStandalone />
+                <ContactSection
+                  isStandalone
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
+                />
               </div>
             </Suspense>
           )}
@@ -1002,7 +1002,11 @@ export default function App() {
           {activeTab === 'faq' && (
             <Suspense fallback={<DashboardSkeleton />}>
               <div className="animate-in fade-in duration-300">
-                <FAQSection isStandalone onOpenConsultation={() => setConsultationModalOpen(true)} />
+                <FAQSection
+                  isStandalone
+                  onOpenConsultation={() => setConsultationModalOpen(true)}
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
+                />
               </div>
             </Suspense>
           )}
@@ -1016,7 +1020,6 @@ export default function App() {
             onSelectTab={handleSelectTab}
             onOpenAssessment={() => handleOpenAssessment()}
             onOpenConsultation={() => setConsultationModalOpen(true)}
-            onOpenAdminPortal={() => setIsAdminPanelOpen(true)}
           />
         </div>
       )}

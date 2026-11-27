@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -49,7 +50,7 @@ export const validateEnv = () => {
   }
 };
 
-const portRaw = process.env.PORT || '3000';
+const portRaw = process.env.PORT || process.env.APP_PORT || '5000';
 const parsedPort = parseInt(portRaw, 10);
 const validPort = !isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 3000;
 
@@ -60,7 +61,11 @@ const allowedOrigins = corsOriginRaw === '*'
 
 const isProduction = process.env.NODE_ENV === 'production';
 const databaseUri = process.env.MONGO_URI || process.env.MONGODB_URI || process.env.MONGO_URL || 'mongodb://localhost:27017/inisio';
-const jwtSecret = (process.env.JWT_SECRET || 'inisio_dev_fallback_secret_must_override_in_prod').trim();
+const configuredJwtSecret = (process.env.JWT_SECRET || '').trim();
+if (isProduction && configuredJwtSecret.length < 16) {
+  throw new Error('[Startup Validation Error] JWT_SECRET (min 16 characters) is required in production.');
+}
+const jwtSecret = configuredJwtSecret || crypto.randomBytes(32).toString('hex');
 const adminEmail1 = (process.env.ADMIN_EMAIL || process.env.ADMIN_EMAIL_1 || 'admin@example.com').trim().toLowerCase();
 const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL_2 || 'superadmin@example.com').trim().toLowerCase();
 const caAdminEmail = (process.env.CA_ADMIN || process.env.CA_ADMIN_EMAIL || 'ca.admin@example.com').trim().toLowerCase();

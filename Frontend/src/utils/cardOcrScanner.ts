@@ -1,4 +1,3 @@
-import jsQR from 'jsqr';
 import type { Worker, LoggerMessage } from 'tesseract.js';
 import {
   sanitizeIndianPhoneInput,
@@ -682,6 +681,7 @@ async function preprocessCardImage(imageSrc: string): Promise<PreprocessedVarian
         qrPixels = ctx.getImageData(0, 0, width, height);
       }
 
+      const { default: jsQR } = await import('jsqr');
       const qrResult = jsQR(qrPixels.data, qrPixels.width, qrPixels.height, {
         inversionAttempts: 'attemptBoth',
       });
@@ -954,7 +954,7 @@ function extractRankedIndianMobileNumbers(normalizedText: string): string[] {
       const candidateViews: Array<{ text: string; isRepaired: boolean }> = [
         { text: cleanedSeg, isRepaired: false },
       ];
-      if (digitOnlyCount >= 6 && (digitRatio >= 0.45 || segHasPhoneLabel || segHasPlus91)) {
+      if (digitOnlyCount >= 7 && (digitRatio >= 0.6 || segHasPhoneLabel || segHasPlus91)) {
         candidateViews.push({ text: repairOcrPhoneSegment(cleanedSeg), isRepaired: true });
       }
 
@@ -982,7 +982,7 @@ function extractRankedIndianMobileNumbers(normalizedText: string): string[] {
           else if (segHasPhoneLabel) baseScore += 15;
           if (segHasPlus91) baseScore += 25;
           if (hasFaxOrLandlineLabel) baseScore -= 25;
-          if (view.isRepaired) baseScore -= 5;
+          if (view.isRepaired) baseScore -= 10;
           if (startsWithStd && !segHasMobileLabel) baseScore -= 30;
 
           // Case 1: Exact 10 digits
@@ -1009,14 +1009,19 @@ function extractRankedIndianMobileNumbers(normalizedText: string): string[] {
             continue;
           }
 
-          // Case 5: Misread phone icon glued as 1 stray leading digit (e.g. "8 98490 12345" -> 11 digits)
-          if (digits.length === 11 && !startsWithStd && /^[6-9]\d{9}$/.test(digits.slice(1))) {
+          // Case 5 & 6: Only trim a stray leading icon digit when an explicit phone/mobile label or +91 is present
+          if (
+            (segHasMobileLabel || segHasPhoneLabel || segHasPlus91) &&
+            digits.length === 11 &&
+            !startsWithStd &&
+            /^[6-9]\d{9}$/.test(digits.slice(1))
+          ) {
             registerCandidate(digits.slice(1), baseScore + 2);
             continue;
           }
 
-          // Case 6: Misread icon glued before 91 + 10 digits (13 digits where [1..3] === '91')
           if (
+            (segHasMobileLabel || segHasPhoneLabel || segHasPlus91) &&
             digits.length === 13 &&
             digits.slice(1, 3) === '91' &&
             /^[6-9]\d{9}$/.test(digits.slice(3))
@@ -1030,6 +1035,7 @@ function extractRankedIndianMobileNumbers(normalizedText: string): string[] {
 
   const ranked: ScoredPhoneCandidate[] = Array.from(bestScores.entries())
     .map(([phone, score]) => ({ phone, score }))
+    .filter((item) => item.score >= 35)
     .sort((a, b) => b.score - a.score);
 
   return ranked.map((item) => item.phone);
@@ -1196,15 +1202,30 @@ export function parseBusinessCardText(rawText: string): ParsedBusinessCard {
     }
   }
 
-  // Fallback state detection from 6-digit Indian PIN code (avoid matching 10-digit phone numbers)
+  // Strict state detection from 6-digit Indian PIN code ONLY inside address / PIN context
+  // (never infer state from stray 6-digit ICAI membership numbers or partial phone chunks)
   if (!state) {
-    const pinMatches = normalizedText.match(/(?<!\d)([1-8]\d{5})(?!\d)/g) || [];
-    for (const pin of pinMatches) {
-      const prefix = pin.slice(0, 2);
-      if (PIN_PREFIX_TO_STATE[prefix]) {
-        state = PIN_PREFIX_TO_STATE[prefix];
-        break;
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      if (/\b(?:icai|m\.?\s*no\.?|mem(?:bership)?|frn|reg(?:n)?\.?\s*no|pan|gstin|cin|mob|tel|ph)\b/i.test(lowerLine)) {
+        continue;
       }
+      const hasAddressContext =
+        /\b(?:pin|pincode|postal)\b/i.test(lowerLine) ||
+        line.includes(',') ||
+        ADDRESS_KEYWORDS.some((kw) => new RegExp(`\\b${kw.replace('.', '\\.')}`, 'i').test(lowerLine));
+      if (!hasAddressContext) continue;
+
+      const pinMatches = line.match(/(?<!\d)([1-8]\d{5})(?!\d)/g) || [];
+      for (const pin of pinMatches) {
+        if (membershipNumber && membershipNumber.replace(/\D/g, '') === pin) continue;
+        const prefix = pin.slice(0, 2);
+        if (PIN_PREFIX_TO_STATE[prefix]) {
+          state = PIN_PREFIX_TO_STATE[prefix];
+          break;
+        }
+      }
+      if (state) break;
     }
   }
 
@@ -1253,15 +1274,69 @@ export function parseBusinessCardText(rawText: string): ParsedBusinessCard {
     }
   }
 
-  // Person name heuristic:
+  // Person name heuristic (strict: reject card headings, services, taglines, and non-name lines):
   // Supports "CA Rajesh Kumar, FCA | Partner", "C.A. S. K. Sharma", "RAJESH KULKARNI", etc.
+  const NON_NAME_STOPWORDS = [
+    'income tax',
+    'gst',
+    'audit',
+    'auditing',
+    'taxation',
+    'advisory',
+    'consultancy',
+    'consultant',
+    'consulting',
+    'chartered',
+    'accountant',
+    'accountants',
+    'services',
+    'service',
+    'solutions',
+    'corporate',
+    'finance',
+    'financial',
+    'banking',
+    'legal',
+    'compliance',
+    'head office',
+    'branch office',
+    'registered office',
+    'office',
+    'address',
+    'contact',
+    'email',
+    'website',
+    'mobile',
+    'phone',
+    'direct',
+    'indirect',
+    'wealth',
+    'management',
+    'valuation',
+    'project',
+    'report',
+    'loans',
+    'loan',
+    'subsidy',
+    'registration',
+    'secretarial',
+    'insolvency',
+    'bankruptcy',
+    'business',
+    'india',
+    'private',
+    'limited',
+    'enterprise',
+    'enterprises',
+  ];
+
   const addressLineSet = new Set(addressLines);
   for (const rawLine of lines) {
     if (addressLineSet.has(rawLine)) continue;
     // Split on '|' in case name & designation share one line
     const segments = rawLine.split('|').map((s) => s.trim()).filter(Boolean);
     for (const seg of segments) {
-      if (/\d|@|www\.|http/i.test(seg)) continue;
+      if (/\d|@|www\.|http|[:\/\\]/i.test(seg)) continue;
 
       const cleanedLine = seg
         .replace(/^(?:C\.?A\.?\s+|Mr\.?\s+|Ms\.?\s+|Mrs\.?\s+|Dr\.?\s+|Adv\.?\s+)/i, '')
@@ -1270,23 +1345,26 @@ export function parseBusinessCardText(rawText: string): ParsedBusinessCard {
         .replace(/^[^a-zA-Z]+|[^a-zA-Z.]+$/g, '')
         .trim();
 
-      if (!cleanedLine || cleanedLine.length < 3 || cleanedLine.length > 55) continue;
+      if (!cleanedLine || cleanedLine.length < 4 || cleanedLine.length > 50) continue;
       if (firmName && cleanedLine.toLowerCase() === firmName.toLowerCase()) continue;
 
       const lowerClean = cleanedLine.toLowerCase();
       if (FIRM_KEYWORDS.some((kw) => lowerClean.includes(kw))) continue;
       if (DESIGNATION_KEYWORDS.some((kw) => lowerClean === kw || lowerClean.startsWith(`${kw} `))) continue;
       if (ADDRESS_KEYWORDS.some((kw) => new RegExp(`\\b${kw.replace('.', '\\.')}\\b`, 'i').test(lowerClean))) continue;
+      if (NON_NAME_STOPWORDS.some((kw) => new RegExp(`\\b${kw.replace(/\s+/g, '\\s+')}\\b`, 'i').test(lowerClean))) continue;
       if (CITY_TO_STATE[lowerClean] || INDIAN_STATES.some((s) => s.toLowerCase() === lowerClean)) continue;
 
       const words = cleanedLine.split(/\s+/).filter(Boolean);
+      const hasSubstantiveWord = words.some((w) => w.replace(/\./g, '').length >= 3);
       const looksLikeName =
         words.length >= 2 &&
         words.length <= 4 &&
+        hasSubstantiveWord &&
         words.every(
           (w) =>
-            /^[A-Z][a-zA-Z.'-]*$/.test(w) ||
-            /^[A-Z]{1,3}\.?$/.test(w)
+            /^[A-Z][a-zA-Z'-]{1,}$/.test(w) ||
+            /^[A-Z]\.?$/.test(w)
         );
 
       if (looksLikeName) {
@@ -1297,25 +1375,7 @@ export function parseBusinessCardText(rawText: string): ParsedBusinessCard {
     if (name) break;
   }
 
-  // Fallback firm name from email domain if firm not detected on card
-  if (!firmName && email) {
-    const domain = email.split('@')[1] || '';
-    const domainBase = domain.split('.')[0] || '';
-    const freeProviders = new Set([
-      'gmail',
-      'yahoo',
-      'outlook',
-      'hotmail',
-      'icloud',
-      'rediffmail',
-      'live',
-      'protonmail',
-      'ymail',
-    ]);
-    if (domainBase && !freeProviders.has(domainBase.toLowerCase()) && domainBase.length >= 3) {
-      firmName = toTitleCase(domainBase.replace(/[-_]/g, ' '));
-    }
-  }
+  // Strictly leave firmName empty if not printed on the card — never guess from email domains.
 
   return {
     name: sanitizePersonNameInput(name).trim(),
@@ -1627,18 +1687,22 @@ export async function scanBusinessCardLocally(
       addFinalPhone(combined.phone);
       combined.alternatePhones?.forEach(addFinalPhone);
 
+      // Guard against hallucinated heuristic fields when overall OCR confidence is very low.
+      // Pattern-verified email, phone, and explicit ICAI registration remain allowed if valid.
+      const allowHeuristicOcr = bestConfidence >= 38;
+
       const merged: ParsedBusinessCard = {
-        name: sanitizePersonNameInput(qrData?.name || combined.name).trim(),
-        firmName: (qrData?.firmName || combined.firmName).trim().slice(0, 100),
+        name: sanitizePersonNameInput(qrData?.name || (allowHeuristicOcr ? combined.name : '')).trim(),
+        firmName: (qrData?.firmName || (allowHeuristicOcr ? combined.firmName : '')).trim().slice(0, 100),
         email: (qrData?.email || combined.email).trim().toLowerCase(),
         phone: finalPhones[0] || '',
         alternatePhones: finalPhones.slice(1),
         membershipNumber: (qrData?.membershipNumber || combined.membershipNumber).trim().slice(0, 24),
-        city: (qrData?.city || combined.city).trim().slice(0, 60),
-        state: (qrData?.state || combined.state).trim().slice(0, 60),
-        designation: (qrData?.designation || combined.designation).trim().slice(0, 80),
-        website: (qrData?.website || combined.website).trim().slice(0, 120),
-        address: (qrData?.address || combined.address).trim().slice(0, 200),
+        city: (qrData?.city || (allowHeuristicOcr ? combined.city : '')).trim().slice(0, 60),
+        state: (qrData?.state || (allowHeuristicOcr ? combined.state : '')).trim().slice(0, 60),
+        designation: (qrData?.designation || (allowHeuristicOcr ? combined.designation : '')).trim().slice(0, 80),
+        website: (qrData?.website || (allowHeuristicOcr ? combined.website : '')).trim().slice(0, 120),
+        address: (qrData?.address || (allowHeuristicOcr ? combined.address : '')).trim().slice(0, 200),
         ocrRawText: [qrData?.ocrRawText, combined.ocrRawText].filter(Boolean).join('\n\n').trim(),
         source: qrData ? 'qr+ocr' : 'ocr',
         confidence: bestConfidence,

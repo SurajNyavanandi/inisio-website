@@ -28,6 +28,7 @@ const PRIVILEGED_ROLES = new Set([
 const FREE_TIER_NAMES = new Set([
   '',
   'free',
+  'free starter',
   'standard',
   'starter',
   'basic',

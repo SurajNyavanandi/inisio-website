@@ -106,10 +106,10 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
   );
 
   const navItems = [
-    { id: 'overview' as ProsyncTab, label: 'Overview', icon: LayoutDashboard },
-    { id: 'pipeline' as ProsyncTab, label: 'Syndication Pipeline', icon: Network, count: leads.length },
-    { id: 'consultations' as ProsyncTab, label: 'Consultations Desk', icon: CalendarCheck, count: consultations.length },
-    { id: 'lenders' as ProsyncTab, label: 'Lender Consortium', icon: Building2 },
+    { id: 'overview' as ProsyncTab, label: 'Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
+    { id: 'pipeline' as ProsyncTab, label: 'Syndication Pipeline', mobileLabel: 'Pipeline', icon: Network, count: leads.length },
+    { id: 'consultations' as ProsyncTab, label: 'Consultations Desk', mobileLabel: 'Consults', icon: CalendarCheck, count: consultations.length },
+    { id: 'lenders' as ProsyncTab, label: 'Lender Consortium', mobileLabel: 'Lenders', icon: Building2 },
   ];
 
   const handleSelectTab = (tab: string) => {
@@ -153,21 +153,45 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
       onGoBack={handleGoBack}
       onNavigateHome={onNavigateHome}
       onLogout={onLogout}
+      mobileStickyAction={
+        activeTab === 'pipeline' || activeTab === 'consultations' ? (
+          <button
+            type="button"
+            onClick={loadData}
+            disabled={loading}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh Queue</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => handleSelectTab('pipeline')}
+            className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Network className="w-4 h-4 shrink-0" />
+            <span>Syndication Pipeline ({leads.length})</span>
+            <ArrowRight className="w-4 h-4 shrink-0" />
+          </button>
+        )
+      }
       headerActions={
         <button
           type="button"
           onClick={loadData}
           disabled={loading}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
+          aria-label="Refresh Queue"
+          className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-[36px] px-2.5 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 disabled:opacity-50"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Queue</span>
+          <RefreshCw className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Refresh Queue</span>
         </button>
       }
     >
       {/* 1. Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <div className="space-y-5 sm:space-y-6">
           <DashboardSectionBanner
             eyebrow="ProSync Operations Hub"
             eyebrowIcon={Network}
@@ -178,7 +202,7 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
                 type="button"
                 onClick={loadData}
                 disabled={loading}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
+                className="hidden lg:flex px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors items-center gap-1.5 cursor-pointer whitespace-nowrap disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh Queue</span>
@@ -186,7 +210,7 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
             }
           />
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
             <DashboardKpiCard
               label="Active Engagements"
               value={leads.length}
@@ -203,13 +227,15 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
               icon={Clock}
               tone="emerald"
             />
-            <DashboardKpiCard
-              label="Credit Clearance"
-              value={leads.length > 0 ? '100%' : '0%'}
-              subtext="Clearance rate"
-              icon={CheckCircle2}
-              tone="slate"
-            />
+            <div className="col-span-2 sm:col-span-1">
+              <DashboardKpiCard
+                label="Credit Clearance"
+                value={leads.length > 0 ? '100%' : '0%'}
+                subtext="Clearance rate"
+                icon={CheckCircle2}
+                tone="slate"
+              />
+            </div>
           </div>
 
           <DashboardCard>
@@ -220,7 +246,7 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSelectTab('pipeline')}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                  className="min-h-[44px] sm:min-h-0 px-2 sm:px-0 text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
                 >
                   <span>View All</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -276,7 +302,54 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
             }
           />
 
-          <div className={DASHBOARD_TABLE.wrapper}>
+          {/* Mobile Stacked Cards */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {loading ? (
+              <DashboardLoadingState label="Loading syndication pipeline..." />
+            ) : filteredLeads.length === 0 ? (
+              <DashboardEmptyState
+                icon={FolderOpen}
+                title="No proposals match your search"
+                description="Newly approved borrower assessments will appear here for banking liaison."
+              />
+            ) : (
+              filteredLeads.map((l, idx) => (
+                <div key={l.id || l._id || idx} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900 text-sm">{l.fullName}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {l.projectName || 'Greenfield Project'} · {l.industry || 'Industrial'}
+                      </div>
+                    </div>
+                    <DashboardStatusBadge status={l.status || 'Syndication Review'} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[11px] text-slate-500">Total Capex</div>
+                      <div className="font-semibold text-slate-900 tabular-nums mt-0.5">
+                        ₹ {l.projectCost || l.totalCostCr || '0'} Cr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Proposed Debt</div>
+                      <div className="font-semibold text-blue-700 tabular-nums mt-0.5">
+                        ₹ {l.proposedLoan || l.loanRequiredCr || '0'} Cr
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500">Rating</div>
+                      <div className="font-semibold text-slate-800 mt-0.5">
+                        {l.bankabilityRating || 'Grade A'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className={`hidden md:block ${DASHBOARD_TABLE.wrapper}`}>
             <table className={DASHBOARD_TABLE.table}>
               <thead className={DASHBOARD_TABLE.thead}>
                 <tr>
@@ -358,19 +431,19 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
                 return (
                   <div
                     key={c._id || c.id || idx}
-                    className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
+                    className="px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-slate-50/70 transition-colors"
                   >
                     <div className="min-w-0">
                       <h4 className="font-semibold text-slate-900 text-sm">
                         {c.fullName || c.name || 'Borrower Consultation'}
                       </h4>
-                      <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                      <p className="text-xs text-slate-500 mt-0.5 tabular-nums break-words">
                         {c.phone || ''} · {c.email || ''}
                         {c.preferredDate ? ` · Date: ${c.preferredDate}` : ''}
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2.5 min-w-[190px] shrink-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto sm:min-w-[200px] shrink-0">
                       <span className="text-xs text-slate-500 font-medium shrink-0">Status:</span>
                       <UISelect
                         value={currentStatus}
@@ -381,7 +454,7 @@ export const ProsyncDashboard: React.FC<ProsyncDashboardProps> = ({
                           { value: 'Customer Declined', label: 'Customer Declined' },
                           { value: 'Completed', label: 'Completed' },
                         ]}
-                        triggerClassName="h-8 text-xs font-semibold px-3 py-1 bg-white border-slate-200 rounded-lg"
+                        triggerClassName="min-h-[44px] sm:min-h-[36px] text-sm sm:text-xs font-semibold px-3 py-2 sm:py-1 bg-white border-slate-200 rounded-lg w-full"
                       />
                     </div>
                   </div>

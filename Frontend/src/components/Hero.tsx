@@ -88,7 +88,7 @@ export const Hero: React.FC<HeroProps> = ({
       secondaryBtnText: 'Talk to an Expert',
       trustPoints: ['100% Free First Assessment', 'Instant Bankability Rating', 'Bank-Grade Teaser PDF'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786547187/ChatGPT_Image_Aug_12_2026_08_34_57_PM_hb8xi9.png',
-      imageAlt: 'Indian entrepreneur reviewing greenfield project finance assessment with Inisio advisor'
+      imageAlt: 'Indian entrepreneur reviewing greenfield project finance assessment and DPR feasibility with Inisio Capital advisor in Hyderabad'
     },
     {
       id: 'slide-2',
@@ -99,7 +99,7 @@ export const Hero: React.FC<HeroProps> = ({
       secondaryBtnText: 'Free Consultation',
       trustPoints: ['Debt-to-Equity & DSCR Checks', 'Capex & Means of Finance', 'Bankability Scorecard'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786536547/start_your_business_fx8g11.png',
-      imageAlt: 'Business promoter evaluating bank loan eligibility and CMA modeling with Inisio consultant'
+      imageAlt: 'Business promoter evaluating bank loan eligibility, DSCR norms, and CMA modeling with Inisio Capital consultant'
     },
     {
       id: 'slide-3',
@@ -110,7 +110,7 @@ export const Hero: React.FC<HeroProps> = ({
       secondaryBtnText: 'Contact Us',
       trustPoints: ['Credit Committee Ready', 'Detailed Risk Scorer', 'Dedicated CA Advisory'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786543850/Business_ootwt8.png',
-      imageAlt: 'Promoter and chartered accountant reviewing Detailed Project Report at industrial plant'
+      imageAlt: 'Promoter and chartered accountant reviewing bankable Detailed Project Report and term loan syndication plan in India'
     }
   ];
 
@@ -375,6 +375,7 @@ export const Hero: React.FC<HeroProps> = ({
                         width={48}
                         height={48}
                         loading="lazy"
+                        decoding="async"
                         referrerPolicy="no-referrer"
                         className="w-10 h-10 sm:w-12 sm:h-12 object-contain group-hover:scale-105 transition-transform duration-300"
                       />

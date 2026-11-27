@@ -28,6 +28,7 @@ interface BlogArticleMeta {
   author: string;
 }
 
+// TODO: Replace Cloudinary OG image with a dedicated 1200x630 branded asset hosted on the primary domain
 const DEFAULT_OG_IMAGE =
   'https://res.cloudinary.com/aessymvl/image/upload/v1786547187/ChatGPT_Image_Aug_12_2026_08_34_57_PM_hb8xi9.png';
 
@@ -90,8 +91,8 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       'Inisio Capital offers bankable DPR preparation, debt syndication, CMA modeling, and greenfield project advisory in Hyderabad & across India.',
     canonicalPath: '/',
     keywords:
-      'Inisio, Inisio Capital, greenfield project advisory, bank loan syndication India, DPR consultant in Hyderabad, Hyderabad project finance advisory, CMA report preparation, DSCR underwriting, bankability scorecard',
-    imageAlt: 'Inisio Capital Greenfield Project Advisory and Bank Debt Syndication Desk',
+      'Inisio, Inisio Capital, Inisio Advisory, greenfield project advisory, bank loan syndication India, DPR consultant in Hyderabad, Hyderabad DPR consultant, project finance advisory in Hyderabad, Hyderabad project finance advisory, debt syndication Hyderabad, CMA report preparation, DSCR underwriting, bankability scorecard',
+    imageAlt: 'Inisio Capital Greenfield Project Advisory and Bank Debt Syndication Desk in Hyderabad',
   },
   assessment: {
     title: 'Project Feasibility & Bankability Scorecard | Inisio',
@@ -99,8 +100,8 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       "Calculate your greenfield project feasibility score, DSCR, and term loan eligibility in minutes with Inisio's free bankability scorecard.",
     canonicalPath: '/assessment',
     keywords:
-      'project bankability scorecard, greenfield feasibility calculator India, bank loan eligibility check, DSCR underwriting tool, debt capacity estimator, Inisio assessment',
-    imageAlt: 'Inisio Greenfield Project Feasibility and Bankability Scorecard',
+      'project bankability scorecard, greenfield feasibility calculator India, bank loan eligibility check, DSCR underwriting tool, debt capacity estimator, DPR feasibility check Hyderabad, Inisio Capital assessment',
+    imageAlt: 'Inisio Greenfield Project Feasibility and Bankability Scorecard Tool',
   },
   'how-it-works': {
     title: 'How It Works: 6-Step Debt Syndication Process | Inisio',
@@ -108,7 +109,7 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       "Explore Inisio's 6-step greenfield funding roadmap from feasibility check and DPR drafting to credit committee review and bank loan sanction.",
     canonicalPath: '/how-it-works',
     keywords:
-      'greenfield loan syndication roadmap, DPR preparation process India, bank loan sanction steps, CMA financial modeling, project teaser DOCX, Inisio Capital process',
+      'greenfield loan syndication roadmap, DPR preparation process India, bank loan sanction steps Hyderabad, CMA financial modeling process, project teaser DOCX, Inisio Capital funding roadmap',
     imageAlt: 'Inisio 6-Step Greenfield Project Debt Syndication Process',
   },
   about: {
@@ -117,8 +118,8 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       'Learn why industrial promoters trust Inisio Capital in Hyderabad for RBI-aligned DPRs, CMA financial modeling, subsidies, and bank syndication.',
     canonicalPath: '/about',
     keywords:
-      'about Inisio, Inisio Capital Hyderabad, project finance consultants in Hyderabad, Telangana debt syndication advisory, bankable DPR consultants India, TEV study certification',
-    imageAlt: 'Why Greenfield Promoters Partner with Inisio Capital Advisory',
+      'about Inisio, Inisio Capital Hyderabad, project finance consultants in Hyderabad, best DPR consultant Hyderabad, Telangana debt syndication advisory, bankable DPR consultants India, TEV study certification',
+    imageAlt: 'Why Greenfield Promoters Partner with Inisio Capital Advisory in Hyderabad',
   },
   industries: {
     title: 'Industries: Manufacturing, Solar & Agro Loans | Inisio',
@@ -126,7 +127,7 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       'Review greenfield project finance norms, DSCR benchmarks, and capital subsidies for solar, food processing, warehousing, and hospital projects.',
     canonicalPath: '/industries',
     keywords:
-      'solar park DPR consultant India, basmati rice mill project loan, warehouse logistics park finance, hospital project debt syndication, eco-resort project loan, PMKSY subsidies Telangana',
+      'solar park DPR consultant India, basmati rice mill project loan Telangana, warehouse logistics park finance Hyderabad, hospital project debt syndication, eco-resort project loan, PMKSY subsidies Telangana, greenfield project sectors India',
     imageAlt: 'Inisio Greenfield Project Finance Benchmarks Across Priority Sectors',
   },
   blogs: {
@@ -135,7 +136,7 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       'Read practical research from Inisio on PSU bank DSCR underwriting, PMKSY food processing grants, CMA modeling, and bankable solar park DPRs.',
     canonicalPath: '/blogs',
     keywords:
-      'greenfield project finance blogs, DSCR calculation guide India, PSU bank underwriting norms, PMKSY food processing subsidy guide, solar park DPR clauses, Inisio research',
+      'greenfield project finance blogs, DSCR calculation guide India, PSU bank underwriting norms, PMKSY food processing subsidy guide, solar park DPR clauses, Inisio Capital research Hyderabad',
     imageAlt: 'Inisio Capital Greenfield Project Finance Knowledge Hub',
   },
   contact: {
@@ -144,7 +145,7 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       "Speak with Inisio's greenfield project finance and DPR consultants in Madhapur, Hyderabad. Call +91 63020 26462 or book a confidential review.",
     canonicalPath: '/contact',
     keywords:
-      'contact Inisio, Inisio Capital Madhapur Hyderabad, DPR consultant Hyderabad contact, greenfield project loan advisory Telangana, debt syndication desk Hyderabad',
+      'contact Inisio, Inisio Capital Madhapur Hyderabad, DPR consultant in Madhapur Hyderabad, greenfield project loan advisory Telangana, debt syndication desk Hyderabad',
     imageAlt: 'Contact Inisio Capital Project Advisory Headquarters in Madhapur Hyderabad',
   },
   faq: {
@@ -153,7 +154,7 @@ const PAGE_METADATA: Record<string, PageSEOMeta> = {
       'Get clear answers from Inisio on bank-grade DPR drafting, CMA financial models, bank sanction timelines, subsidy mapping, and NDA security.',
     canonicalPath: '/faq',
     keywords:
-      'greenfield project funding FAQ, bank loan sanction timeline India, DPR preparation questions, CMA report requirements, government subsidy mapping, Inisio FAQs',
+      'greenfield project funding FAQ, bank loan sanction timeline India, DPR preparation questions Hyderabad, CMA report requirements, government subsidy mapping Telangana, Inisio Capital FAQs',
     imageAlt: 'Frequently Asked Questions on Greenfield Project Funding and DPR Advisory',
   },
   'user-dashboard': {
@@ -349,10 +350,14 @@ export const SEOHead: React.FC<SEOHeadProps> = ({ activeTab, activeBlogSlug, act
 
     // 4. Open Graph Social Tags
     setMetaTag('meta[property="og:type"]', 'property', 'og:type', currentMeta.ogType || 'website');
+    setMetaTag('meta[property="og:site_name"]', 'property', 'og:site_name', 'Inisio Capital');
+    setMetaTag('meta[property="og:locale"]', 'property', 'og:locale', 'en_IN');
     setMetaTag('meta[property="og:title"]', 'property', 'og:title', currentMeta.title);
     setMetaTag('meta[property="og:description"]', 'property', 'og:description', currentMeta.description);
     setMetaTag('meta[property="og:url"]', 'property', 'og:url', canonicalHref);
     setMetaTag('meta[property="og:image"]', 'property', 'og:image', DEFAULT_OG_IMAGE);
+    setMetaTag('meta[property="og:image:width"]', 'property', 'og:image:width', '1200');
+    setMetaTag('meta[property="og:image:height"]', 'property', 'og:image:height', '630');
     setMetaTag(
       'meta[property="og:image:alt"]',
       'property',
@@ -441,7 +446,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({ activeTab, activeBlogSlug, act
         inLanguage: 'en-IN',
         image: DEFAULT_OG_IMAGE,
         datePublished: resolvedBlog.datePublished,
-        dateModified: '2026-11-18T12:00:00+05:30',
+        dateModified: '2026-11-27T12:00:00+05:30',
         author: {
           '@type': 'Organization',
           name: resolvedBlog.author,
@@ -486,6 +491,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({ activeTab, activeBlogSlug, act
           '@id': `${origin}/#organization`,
           name: 'Inisio Capital',
           telephone: '+916302026462',
+          // TODO: Confirm official contact email (advisory@inisio.in vs contact@inisio.com in Footer)
           email: 'advisory@inisio.in',
           address: {
             '@type': 'PostalAddress',
@@ -542,27 +548,43 @@ export const SEOHead: React.FC<SEOHeadProps> = ({ activeTab, activeBlogSlug, act
         }
       );
     } else if (activeTab === 'assessment') {
-      graphNodes.push({
-        '@type': 'Service',
-        '@id': `${canonicalHref}#service`,
-        name: 'Greenfield Project Feasibility & Bankability Scorecard',
-        description: currentMeta.description,
-        provider: {
-          '@type': 'FinancialService',
-          '@id': `${origin}/#organization`,
-          name: 'Inisio Capital',
+      graphNodes.push(
+        {
+          '@type': 'Service',
+          '@id': `${canonicalHref}#service`,
+          name: 'Greenfield Project Feasibility & Bankability Scorecard',
+          description: currentMeta.description,
+          provider: {
+            '@type': 'FinancialService',
+            '@id': `${origin}/#organization`,
+            name: 'Inisio Capital',
+          },
+          areaServed: [
+            { '@type': 'City', name: 'Hyderabad' },
+            { '@type': 'State', name: 'Telangana' },
+            { '@type': 'Country', name: 'India' },
+          ],
+          offers: {
+            '@type': 'Offer',
+            price: '0',
+            priceCurrency: 'INR',
+            description: 'Free Starter greenfield project feasibility check and bankability assessment.',
+          },
         },
-        areaServed: {
-          '@type': 'Country',
-          name: 'India',
-        },
-        offers: {
-          '@type': 'Offer',
-          price: '0',
-          priceCurrency: 'INR',
-          description: 'Initial greenfield project feasibility check and bankability assessment.',
-        },
-      });
+        {
+          '@type': 'WebApplication',
+          '@id': `${canonicalHref}#webapp`,
+          name: 'Inisio Greenfield Project Bankability Scorecard',
+          url: canonicalHref,
+          applicationCategory: 'FinanceApplication',
+          operatingSystem: 'Web',
+          offers: {
+            '@type': 'Offer',
+            price: '0',
+            priceCurrency: 'INR',
+          },
+        }
+      );
     } else if (activeTab === 'industries') {
       graphNodes.push({
         '@type': 'CollectionPage',

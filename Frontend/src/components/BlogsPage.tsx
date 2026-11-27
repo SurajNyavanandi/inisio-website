@@ -158,6 +158,61 @@ export const BlogsPage: React.FC<BlogsPageProps> = ({
               Start Free Assessment
             </a>
           </div>
+          {/* Related Advisory Resources */}
+          {onNavigateToPage && (
+            <nav aria-label="Related advisory pages" className="pt-6 border-t border-slate-200 flex flex-wrap items-center justify-center gap-3 text-xs font-semibold">
+              <a
+                href="/blogs"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onBackToBlogs();
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                All Research Articles
+              </a>
+              <a
+                href="/industries"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigateToPage('industries');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Priority Sectors &amp; Norms
+              </a>
+              <a
+                href="/how-it-works"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigateToPage('how-it-works');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                6-Step Funding Process
+              </a>
+              <a
+                href="/faq"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigateToPage('faq');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Greenfield Funding FAQs
+              </a>
+              <a
+                href="/contact"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigateToPage('contact');
+                }}
+                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                Contact Hyderabad Advisory Desk
+              </a>
+            </nav>
+          )}
         </article>
       </div>
     );

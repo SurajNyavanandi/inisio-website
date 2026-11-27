@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Download, FileCode, FileText, Eye, X } from 'lucide-react';
-import { fmtCr, ResolvedDocumentData } from '../utils/pdfGenerator';
+import type { ResolvedDocumentData } from '../utils/pdfGenerator';
+
+const fmtCr = (val: number): string => {
+  const safe = Number.isFinite(val) ? val : 0;
+  return `INR ${safe.toFixed(2)} Cr`;
+};
 
 export interface PdfPreviewState {
   blobUrl: string;
@@ -77,10 +82,10 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ preview, onClo
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div className="bg-white w-full max-w-5xl h-[92vh] sm:h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
         {/* Header Bar */}
-        <div className="px-4 sm:px-6 py-3.5 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="px-3.5 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0">
               <FileText className="w-4 h-4" />
             </div>
@@ -94,32 +99,32 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ preview, onClo
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end">
             {r && (
               <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-lg border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setViewMode('document')}
-                  className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer inline-flex items-center gap-1 ${
+                  className={`min-h-[34px] px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer inline-flex items-center gap-1 ${
                     viewMode === 'document'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>Document View</span>
+                  <span className="hidden xs:inline sm:inline">Document</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode('raw_pdf')}
-                  className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer inline-flex items-center gap-1 ${
+                  className={`min-h-[34px] px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer inline-flex items-center gap-1 ${
                     viewMode === 'raw_pdf'
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5" />
-                  <span>PDF Viewer</span>
+                  <span className="hidden xs:inline sm:inline">PDF</span>
                 </button>
               </div>
             )}
@@ -128,27 +133,27 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ preview, onClo
               <button
                 type="button"
                 onClick={preview.onDownloadDocx}
-                className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                className="min-h-[38px] px-2.5 sm:px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
                 <FileCode className="w-3.5 h-3.5 text-blue-600" />
-                <span>Download DOCX</span>
+                <span>DOCX</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={handleDownloadPdf}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+              className="min-h-[38px] px-3 sm:px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Download PDF</span>
+              <span>PDF</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
               aria-label="Close preview"
-              className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -158,12 +163,12 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({ preview, onClo
         {/* Viewer Body */}
         <div className="flex-1 bg-slate-100 overflow-y-auto relative">
           {viewMode === 'document' && r ? (
-            <div className="p-4 sm:p-8 flex justify-center">
+            <div className="p-2.5 sm:p-8 flex justify-center">
               <div className="w-full max-w-[794px] bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden">
                 {/* Top Accent Line */}
                 <div className="h-1.5 bg-blue-600 w-full" />
 
-                <div className="p-6 sm:p-10 space-y-7 text-slate-800">
+                <div className="p-4 sm:p-10 space-y-6 sm:space-y-7 text-slate-800">
                   {/* Document Header */}
                   <div className="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-slate-200">
                     <div>
