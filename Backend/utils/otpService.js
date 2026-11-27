@@ -1,8 +1,9 @@
 import crypto from 'crypto';
+import config from '../config/env.js';
 
 /**
  * Centralized OTP Service for Authentication & Password Reset
- * Generates cryptographically secure 6-digit OTP codes for real-time email delivery via Resend.
+ * Generates cryptographically secure 6-digit OTP codes and stores/verifies HMAC-SHA256 digests.
  */
 
 export const isProduction = () => {
@@ -17,25 +18,42 @@ export const generateOtp = () => {
 };
 
 /**
- * Strictly verify a submitted 6-digit OTP against the expected OTP.
+ * Derive an HMAC-SHA256 digest of a 6-digit OTP before persisting to storage.
  */
-export const verifyOtpCode = (expectedOtp, submittedOtp) => {
-  if (!expectedOtp || !submittedOtp) return false;
-  const cleanExpected = String(expectedOtp).trim();
-  const cleanSubmitted = String(submittedOtp).trim();
-  if (cleanExpected.length !== cleanSubmitted.length) return false;
+export const hashOtpCode = (otp) => {
+  if (!otp) return null;
+  const clean = String(otp).trim();
+  return crypto
+    .createHmac('sha256', config.OTP_HMAC_SECRET)
+    .update(clean)
+    .digest('hex');
+};
+
+/**
+ * Timing-safe verification of a submitted OTP against a stored HMAC digest.
+ */
+export const verifyOtpCode = (storedDigest, submittedOtp) => {
+  if (!storedDigest || !submittedOtp) return false;
+  const cleanStored = String(storedDigest).trim();
+  const submittedDigest = hashOtpCode(submittedOtp);
+  if (!submittedDigest) return false;
+
   try {
-    return crypto.timingSafeEqual(Buffer.from(cleanExpected), Buffer.from(cleanSubmitted));
+    if (cleanStored.length === submittedDigest.length) {
+      return crypto.timingSafeEqual(
+        Buffer.from(cleanStored, 'utf8'),
+        Buffer.from(submittedDigest, 'utf8')
+      );
+    }
+    return false;
   } catch {
-    return cleanExpected === cleanSubmitted;
+    return false;
   }
 };
 
-export const FIXED_TEST_OTP = '';
-
 export default {
-  FIXED_TEST_OTP,
   isProduction,
   generateOtp,
+  hashOtpCode,
   verifyOtpCode,
 };

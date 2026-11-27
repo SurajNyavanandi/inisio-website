@@ -7,59 +7,120 @@ import { renderActivationConfirmationEmail } from '../templates/activationConfir
 import { sendEmail } from './emailService.js';
 import { memoryUsers, addMemoryUser, findMemoryUserByEmail } from './memoryUserStore.js';
 import bcrypt from 'bcryptjs';
+import Tesseract from 'tesseract.js';
+import config from '../config/env.js';
 
 // In-memory CA Profile Store (starts empty, populated strictly via Card Registration workflow)
 export let memoryCaProfiles = [];
 
-/**
- * Step 1 & 2: Mock OCR Extraction Service
- * In production: Replace with Google Cloud Vision / AWS Textract / Tesseract.js
- */
-export const mockOcrExtractFromCard = async (cardPayload) => {
-  // TODO: Replace mock OCR extraction with production provider (e.g., Google Cloud Vision, AWS Textract, or Tesseract.js)
-  // Example production call:
-  // const [result] = await visionClient.textDetection(imageBuffer);
-  // const ocrText = result.fullTextAnnotation.text;
-  
-  // Extract mock values or simulate OCR parser based on filename or dummy scan
-  const sampleNames = ['Kiran K. Kulkarni, FCA', 'Manish Agrawal, ACA', 'Sunita Sundaram, FCA', 'Praveen Mehta, FCA'];
-  const sampleFirms = ['Kulkarni & Associates', 'Agrawal Financial Advisors', 'Sundaram & Co.', 'Mehta Chartered Accountants'];
-  const sampleCities = ['Ahmedabad', 'Bengaluru', 'Hyderabad', 'Indore'];
-  const sampleStates = ['Gujarat', 'Karnataka', 'Telangana', 'Madhya Pradesh'];
+const parseCardFieldsFromText = (rawText = '', overrides = {}) => {
+  const lines = String(rawText || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-  const randIdx = Math.floor(Math.random() * sampleNames.length);
-  const randomDigits = Math.floor(1000 + Math.random() * 9000);
+  const emailMatch = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const phoneMatch = rawText.match(/(?:\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}/) || rawText.match(/(?:\+?\d[\d\s\-()]{8,16}\d)/);
+  const mbrMatch = rawText.match(/(?:FCA|ACA|M\.?\s*No\.?|Reg\.?\s*No\.?)[\s:\-#]*([A-Z0-9\-]{4,14})/i);
+  const firmMatch = lines.find((l) => /(&\s*Co|Associates|Chartered\s*Accountants|LLP|Advisors|Consultants)/i.test(l));
+  const nameMatch = lines.find(
+    (l) =>
+      !/^(\+?\d|email|e-mail|tel|mob|www\.|http)/i.test(l) &&
+      !l.includes('@') &&
+      l !== firmMatch
+  );
 
-  const cleanName = cardPayload?.extractedName || sampleNames[randIdx];
-  const cleanFirm = cardPayload?.extractedFirm || sampleFirms[randIdx];
-  const cleanEmail = cardPayload?.extractedEmail || `ca.${cleanName.split(' ')[0].toLowerCase()}.${randomDigits}@auditfirm.in`;
-  const cleanPhone = cardPayload?.extractedPhone || `+91 98${randomDigits} 1234`;
-  const cleanCity = cardPayload?.extractedCity || sampleCities[randIdx];
-  const cleanState = cardPayload?.extractedState || sampleStates[randIdx];
-  const cleanMbr = `FCA-0${randomDigits}`;
+  const states = [
+    'Telangana', 'Maharashtra', 'Karnataka', 'Tamil Nadu', 'Gujarat',
+    'Delhi', 'Uttar Pradesh', 'Rajasthan', 'West Bengal', 'Kerala',
+    'Andhra Pradesh', 'Madhya Pradesh', 'Haryana', 'Punjab', 'Odisha', 'Bihar',
+  ];
+  const cities = [
+    'Hyderabad', 'Mumbai', 'Pune', 'Bengaluru', 'Bangalore', 'Chennai',
+    'Ahmedabad', 'Surat', 'New Delhi', 'Noida', 'Gurugram', 'Kolkata',
+    'Jaipur', 'Indore', 'Kochi', 'Visakhapatnam', 'Vijayawada',
+  ];
 
-  const rawText = `
-${cleanFirm}
-${cleanName}
-Chartered Accountant | Reg No: ${cleanMbr}
-Contact: ${cleanPhone}
-Email: ${cleanEmail}
-Office: ${cleanCity}, ${cleanState}
-Specialization: Project Financing, CMA Preparation & Bank Audit
-`.trim();
+  const foundState = states.find((s) => new RegExp(`\\b${s}\\b`, 'i').test(rawText)) || '';
+  const foundCity = cities.find((c) => new RegExp(`\\b${c}\\b`, 'i').test(rawText)) || '';
 
   return {
-    name: cleanName,
-    firmName: cleanFirm,
-    email: cleanEmail,
-    phone: cleanPhone,
-    membershipNumber: cleanMbr,
-    city: cleanCity,
-    state: cleanState,
-    ocrRawText: rawText,
-    confidenceScore: 94.8,
+    name: overrides.extractedName || nameMatch || '',
+    firmName: overrides.extractedFirm || firmMatch || '',
+    email: overrides.extractedEmail || (emailMatch ? emailMatch[0].toLowerCase() : ''),
+    phone: overrides.extractedPhone || (phoneMatch ? phoneMatch[0].trim() : ''),
+    membershipNumber: overrides.extractedMembershipNumber || (mbrMatch ? mbrMatch[0].trim() : ''),
+    city: overrides.extractedCity || foundCity,
+    state: overrides.extractedState || foundState,
   };
 };
+
+/**
+ * Production OCR Extraction Service (Tesseract.js default + configurable Google Cloud Vision adapter)
+ */
+export const extractBusinessCardOcr = async (cardPayload = {}) => {
+  const imageInput =
+    cardPayload?.imageBase64 ||
+    cardPayload?.imageDataUrl ||
+    cardPayload?.image ||
+    cardPayload?.filePath ||
+    null;
+
+  let ocrRawText = String(cardPayload?.rawText || cardPayload?.extractedText || '').trim();
+  let confidenceScore = 0;
+
+  if (imageInput) {
+    if (config.ocr?.provider === 'google_vision' && config.ocr?.googleVisionApiKey) {
+      const base64Content = String(imageInput).replace(/^data:image\/[a-zA-Z0-9+]+;base64,/, '');
+      const visionResp = await fetch(
+        `https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(config.ocr.googleVisionApiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requests: [
+              {
+                image: { content: base64Content },
+                features: [{ type: 'TEXT_DETECTION' }],
+              },
+            ],
+          }),
+        }
+      );
+      const visionJson = await visionResp.json().catch(() => ({}));
+      const detectedText = visionJson?.responses?.[0]?.fullTextAnnotation?.text || '';
+      if (detectedText) {
+        ocrRawText = detectedText.trim();
+        confidenceScore = 96;
+      }
+    } else {
+      const imageSource =
+        typeof imageInput === 'string' && !imageInput.startsWith('data:') && !imageInput.includes('/') && !imageInput.includes('\\')
+          ? Buffer.from(imageInput, 'base64')
+          : imageInput;
+      const result = await Tesseract.recognize(imageSource, 'eng');
+      ocrRawText = String(result?.data?.text || '').trim();
+      confidenceScore = Number((result?.data?.confidence || 0).toFixed(1));
+    }
+  }
+
+  if (!ocrRawText && !cardPayload?.extractedName && !cardPayload?.extractedEmail) {
+    const err = new Error('Please upload a visiting card image (base64/data URL) or OCR text payload for extraction.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const parsed = parseCardFieldsFromText(ocrRawText, cardPayload);
+  return {
+    ...parsed,
+    ocrRawText,
+    confidenceScore,
+    provider: config.ocr?.provider === 'google_vision' && config.ocr?.googleVisionApiKey ? 'google_vision' : 'tesseract.js',
+  };
+};
+
+// Backwards-compatible export alias for caAdminController
+export const mockOcrExtractFromCard = extractBusinessCardOcr;
 
 /**
  * Duplicate check for email, phone, or registration number (membershipNumber)
@@ -447,7 +508,7 @@ export const activateCaProfile = async ({ token, password, name, phone, firmName
 
   // Also maintain in memory store
   let memUser = findMemoryUserByEmail(cleanEmail);
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, config.BCRYPT_ROUNDS || 12);
   if (!memUser) {
     memUser = {
       _id: `user_${Date.now()}`,
@@ -569,6 +630,7 @@ export const getProfileReportsBySourceTag = async () => {
 };
 
 export default {
+  extractBusinessCardOcr,
   mockOcrExtractFromCard,
   checkDuplicateCa,
   createPendingCaProfile,

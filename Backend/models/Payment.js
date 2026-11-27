@@ -45,10 +45,36 @@ const paymentSchema = new mongoose.Schema(
       required: [true, 'Payment amount in INR is required'],
       min: 0,
     },
+    baseAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    gstRate: {
+      type: Number,
+      default: 0.18,
+    },
+    gstAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     amountPaise: {
       type: Number,
       required: true,
       min: 0,
+    },
+    planId: {
+      type: String,
+      default: '',
+    },
+    consentAccepted: {
+      type: Boolean,
+      default: false,
+    },
+    consentAcceptedAt: {
+      type: Date,
+      default: null,
     },
     currency: {
       type: String,

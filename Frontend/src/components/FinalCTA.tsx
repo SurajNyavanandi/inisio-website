@@ -40,11 +40,11 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({
                 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-[1.15]"
                 style={{ textWrap: 'balance' }}
               >
-                Ready to Validate Your <span className="text-sky-300">Greenfield Project</span>?
+                Ready to Assess Your <span className="text-sky-300">Greenfield Project</span>?
               </h2>
 
               <p className="font-inter text-sm sm:text-base text-blue-100 leading-relaxed max-w-2xl mx-auto">
-                Join 2,500+ Indian &amp; global promoters who used Inisio to calculate bankability scores, eliminate credit committee rejections, and secure debt funding.
+                Start your free preliminary project assessment to review funding structure, identify documentation gaps, and connect with independent project finance professionals.
               </p>
 
               {/* CTAs */}

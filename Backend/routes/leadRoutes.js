@@ -8,6 +8,7 @@ import {
   clearAllLeads,
   assignLead,
   updateLeadProgress,
+  requestPromoterFundAssistance,
 } from '../controllers/leadController.js';
 import { authenticateUser, authorizeRoles, restrictSuperAdminViewer, optionalAuth } from '../middleware/authMiddleware.js';
 import { validateSchema, leadCreateSchema, validateIndianPhone } from '../middleware/validateMiddleware.js';
@@ -16,6 +17,7 @@ const router = express.Router();
 
 // Public submission
 router.post('/', optionalAuth, validateSchema(leadCreateSchema), validateIndianPhone('mobile'), createLead);
+router.post('/promoter-fund-assistance', optionalAuth, requestPromoterFundAssistance);
 
 // Lead retrieval & management (Authenticated - scoped by role: Admins, CAs, DPR, Prosync, or own leads for user)
 router.get('/', authenticateUser, getLeads);

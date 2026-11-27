@@ -1,7 +1,12 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
-import { generateToken } from '../utils/generateToken.js';
+import {
+  generateToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  hashRefreshToken,
+} from '../utils/generateToken.js';
 import { isDBConnected } from '../config/db.js';
 import config from '../config/env.js';
 import {
@@ -17,27 +22,57 @@ import {
   findMemoryUserByEmail,
   findMemoryUserById,
   addMemoryUser,
-  updateMemoryUser,
-  AUTHORIZED_ADMIN_EMAILS,
   getAdminEmail1,
   getAdminEmail2,
   getCaAdminEmail,
-  isCaAdminEmail,
   getAuthorizedAdminEmails,
   isAuthorizedAdminEmail,
   isValidGmail,
   isAuthorizedAdminGmail,
   isAuthorizedCaAdminGmail,
-  isAdminTestPasswordMatch,
 } from '../utils/memoryUserStore.js';
-import { generateOtp, verifyOtpCode } from '../utils/otpService.js';
+import { generateOtp, hashOtpCode, verifyOtpCode } from '../utils/otpService.js';
 import { maskEmail } from '../utils/privacyMask.js';
 import bcrypt from 'bcryptjs';
 
 const generateUnusableRandomPassword = () => crypto.randomBytes(24).toString('hex');
 
-const shouldExposeDevOtp = (mailResult) =>
-  process.env.NODE_ENV !== 'production' && !mailResult?.configured;
+const hashPasswordDirect = async (plainPassword) =>
+  bcrypt.hash(String(plainPassword), config.BCRYPT_ROUNDS || 12);
+
+const issueSessionPair = async (userObj) => {
+  const tokenVersion = Number(userObj?.tokenVersion || 0);
+  const accessPayload = {
+    id: userObj._id,
+    email: userObj.email,
+    role: userObj.role || 'user',
+    name: userObj.name || String(userObj.email || '').split('@')[0],
+    company: userObj.company || '',
+    phone: userObj.phone || '',
+    tokenVersion,
+    isVerified: Boolean(userObj.isVerified ?? true),
+  };
+  const token = generateToken(accessPayload);
+  const refreshToken = generateRefreshToken({
+    id: userObj._id,
+    email: userObj.email,
+    tokenVersion,
+  });
+  const tokenHash = hashRefreshToken(refreshToken);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const now = new Date();
+
+  const existingList = Array.isArray(userObj.refreshTokens) ? userObj.refreshTokens : [];
+  const pruned = existingList.filter((entry) => entry?.expiresAt && new Date(entry.expiresAt) > now).slice(-4);
+  pruned.push({ tokenHash, expiresAt, createdAt: now });
+  userObj.refreshTokens = pruned;
+
+  if (typeof userObj.save === 'function') {
+    await userObj.save().catch(() => {});
+  }
+
+  return { token, refreshToken };
+};
 
 const assertCriticalEmailDelivered = (mailResult, fallbackMessage) => {
   if (mailResult?.configured && !mailResult.success) {
@@ -151,8 +186,8 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
     error.statusCode = 400;
     throw error;
   }
-  if (!password || password.length < 6) {
-    const error = new Error('Password must be at least 6 characters');
+  if (!password || password.length < 8) {
+    const error = new Error('Password must be at least 8 characters');
     error.statusCode = 400;
     throw error;
   }
@@ -187,6 +222,7 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
   );
 
   const otp = generateOtp();
+  const otpHash = hashOtpCode(otp);
   const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
 
   if (isDBConnected()) {
@@ -194,11 +230,11 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
       const userExists = await User.findOne({ email: cleanEmail });
       if (userExists) {
         if (!userExists.isVerified) {
-          userExists.verificationOtp = otp;
+          userExists.verificationOtp = otpHash;
           userExists.verificationExpires = otpExpiry;
           userExists.otpAttempts = 0;
-          if (password && password.length >= 6) {
-            userExists.password = password; // Mongoose will re-hash
+          if (password && password.length >= 8) {
+            userExists.password = password; // Mongoose will hash via pre-save (>= 12 rounds)
           }
           if (name) userExists.name = name;
           if (phone) userExists.phone = phone;
@@ -224,7 +260,6 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
             phone: userExists.phone,
             isVerified: false,
             requiresVerification: true,
-            otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
             maskedEmail: maskEmail(cleanEmail),
             message: `A 6-digit verification code has been sent to ${maskEmail(cleanEmail)}. Please enter it to activate your account.`,
           };
@@ -243,7 +278,7 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         company: defaultCompany,
         phone: phone || '',
         isVerified: false,
-        verificationOtp: otp,
+        verificationOtp: otpHash,
         verificationExpires: otpExpiry,
         otpAttempts: 0,
       });
@@ -269,7 +304,6 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         avatarUrl: user.avatarUrl,
         isVerified: false,
         requiresVerification: true,
-        otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
         maskedEmail: maskEmail(cleanEmail),
         message: `A 6-digit verification code has been sent to ${maskEmail(cleanEmail)}. Please enter it to activate your account.`,
       };
@@ -291,9 +325,10 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
   const userExists = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
   if (userExists) {
     if (!userExists.isVerified) {
-      userExists.verificationOtp = otp;
+      userExists.verificationOtp = otpHash;
       userExists.verificationExpires = otpExpiry;
-      userExists.password = await bcrypt.hash(password, 10);
+      userExists.otpAttempts = 0;
+      userExists.password = await hashPasswordDirect(password);
       if (name) userExists.name = name;
       if (phone) userExists.phone = phone;
 
@@ -317,7 +352,6 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
         avatarUrl: userExists.avatarUrl,
         isVerified: false,
         requiresVerification: true,
-        otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
         maskedEmail: maskEmail(cleanEmail),
         message: `Account is pending verification. A fresh 6-digit code has been sent to ${maskEmail(cleanEmail)}.`,
       };
@@ -328,7 +362,7 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await hashPasswordDirect(password);
   const newUser = {
     _id: `user_${Date.now()}`,
     name: name || cleanEmail.split('@')[0],
@@ -338,8 +372,11 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
     company: defaultCompany,
     phone: phone || '',
     isVerified: false,
-    verificationOtp: otp,
+    verificationOtp: otpHash,
     verificationExpires: otpExpiry,
+    otpAttempts: 0,
+    tokenVersion: 0,
+    refreshTokens: [],
     createdAt: new Date(),
   };
   memoryUsers.push(newUser);
@@ -368,7 +405,6 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
     avatarUrl: newUser.avatarUrl,
     isVerified: false,
     requiresVerification: true,
-    otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
     message: feedbackMessage,
   };
 };
@@ -396,15 +432,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
 
       if (user.isVerified) {
         await recordSuccessfulLogin(user, req);
-        const token = generateToken({
-          id: user._id,
-          email: user.email,
-          role: user.role,
-          name: user.name,
-          company: user.company,
-          phone: user.phone,
-          isVerified: true,
-        });
+        const { token, refreshToken } = await issueSessionPair(user);
         return {
           _id: user._id,
           name: user.name,
@@ -415,6 +443,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
           avatarUrl: user.avatarUrl,
           isVerified: true,
           token,
+          refreshToken,
           message: 'Account is already verified. Logged in successfully.',
         };
       }
@@ -451,15 +480,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       // Non-blocking welcome email confirming account activation
       sendWelcomeEmail({ to: user.email, name: user.name }).catch(() => {});
 
-      const token = generateToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-        company: user.company,
-        phone: user.phone,
-        isVerified: true,
-      });
+      const { token, refreshToken } = await issueSessionPair(user);
 
       return {
         _id: user._id,
@@ -471,6 +492,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
         avatarUrl: user.avatarUrl,
         isVerified: true,
         token,
+        refreshToken,
         message: 'Email successfully verified! Welcome to Inisio.',
       };
     } catch (err) {
@@ -479,6 +501,12 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       }
       console.warn('MongoDB error in verifyEmailOtp, checking memory store:', err.message);
     }
+  }
+
+  if (!shouldAllowMemoryFallback()) {
+    const error = new Error('Database connection is unavailable.');
+    error.statusCode = 503;
+    throw error;
   }
 
   // In-memory verification fallback
@@ -491,15 +519,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
 
   if (user.isVerified) {
     await recordSuccessfulLogin(user, req);
-    const token = generateToken({
-      id: user._id,
-      email: user.email,
-      role: user.role,
-      name: user.name,
-      company: user.company,
-      phone: user.phone,
-      isVerified: true,
-    });
+    const { token, refreshToken } = await issueSessionPair(user);
     return {
       _id: user._id,
       name: user.name,
@@ -510,12 +530,22 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
       avatarUrl: user.avatarUrl,
       isVerified: true,
       token,
+      refreshToken,
       message: 'Account is already verified. Logged in successfully.',
     };
   }
 
   if (!verifyOtpCode(user.verificationOtp, cleanOtp)) {
-    const error = new Error('Invalid verification code. Please check your email or click Resend Code.');
+    user.otpAttempts = (user.otpAttempts || 0) + 1;
+    if (user.otpAttempts >= 5) {
+      user.verificationOtp = null;
+      user.verificationExpires = null;
+      user.otpAttempts = 0;
+      const error = new Error('Too many incorrect verification attempts. Code has been invalidated. Please click Resend Code.');
+      error.statusCode = 429;
+      throw error;
+    }
+    const error = new Error(`Invalid verification code. ${5 - user.otpAttempts} attempts remaining.`);
     error.statusCode = 400;
     throw error;
   }
@@ -529,20 +559,13 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
   user.isVerified = true;
   user.verificationOtp = null;
   user.verificationExpires = null;
+  user.otpAttempts = 0;
   await recordSuccessfulLogin(user, req);
 
   // Non-blocking welcome email confirming account activation
   sendWelcomeEmail({ to: user.email, name: user.name }).catch(() => {});
 
-  const token = generateToken({
-    id: user._id,
-    email: user.email,
-    role: user.role,
-    name: user.name,
-    company: user.company,
-    phone: user.phone,
-    isVerified: true,
-  });
+  const { token, refreshToken } = await issueSessionPair(user);
 
   return {
     _id: user._id,
@@ -554,6 +577,7 @@ export const verifyEmailOtp = async ({ email, otp, req }) => {
     avatarUrl: user.avatarUrl,
     isVerified: true,
     token,
+    refreshToken,
     message: 'Email successfully verified! Welcome to Inisio.',
   };
 };
@@ -569,6 +593,7 @@ export const sendVerificationOtp = async (email) => {
   }
   const cleanEmail = email.toLowerCase().trim();
   const otp = generateOtp();
+  const otpHash = hashOtpCode(otp);
   const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
 
   let userName = cleanEmail.split('@')[0];
@@ -580,8 +605,9 @@ export const sendVerificationOtp = async (email) => {
       if (user) {
         foundUser = true;
         userName = user.name || userName;
-        user.verificationOtp = otp;
+        user.verificationOtp = otpHash;
         user.verificationExpires = otpExpiry;
+        user.otpAttempts = 0;
         await user.save();
       }
     } catch (err) {
@@ -589,12 +615,13 @@ export const sendVerificationOtp = async (email) => {
     }
   }
 
-  if (!foundUser) {
+  if (!foundUser && shouldAllowMemoryFallback()) {
     const memUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
     if (memUser) {
       foundUser = true;
-      memUser.verificationOtp = otp;
+      memUser.verificationOtp = otpHash;
       memUser.verificationExpires = otpExpiry;
+      memUser.otpAttempts = 0;
       userName = memUser.name || userName;
     }
   }
@@ -621,7 +648,6 @@ export const sendVerificationOtp = async (email) => {
     maskedEmail,
     message: `A new 6-digit verification code has been sent to ${maskedEmail}.`,
     expiresIn: '15 minutes',
-    otp: shouldExposeDevOtp(mailResult) ? otp : undefined,
   };
 };
 
@@ -650,40 +676,30 @@ export const loginUser = async ({ email, password, req }) => {
   // 1. Database-backed authentication
   if (isDBConnected()) {
     try {
-      const user = await User.findOne({ email: cleanEmail }).select('+password');
-      
-      const isAdminTestPass = isAdminEmail && isAdminTestPasswordMatch(password);
+      const user = await User.findOne({ email: cleanEmail }).select('+password +refreshTokens');
+
       if (user) {
         if (user.passwordInitialized === false) {
-          if (isAdminTestPass) {
-            user.password = String(password);
-            user.passwordInitialized = true;
-            user.isVerified = true;
-          } else {
-            const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
-            error.statusCode = 401;
-            throw error;
-          }
-        } else {
-          const isMatch = (await user.matchPassword(password)) || isAdminTestPass;
-
-          if (!isMatch) {
-            const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
-            error.statusCode = 401;
-            throw error;
-          }
+          const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
+          error.statusCode = 401;
+          throw error;
+        }
+        const isMatch = await user.matchPassword(password);
+        if (!isMatch) {
+          const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
+          error.statusCode = 401;
+          throw error;
         }
 
         if (isAdminEmail && user.role !== adminRole) {
           user.role = adminRole;
         } else if (!isAdminEmail && ['admin', 'superadmin', 'ca_admin'].includes(user.role)) {
-          // Heal any non-allowlisted user account that was previously misassigned an admin role
           user.role = 'user';
         }
 
         if (user.isVerified === false && !isAdminEmail) {
           const freshOtp = generateOtp();
-          user.verificationOtp = freshOtp;
+          user.verificationOtp = hashOtpCode(freshOtp);
           user.verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
           user.otpAttempts = 0;
           await user.save();
@@ -707,7 +723,6 @@ export const loginUser = async ({ email, password, req }) => {
             phone: user.phone,
             isVerified: false,
             requiresVerification: true,
-            otp: shouldExposeDevOtp(mailResult) ? freshOtp : undefined,
             maskedEmail: maskEmail(cleanEmail),
             message: `Please verify your email first. We sent a fresh 6-digit code to ${maskEmail(cleanEmail)}.`,
           };
@@ -718,19 +733,9 @@ export const loginUser = async ({ email, password, req }) => {
           user.verificationOtp = null;
           user.verificationExpires = null;
         }
-        await user.save();
 
         await recordSuccessfulLogin(user, req);
-
-        const token = generateToken({
-          id: user._id,
-          email: user.email,
-          role: user.role,
-          name: user.name,
-          company: user.company,
-          phone: user.phone,
-          isVerified: true,
-        });
+        const { token, refreshToken } = await issueSessionPair(user);
 
         return {
           _id: user._id,
@@ -742,6 +747,7 @@ export const loginUser = async ({ email, password, req }) => {
           avatarUrl: user.avatarUrl,
           isVerified: true,
           token,
+          refreshToken,
           message: 'Login successful',
         };
       }
@@ -773,25 +779,17 @@ export const loginUser = async ({ email, password, req }) => {
     throw error;
   }
 
-  const isAdminTestPassMem = (isAdminEmail || isCaAdmin) && isAdminTestPasswordMatch(password);
   if (user.passwordInitialized === false) {
-    if (isAdminTestPassMem) {
-      user.password = bcrypt.hashSync(String(password), 10);
-      user.passwordInitialized = true;
-      user.isVerified = true;
-    } else {
-      const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
-      error.statusCode = 401;
-      throw error;
-    }
-  } else {
-    const isMatch = (await bcrypt.compare(password, user.password)) || isAdminTestPassMem;
+    const error = new Error(`No password has been set for ${cleanEmail} yet. Please click 'Forgot Password?' to receive a 6-digit code via email and set your password.`);
+    error.statusCode = 401;
+    throw error;
+  }
 
-    if (!isMatch) {
-      const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
-      error.statusCode = 401;
-      throw error;
-    }
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    const error = new Error(`Incorrect password for ${cleanEmail}. If you forgot your password, please click 'Forgot Password?' to reset it.`);
+    error.statusCode = 401;
+    throw error;
   }
 
   if (isAdminEmail) {
@@ -800,15 +798,11 @@ export const loginUser = async ({ email, password, req }) => {
     user.role = 'user';
   }
 
-  // If user has not verified their email, dispatch OTP and require verification
   if (user.isVerified === false) {
     const freshOtp = generateOtp();
-    user.verificationOtp = freshOtp;
+    user.verificationOtp = hashOtpCode(freshOtp);
     user.verificationExpires = new Date(Date.now() + 15 * 60 * 1000);
     user.otpAttempts = 0;
-    if (user.save) {
-      await user.save().catch(() => {});
-    }
 
     const mailResult = await sendVerificationEmail({
       to: cleanEmail,
@@ -829,23 +823,13 @@ export const loginUser = async ({ email, password, req }) => {
       phone: user.phone,
       isVerified: false,
       requiresVerification: true,
-      otp: shouldExposeDevOtp(mailResult) ? freshOtp : undefined,
       maskedEmail: maskEmail(cleanEmail),
       message: `Please verify your email first. We sent a fresh 6-digit code to ${maskEmail(cleanEmail)}.`,
     };
   }
 
   await recordSuccessfulLogin(user, req);
-
-  const token = generateToken({
-    id: user._id,
-    email: user.email,
-    role: user.role,
-    name: user.name,
-    company: user.company,
-    phone: user.phone,
-    isVerified: true,
-  });
+  const { token, refreshToken } = await issueSessionPair(user);
 
   return {
     _id: user._id,
@@ -857,6 +841,7 @@ export const loginUser = async ({ email, password, req }) => {
     avatarUrl: user.avatarUrl,
     isVerified: true,
     token,
+    refreshToken,
     message: 'Login successful',
   };
 };
@@ -955,6 +940,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
   }
   const cleanEmail = email.toLowerCase().trim();
   const otp = generateOtp();
+  const otpHash = hashOtpCode(otp);
   const otpExpiry = new Date(Date.now() + 15 * 60 * 1000);
   let userName = cleanEmail.split('@')[0];
   let foundUser = false;
@@ -966,8 +952,9 @@ export const forgotPassword = async (email, clientOrigin = '') => {
       });
       if (user) {
         foundUser = true;
-        user.resetPasswordOtp = otp;
+        user.resetPasswordOtp = otpHash;
         user.resetPasswordExpires = otpExpiry;
+        user.otpAttempts = 0;
         await user.save();
         userName = user.name || userName;
       }
@@ -976,15 +963,15 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     }
   }
 
-  if (!foundUser) {
+  if (!foundUser && shouldAllowMemoryFallback()) {
     const memUser = memoryUsers.find((u) => u.email.toLowerCase().trim() === cleanEmail);
     if (memUser) {
       foundUser = true;
-      memUser.resetPasswordOtp = otp;
+      memUser.resetPasswordOtp = otpHash;
       memUser.resetPasswordExpires = otpExpiry;
+      memUser.otpAttempts = 0;
       userName = memUser.name || userName;
 
-      // Sync into DB if DB is connected
       if (isDBConnected()) {
         try {
           await User.create({
@@ -996,8 +983,9 @@ export const forgotPassword = async (email, clientOrigin = '') => {
             company: memUser.company || '',
             phone: memUser.phone || '',
             isVerified: true,
-            resetPasswordOtp: otp,
+            resetPasswordOtp: otpHash,
             resetPasswordExpires: otpExpiry,
+            otpAttempts: 0,
           });
         } catch (syncErr) {
           console.warn('Could not sync memory user to DB on forgotPassword:', syncErr.message);
@@ -1031,8 +1019,9 @@ export const forgotPassword = async (email, clientOrigin = '') => {
               : 'Inisio HQ Operations',
           phone: isCaAdmin ? '+91 98765 43210' : '+91 63020 26462',
           isVerified: true,
-          resetPasswordOtp: otp,
+          resetPasswordOtp: otpHash,
           resetPasswordExpires: otpExpiry,
+          otpAttempts: 0,
         });
         foundUser = true;
       } catch (adminSyncErr) {
@@ -1045,7 +1034,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
         _id: `user_${Date.now()}`,
         name: userName,
         email: cleanEmail,
-        password: await bcrypt.hash(generateUnusableRandomPassword(), 10),
+        password: await hashPasswordDirect(generateUnusableRandomPassword()),
         passwordInitialized: false,
         role: adminRole,
         company: isCaAdmin
@@ -1055,8 +1044,11 @@ export const forgotPassword = async (email, clientOrigin = '') => {
             : 'Inisio HQ Operations',
         phone: isCaAdmin ? '+91 98765 43210' : '+91 63020 26462',
         isVerified: true,
-        resetPasswordOtp: otp,
+        resetPasswordOtp: otpHash,
         resetPasswordExpires: otpExpiry,
+        otpAttempts: 0,
+        tokenVersion: 0,
+        refreshTokens: [],
         createdAt: new Date(),
       });
       foundUser = true;
@@ -1069,8 +1061,7 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     throw error;
   }
 
-  // Determine base application URL from request origin or APP_URL
-  const baseUrl = (clientOrigin || config.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const baseUrl = (clientOrigin || config.APP_URL || 'http://localhost:5000').replace(/\/$/, '');
   const resetLink = `${baseUrl}/?mode=reset-password&token=${encodeURIComponent(otp)}&email=${encodeURIComponent(cleanEmail)}`;
 
   const mailResult = await sendPasswordResetEmail({
@@ -1090,7 +1081,6 @@ export const forgotPassword = async (email, clientOrigin = '') => {
     email: cleanEmail,
     maskedEmail,
     expiresIn: '15 minutes',
-    ...(shouldExposeDevOtp(mailResult) ? { otp, resetLink } : {}),
   };
 };
 
@@ -1118,7 +1108,18 @@ export const verifyResetOtp = async ({ email, otp }) => {
       }
 
       if (!verifyOtpCode(user.resetPasswordOtp, cleanOtp)) {
-        const error = new Error('Invalid OTP code. Please check your email.');
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        if (user.otpAttempts >= 5) {
+          user.resetPasswordOtp = null;
+          user.resetPasswordExpires = null;
+          user.otpAttempts = 0;
+          await user.save().catch(() => {});
+          const error = new Error('Too many incorrect OTP attempts. Code has been invalidated. Please request a new password reset.');
+          error.statusCode = 429;
+          throw error;
+        }
+        await user.save().catch(() => {});
+        const error = new Error(`Invalid OTP code. ${5 - user.otpAttempts} attempts remaining.`);
         error.statusCode = 400;
         throw error;
       }
@@ -1131,13 +1132,18 @@ export const verifyResetOtp = async ({ email, otp }) => {
 
       valid = true;
     } catch (err) {
-      if (err.statusCode || err.message.includes('Invalid') || err.message.includes('expired') || err.message.includes('No registered')) {
+      if (err.statusCode || err.message.includes('Invalid') || err.message.includes('expired') || err.message.includes('No registered') || err.message.includes('Too many')) {
         throw err;
       }
     }
   }
 
   if (!valid) {
+    if (!shouldAllowMemoryFallback()) {
+      const error = new Error('Database connection is unavailable.');
+      error.statusCode = 503;
+      throw error;
+    }
     const memUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
     if (!memUser) {
       const error = new Error('No registered account found with this email address.');
@@ -1146,7 +1152,16 @@ export const verifyResetOtp = async ({ email, otp }) => {
     }
 
     if (!verifyOtpCode(memUser.resetPasswordOtp, cleanOtp)) {
-      const error = new Error('Invalid OTP code. Please check your email.');
+      memUser.otpAttempts = (memUser.otpAttempts || 0) + 1;
+      if (memUser.otpAttempts >= 5) {
+        memUser.resetPasswordOtp = null;
+        memUser.resetPasswordExpires = null;
+        memUser.otpAttempts = 0;
+        const error = new Error('Too many incorrect OTP attempts. Code has been invalidated. Please request a new password reset.');
+        error.statusCode = 429;
+        throw error;
+      }
+      const error = new Error(`Invalid OTP code. ${5 - memUser.otpAttempts} attempts remaining.`);
       error.statusCode = 400;
       throw error;
     }
@@ -1172,15 +1187,15 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
   const cleanEmail = email.toLowerCase().trim();
   const cleanOtp = String(otp).trim();
 
-  if (!newPassword || newPassword.length < 6) {
-    const error = new Error('New password must be at least 6 characters');
+  if (!newPassword || newPassword.length < 8) {
+    const error = new Error('New password must be at least 8 characters');
     error.statusCode = 400;
     throw error;
   }
 
   if (isDBConnected()) {
     try {
-      const user = await User.findOne({ email: cleanEmail }).select('+password');
+      const user = await User.findOne({ email: cleanEmail }).select('+password +refreshTokens');
       if (!user) {
         const error = new Error('User not found.');
         error.statusCode = 404;
@@ -1216,20 +1231,14 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
       user.resetPasswordExpires = null;
       user.otpAttempts = 0;
       user.isVerified = true;
+      user.tokenVersion = Number(user.tokenVersion || 0) + 1;
+      user.refreshTokens = [];
       await user.save();
 
       // Dispatch security notification via Resend
       sendPasswordResetSuccessEmail({ to: user.email, name: user.name }).catch(() => {});
 
-      const token = generateToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-        company: user.company,
-        phone: user.phone,
-        isVerified: true,
-      });
+      const { token, refreshToken } = await issueSessionPair(user);
 
       return {
         _id: user._id,
@@ -1240,13 +1249,20 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
         phone: user.phone,
         isVerified: true,
         token,
+        refreshToken,
         message: 'Password successfully updated! You are now logged in.',
       };
     } catch (err) {
-      if (err.statusCode || err.message.includes('Invalid') || err.message.includes('expired') || err.message.includes('not found')) {
+      if (err.statusCode || err.message.includes('Invalid') || err.message.includes('expired') || err.message.includes('not found') || err.message.includes('Too many')) {
         throw err;
       }
     }
+  }
+
+  if (!shouldAllowMemoryFallback()) {
+    const error = new Error('Database connection unavailable.');
+    error.statusCode = 503;
+    throw error;
   }
 
   const memUser = memoryUsers.find((u) => u.email.toLowerCase() === cleanEmail);
@@ -1257,7 +1273,16 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
   }
 
   if (!verifyOtpCode(memUser.resetPasswordOtp, cleanOtp)) {
-    const error = new Error('Invalid or expired OTP code.');
+    memUser.otpAttempts = (memUser.otpAttempts || 0) + 1;
+    if (memUser.otpAttempts >= 5) {
+      memUser.resetPasswordOtp = null;
+      memUser.resetPasswordExpires = null;
+      memUser.otpAttempts = 0;
+      const error = new Error('Too many incorrect OTP attempts. Code has been invalidated. Please request a new password reset.');
+      error.statusCode = 429;
+      throw error;
+    }
+    const error = new Error(`Invalid or expired OTP code. ${5 - memUser.otpAttempts} attempts remaining.`);
     error.statusCode = 400;
     throw error;
   }
@@ -1268,24 +1293,19 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
     throw error;
   }
 
-  memUser.password = await bcrypt.hash(newPassword, 10);
+  memUser.password = await hashPasswordDirect(newPassword);
   memUser.passwordInitialized = true;
   memUser.resetPasswordOtp = null;
   memUser.resetPasswordExpires = null;
+  memUser.otpAttempts = 0;
   memUser.isVerified = true;
+  memUser.tokenVersion = Number(memUser.tokenVersion || 0) + 1;
+  memUser.refreshTokens = [];
 
   // Dispatch security notification via Resend
   sendPasswordResetSuccessEmail({ to: cleanEmail, name: memUser.name }).catch(() => {});
 
-  const token = generateToken({
-    id: memUser._id,
-    email: cleanEmail,
-    role: memUser.role || 'user',
-    name: memUser.name || cleanEmail.split('@')[0],
-    company: memUser.company || 'Enterprise Promoter',
-    phone: memUser.phone || '',
-    isVerified: true,
-  });
+  const { token, refreshToken } = await issueSessionPair(memUser);
 
   return {
     _id: memUser._id,
@@ -1296,6 +1316,7 @@ export const resetPassword = async ({ email, otp, newPassword }) => {
     phone: memUser.phone || '',
     isVerified: true,
     token,
+    refreshToken,
     message: 'Password successfully updated! You are now logged in.',
   };
 };
@@ -1341,24 +1362,11 @@ export const adminLogin = async ({ email, password, req }) => {
   const NON_ADMIN_PORTAL_ROLES = ['user', 'ca', 'dpr_consultant', 'dpr', 'prosync', 'prosync_admin'];
   const setupPasswordMsg =
     'No password has been set for this admin account yet. Click "Forgot / Set Password?" to receive a 6-digit code via email and create your password.';
-  const isTestPassword = isAdminTestPasswordMatch(password);
-  const defaultAdminName =
-    role === 'ca_admin'
-      ? 'CA Operations Admin'
-      : role === 'superadmin'
-      ? 'Executive Super Admin'
-      : 'Inisio Operations Admin';
-  const defaultAdminCompany =
-    role === 'ca_admin'
-      ? 'Inisio CA Network Administration'
-      : role === 'superadmin'
-      ? 'Inisio Executive Board'
-      : 'Inisio HQ Operations';
 
   // 1. Try DB first
   if (isDBConnected()) {
     try {
-      let user = await User.findOne({ email: cleanEmail }).select('+password');
+      const user = await User.findOne({ email: cleanEmail }).select('+password +refreshTokens');
       if (user && NON_ADMIN_PORTAL_ROLES.includes(user.role)) {
         const error = new Error(
           'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
@@ -1367,63 +1375,31 @@ export const adminLogin = async ({ email, password, req }) => {
         throw error;
       }
 
-      if (!user) {
-        if (!isTestPassword) {
-          const error = new Error(setupPasswordMsg);
-          error.statusCode = 401;
-          throw error;
-        }
-        user = await User.create({
-          name: defaultAdminName,
-          email: cleanEmail,
-          password: String(password),
-          role,
-          company: defaultAdminCompany,
-          phone: '',
-          isVerified: true,
-          passwordInitialized: true,
-        });
-      } else if (user.passwordInitialized === false) {
-        if (!isTestPassword) {
-          const error = new Error(setupPasswordMsg);
-          error.statusCode = 401;
-          throw error;
-        }
-        user.password = String(password);
-        user.passwordInitialized = true;
-        user.role = role;
-        user.isVerified = true;
-        await user.save();
-      } else {
-        const isMatch = (await user.matchPassword(password)) || isTestPassword;
-        if (!isMatch) {
-          const error = new Error(
-            'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
-          );
-          error.statusCode = 401;
-          throw error;
-        }
-
-        if (user.role !== role) {
-          user.role = role;
-        }
-        if (!user.isVerified) {
-          user.isVerified = true;
-        }
-        await user.save();
+      if (!user || user.passwordInitialized === false) {
+        const error = new Error(setupPasswordMsg);
+        error.statusCode = 401;
+        throw error;
       }
 
-      await recordSuccessfulLogin(user, req);
+      const isMatch = await user.matchPassword(password);
+      if (!isMatch) {
+        const error = new Error(
+          'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
+        );
+        error.statusCode = 401;
+        throw error;
+      }
 
-      const token = generateToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
-        name: user.name,
-        company: user.company,
-        phone: user.phone,
-        isVerified: true,
-      });
+      if (user.role !== role) {
+        user.role = role;
+      }
+      if (!user.isVerified) {
+        user.isVerified = true;
+      }
+      await user.save();
+
+      await recordSuccessfulLogin(user, req);
+      const { token, refreshToken } = await issueSessionPair(user);
 
       return {
         _id: user._id,
@@ -1435,6 +1411,7 @@ export const adminLogin = async ({ email, password, req }) => {
         avatarUrl: user.avatarUrl,
         isVerified: true,
         token,
+        refreshToken,
         message: `${user.role === 'ca_admin' ? 'CA Admin' : user.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
       };
     } catch (err) {
@@ -1445,14 +1422,14 @@ export const adminLogin = async ({ email, password, req }) => {
     }
   }
 
-  // 2. Memory fallback (when DB unavailable)
+  // 2. Memory fallback (only when explicitly permitted outside production)
   if (!shouldAllowMemoryFallback()) {
     const error = new Error('Database connection unavailable.');
     error.statusCode = 503;
     throw error;
   }
 
-  let memUser = findMemoryUserByEmail(cleanEmail);
+  const memUser = findMemoryUserByEmail(cleanEmail);
   if (memUser && NON_ADMIN_PORTAL_ROLES.includes(memUser.role)) {
     const error = new Error(
       'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
@@ -1461,55 +1438,24 @@ export const adminLogin = async ({ email, password, req }) => {
     throw error;
   }
 
-  if (!memUser) {
-    if (!isTestPassword) {
-      const error = new Error(setupPasswordMsg);
-      error.statusCode = 401;
-      throw error;
-    }
-    memUser = addMemoryUser({
-      name: defaultAdminName,
-      email: cleanEmail,
-      password: bcrypt.hashSync(String(password), 10),
-      passwordInitialized: true,
-      role,
-      company: defaultAdminCompany,
-      phone: '',
-      isVerified: true,
-    });
-  } else if (memUser.passwordInitialized === false) {
-    if (!isTestPassword) {
-      const error = new Error(setupPasswordMsg);
-      error.statusCode = 401;
-      throw error;
-    }
-    memUser.password = bcrypt.hashSync(String(password), 10);
-    memUser.passwordInitialized = true;
-    memUser.isVerified = true;
-  } else {
-    const isMatch = (await bcrypt.compare(password, memUser.password)) || isTestPassword;
-    if (!isMatch) {
-      const error = new Error(
-        'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
-      );
-      error.statusCode = 401;
-      throw error;
-    }
+  if (!memUser || memUser.passwordInitialized === false) {
+    const error = new Error(setupPasswordMsg);
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const isMatch = await bcrypt.compare(password, memUser.password);
+  if (!isMatch) {
+    const error = new Error(
+      'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
+    );
+    error.statusCode = 401;
+    throw error;
   }
 
   memUser.role = role;
-
   await recordSuccessfulLogin(memUser, req);
-
-  const token = generateToken({
-    id: memUser._id,
-    email: memUser.email,
-    role: memUser.role,
-    name: memUser.name,
-    company: memUser.company,
-    phone: memUser.phone,
-    isVerified: true,
-  });
+  const { token, refreshToken } = await issueSessionPair(memUser);
 
   return {
     _id: memUser._id,
@@ -1521,8 +1467,116 @@ export const adminLogin = async ({ email, password, req }) => {
     avatarUrl: memUser.avatarUrl,
     isVerified: true,
     token,
+    refreshToken,
     message: `${memUser.role === 'ca_admin' ? 'CA Admin' : memUser.role === 'superadmin' ? 'Super Admin' : 'Admin'} authentication successful`,
   };
+};
+
+/**
+ * Rotate a valid HttpOnly refresh token into a fresh access token + new refresh token
+ */
+export const refreshSessionTokens = async ({ refreshToken, req }) => {
+  if (!refreshToken) {
+    const err = new Error('Refresh token missing. Please sign in again.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  let decoded;
+  try {
+    decoded = verifyRefreshToken(refreshToken);
+  } catch {
+    const err = new Error('Invalid or expired refresh token. Please sign in again.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  const incomingHash = hashRefreshToken(refreshToken);
+  const cleanEmail = String(decoded.email || '').toLowerCase().trim();
+  const now = new Date();
+
+  let userObj = null;
+  if (isDBConnected()) {
+    if (decoded.id && mongoose.Types.ObjectId.isValid(decoded.id)) {
+      userObj = await User.findById(decoded.id).select('+refreshTokens');
+    } else if (cleanEmail) {
+      userObj = await User.findOne({ email: cleanEmail }).select('+refreshTokens');
+    }
+  } else if (shouldAllowMemoryFallback()) {
+    userObj = findMemoryUserById(decoded.id) || findMemoryUserByEmail(cleanEmail);
+  }
+
+  if (!userObj) {
+    const err = new Error('Account not found for refresh token.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  if (Number(userObj.tokenVersion || 0) !== Number(decoded.tokenVersion ?? 0)) {
+    const err = new Error('Session has been revoked. Please sign in again.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  const storedTokens = Array.isArray(userObj.refreshTokens) ? userObj.refreshTokens : [];
+  const matchIdx = storedTokens.findIndex(
+    (entry) => entry?.tokenHash === incomingHash && entry?.expiresAt && new Date(entry.expiresAt) > now
+  );
+
+  if (matchIdx === -1) {
+    // Possible refresh token reuse: revoke all active sessions for safety
+    userObj.refreshTokens = [];
+    userObj.tokenVersion = Number(userObj.tokenVersion || 0) + 1;
+    if (typeof userObj.save === 'function') {
+      await userObj.save().catch(() => {});
+    }
+    const err = new Error('Refresh token is invalid or has already been rotated. Please sign in again.');
+    err.statusCode = 401;
+    throw err;
+  }
+
+  // Rotate: remove used refresh hash before issuing next pair
+  userObj.refreshTokens = storedTokens.filter((_, idx) => idx !== matchIdx);
+  const pair = await issueSessionPair(userObj);
+
+  return {
+    _id: userObj._id,
+    name: userObj.name,
+    email: userObj.email,
+    role: userObj.role,
+    company: userObj.company,
+    phone: userObj.phone,
+    isVerified: Boolean(userObj.isVerified ?? true),
+    token: pair.token,
+    refreshToken: pair.refreshToken,
+  };
+};
+
+/**
+ * Revoke current refresh token and invalidate existing access tokens by incrementing tokenVersion
+ */
+export const logoutUserSession = async ({ userId, refreshToken }) => {
+  const tokenHash = refreshToken ? hashRefreshToken(refreshToken) : null;
+  let userObj = null;
+
+  if (isDBConnected()) {
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      userObj = await User.findById(userId).select('+refreshTokens');
+    } else if (tokenHash) {
+      userObj = await User.findOne({ 'refreshTokens.tokenHash': tokenHash }).select('+refreshTokens');
+    }
+  } else if (shouldAllowMemoryFallback() && userId) {
+    userObj = findMemoryUserById(userId);
+  }
+
+  if (userObj) {
+    userObj.tokenVersion = Number(userObj.tokenVersion || 0) + 1;
+    userObj.refreshTokens = [];
+    if (typeof userObj.save === 'function') {
+      await userObj.save().catch(() => {});
+    }
+  }
+  return { loggedOut: true };
 };
 
 export default {
@@ -1531,6 +1585,8 @@ export default {
   sendVerificationOtp,
   loginUser,
   adminLogin,
+  refreshSessionTokens,
+  logoutUserSession,
   getUserProfile,
   updateUserProfile,
   forgotPassword,

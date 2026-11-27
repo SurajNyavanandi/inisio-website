@@ -41,105 +41,105 @@ interface StepItem {
 export const HOW_IT_WORKS_STEPS: StepItem[] = [
   {
     number: 1,
-    id: 'tell-us',
-    title: 'Tell Us About Your Project',
+    id: 'project-details',
+    title: 'Project Details',
     shortTitle: 'Project Details',
-    timeframe: 'Step 01',
+    timeframe: 'STEP 01',
     description:
-      'Share initial information about your project vision, target industry, land status, planned capacity, and capital requirements.',
+      'Share initial information about your project vision, proposed location, planned capacity, and capital requirements.',
     icon: MessageSquare,
     points: [
-      'Industry sector & project concept',
-      'Proposed location & land acquisition status',
-      'Target production capacity & machinery scope',
-      'Estimated capital expenditure & timeline',
+      'Project name & concept overview',
+      'Proposed State & City location',
+      'Optional sector classification & capacity scope',
+      'Initial project readiness snapshot',
     ],
     deliverables: ['Project Intake Record', 'Initial Parameter Setup'],
   },
   {
     number: 2,
-    id: 'assess-project',
-    title: 'Assess Your Project',
-    shortTitle: 'Assess Project',
-    timeframe: 'Step 02',
+    id: 'project-assessment',
+    title: 'Project Assessment',
+    shortTitle: 'Project Assessment',
+    timeframe: 'STEP 02',
     description:
-      'Structure your project financial model, capital cost breakdown (civil, machinery, consultancy), and means of finance.',
+      'Structure your estimated project cost, promoter equity contribution, proposed debt requirement, and capital expenditure breakup.',
     icon: FileSearch,
     points: [
-      'Civil works & plant machinery cost analysis',
-      'Promoter equity vs debt capital sizing',
-      'Operational expense & revenue projections',
-      'Capacity utilization & breakeven modeling',
+      'Plant, machinery & civil works outlay',
+      'Promoter equity vs proposed debt structure',
+      'Promoter fund readiness check',
+      'Working capital & capital structure inputs',
     ],
-    deliverables: ['Feasibility Analysis', 'Capex & Means of Finance'],
+    deliverables: ['Feasibility Summary', 'Capex & Means of Finance'],
   },
   {
     number: 3,
     id: 'credit-profile',
-    title: 'Check Your Credit Profile',
+    title: 'Credit Profile',
     shortTitle: 'Credit Profile',
-    timeframe: 'Step 03',
+    timeframe: 'STEP 03',
     description:
-      'Evaluate promoter background, management track record, existing credit history, and equity contribution readiness.',
+      'Evaluate promoter background, management experience, land readiness, collateral status, and existing credit profile.',
     icon: CreditCard,
     points: [
-      'Promoter net worth & solvency review',
-      'Past project execution experience',
-      'Collateral & security coverage ratio',
-      'Institutional banking compliance checks',
+      'Land & site acquisition readiness',
+      'Collateral & security status review',
+      'Promoter track record & business constitution',
+      'Key documentation readiness checks',
     ],
-    deliverables: ['Promoter Risk Score', 'Equity Readiness Check'],
+    deliverables: ['Credit Profile Summary', 'Readiness Gap Check'],
   },
   {
     number: 4,
     id: 'bankability-insights',
-    title: 'Get Bankability Insights',
+    title: 'Bankability Insights',
     shortTitle: 'Bankability Insights',
-    timeframe: 'Step 04',
+    timeframe: 'STEP 04',
     description:
-      'Receive instant institutional underwriting metrics including DSCR thresholds, debt service capacity, and a bankability rating from AAA to BBB.',
+      'Receive preliminary indicative bankability insights, DSCR estimates, and debt-to-equity structure to highlight areas needing attention before approaching lenders.',
     icon: BarChart3,
     points: [
-      'Proprietary Bankability Scorecard (AAA to BBB)',
-      'DSCR, ISCR & Debt-to-Equity benchmarks',
-      'Sensitivity stress testing for raw material & revenue shocks',
-      'Credit committee approval probability',
+      'Indicative bankability rating & feasibility score',
+      'Indicative DSCR & debt-to-equity metrics',
+      'Identification of documentation & readiness gaps',
+      'Preliminary project viability overview',
     ],
-    deliverables: ['Bankability Rating', 'DSCR & Debt Capacity Matrix'],
+    deliverables: ['Indicative Bankability Insights', 'DSCR & Debt Capacity Overview'],
   },
   {
     number: 5,
-    id: 'download-teaser',
-    title: 'Download AI Project Teaser',
-    shortTitle: 'AI Teaser DOCX',
-    timeframe: 'Step 05',
+    id: 'project-teaser',
+    title: 'Project Teaser',
+    shortTitle: 'Project Teaser',
+    timeframe: 'STEP 05',
     description:
-      'Generate and download a comprehensive, professional Executive Project Teaser formatted specifically for institutional lenders and investors in editable DOCX format (with optional PDF).',
+      'Generate and download a preliminary project teaser in editable Word (DOCX) and PDF formats to review and share with consultants or financial institutions.',
     icon: FileText,
     points: [
-      'Institutional-grade Executive Summary',
-      'Means of Finance & Capital Outlay summary',
-      'Key financial ratios & DSCR metrics',
-      'Downloadable editable DOCX & PDF documents',
+      'Structured executive project summary',
+      'Cost of project & means of finance summary',
+      'Indicative financial ratios & DSCR snapshot',
+      'Editable DOCX & PDF formats + Document Checklist',
     ],
-    deliverables: ['Executive Project Teaser DOCX', 'Summary Risk Profile'],
+    deliverables: ['Editable Project Teaser DOCX & PDF', 'Indicative Document Checklist'],
   },
   {
     number: 6,
-    id: 'next-step-funding',
-    title: 'Choose Your Next Step / Move Towards Funding',
-    shortTitle: 'Move Towards Funding',
-    timeframe: 'Step 06',
+    id: 'connect-with-experts',
+    title: 'Connect with Experts',
+    shortTitle: 'Connect with Experts',
+    timeframe: 'STEP 06',
     description:
-      'Collaborate with dedicated Chartered Accountants and Project Finance specialists for bank-ready DPR preparation, CMA modeling, and institutional sanction support.',
+      'Discover and connect with independent Chartered Accountants, DPR, CMA and TEV consultants or Prosync Consulting for professional assistance.',
     icon: Target,
     points: [
-      'Comprehensive Bank-Grade DPR preparation',
-      'CMA data modeling & 7-10 year financial projections',
-      'Bank appraisal & TEV study coordination',
-      'End-to-end guidance towards loan sanction',
+      'CMA & Financial Analysis professionals',
+      'DPR Preparation & TEV Study consultants',
+      'Debt Syndication & Featured Advisory Partner (Prosync Consulting)',
+      'Project workspace tracking & consultation coordination',
     ],
-    deliverables: ['Bank-Ready DPR', 'Dedicated CA Advisory Support'],
+    deliverables: ['Independent Expert Introductions', 'Project Tracking Workspace'],
   },
 ];
 
@@ -161,23 +161,23 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
   const partnerCards = [
     {
       icon: Briefcase,
-      title: 'Project Assessment Specialists',
-      description: 'Experts in Greenfield Project financing.',
+      title: 'Project Feasibility Assessment',
+      description: 'Understand project cost, funding structure and indicative bankability.',
     },
     {
       icon: FileCheck,
-      title: 'Bank-Ready Documentation',
-      description: 'Professional DPRs and financial reports prepared as per banking standards.',
+      title: 'Structured Project Documentation',
+      description: 'Generate an editable project teaser and organise project information.',
     },
     {
       icon: Clock,
-      title: 'Faster Due Diligence',
-      description: 'Reduce delays with complete documentation and dedicated support.',
+      title: 'Access to Project Experts',
+      description: 'Discover independent CAs, DPR, CMA and TEV consultants.',
     },
     {
       icon: ShieldCheck,
-      title: 'Complete Project Finance Support',
-      description: 'From idea validation to funding readiness.',
+      title: 'Project Tracking',
+      description: 'Keep documents, consultant interactions and project progress organised.',
     },
   ];
 
@@ -205,21 +205,21 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
                 className="font-manrope text-3xl sm:text-4xl lg:text-[42px] font-extrabold text-slate-900 tracking-tight leading-[1.14]"
                 style={{ textWrap: 'balance' }}
               >
-                Your Step-by-Step Journey to{' '}
-                <span className="text-blue-600">Institutional Funding Readiness</span>
+                Your Project Journey:{' '}
+                <span className="text-blue-600">From Project Details to Funding Readiness</span>
               </h1>
             ) : (
               <h2
                 className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.15]"
                 style={{ textWrap: 'balance' }}
               >
-                Your Step-by-Step Journey to{' '}
-                <span className="text-blue-600">Institutional Funding Readiness</span>
+                Your Project Journey:{' '}
+                <span className="text-blue-600">From Project Details to Funding Readiness</span>
               </h2>
             )}
 
             <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed max-w-2xl mx-auto">
-              From your business idea to funding readiness, Inisio Capital guides promoters in Hyderabad, Telangana and across India through every stage with expert DPR preparation, CMA modeling, and complete project finance support.
+              Understand your project&apos;s funding structure, evaluate indicative bankability insights, generate an editable project teaser, and connect with independent project finance professionals across India.
             </p>
           </Reveal>
 
@@ -250,14 +250,6 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
               <span>Start Free Assessment</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              onClick={onOpenConsultation}
-              className="min-h-[44px] px-6 py-3 bg-white hover:bg-slate-50 text-slate-800 font-manrope font-semibold text-sm rounded-xl transition-all border border-slate-200 hover:border-slate-300 cursor-pointer inline-flex items-center gap-2 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
-            >
-              <PhoneCall className="w-4 h-4 text-blue-600" />
-              <span>Book Free Consultation</span>
-            </button>
           </Reveal>
         </section>
 
@@ -269,16 +261,16 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-left">
                   {isStandalone ? (
                     <h2 className="text-xs font-bold tracking-wide text-slate-900 font-manrope">
-                      6-Step Project Journey
+                      Your Project Journey · From Project Details to Funding Readiness
                     </h2>
                   ) : (
                     <span className="text-xs font-bold tracking-wide text-slate-900 font-manrope">
-                      6-Step Project Journey
+                      Your Project Journey · From Project Details to Funding Readiness
                     </span>
                   )}
                   <span aria-hidden="true" className="text-slate-300">·</span>
                   <span className="text-xs font-semibold text-blue-700 font-inter">
-                    Step {activeStep} of 6: {HOW_IT_WORKS_STEPS[activeStep - 1]?.title}
+                    STEP 0{activeStep}: {HOW_IT_WORKS_STEPS[activeStep - 1]?.title}
                   </span>
                 </div>
 
@@ -464,7 +456,7 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
           })}
         </section>
 
-        {/* 4. Compact Institutional Scale Strip */}
+        {/* 4. Featured Partner Strip (Prosync Consulting) */}
         <Reveal>
           <section className="relative overflow-hidden rounded-3xl bg-[#0B2A6B] bg-gradient-to-r from-[#0B2A6B] via-[#133E96] to-[#1D4ED8] p-6 sm:p-8 lg:p-10 text-white border border-blue-800/70 shadow-[0_18px_40px_-18px_rgba(11,42,107,0.45)]">
             <div
@@ -472,38 +464,41 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
               className="pointer-events-none absolute inset-0 bg-section-grid-dark opacity-70"
             />
             <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-10">
-              <div className="space-y-1.5 text-center lg:text-left">
-                <p className="text-xs font-semibold tracking-wide text-sky-200 font-inter">
-                  Advisory Track Record
+              <div className="space-y-2 text-center lg:text-left max-w-xl">
+                <p className="text-xs font-semibold tracking-wide text-sky-200 font-inter uppercase">
+                  Featured Partner
                 </p>
                 <h2 className="font-manrope text-xl sm:text-2xl font-bold text-white tracking-tight">
-                  Pan-India Greenfield Project Appraisal Scale
+                  Prosync Consulting — Featured Advisory Partner
                 </h2>
-                <p className="text-xs sm:text-sm text-blue-100 font-inter">
-                  Structuring bankable debt syndications for high-growth industrial promoters.
+                <p className="text-xs sm:text-sm text-blue-100 font-inter leading-relaxed">
+                  Prosync Consulting is an independent advisory partner featured on Inisio for project finance structuring, institutional debt syndication coordination, and lender advisory support.
+                </p>
+                <p className="text-[11px] text-sky-200/80 font-inter">
+                  Separate engagement terms, scope, and fees apply. Neither Inisio nor Prosync guarantees loan sanction or disbursement.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full lg:w-auto shrink-0">
                 <div className="px-5 py-4 bg-white/10 backdrop-blur-xs rounded-2xl border border-white/20 text-center">
-                  <span className="font-manrope text-lg sm:text-xl font-extrabold text-white block tabular-nums">
-                    ₹5 Cr – ₹2000 Cr+
+                  <span className="font-manrope text-sm sm:text-base font-extrabold text-white block">
+                    Financial Structuring
                   </span>
-                  <span className="text-xs text-blue-100 font-medium mt-0.5 block">Capex Scope</span>
+                  <span className="text-xs text-blue-100 font-medium mt-1 block">DPR &amp; Debt Advisory</span>
                 </div>
 
                 <div className="px-5 py-4 bg-white/10 backdrop-blur-xs rounded-2xl border border-white/20 text-center">
-                  <span className="font-manrope text-lg sm:text-xl font-extrabold text-emerald-300 block tabular-nums">
-                    100%
+                  <span className="font-manrope text-sm sm:text-base font-extrabold text-sky-200 block">
+                    Independent Partner
                   </span>
-                  <span className="text-xs text-blue-100 font-medium mt-0.5 block">Clearance Focus</span>
+                  <span className="text-xs text-blue-100 font-medium mt-1 block">Direct Engagement Terms</span>
                 </div>
 
                 <div className="px-5 py-4 bg-white/10 backdrop-blur-xs rounded-2xl border border-white/20 text-center">
-                  <span className="font-manrope text-lg sm:text-xl font-extrabold text-sky-200 block tabular-nums">
-                    50+
+                  <span className="font-manrope text-sm sm:text-base font-extrabold text-emerald-300 block">
+                    Multi-Sector Desk
                   </span>
-                  <span className="text-xs text-blue-100 font-medium mt-0.5 block">Sectors</span>
+                  <span className="text-xs text-blue-100 font-medium mt-1 block">Greenfield &amp; Expansion</span>
                 </div>
               </div>
             </div>
@@ -520,10 +515,10 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
               className="font-manrope text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight"
               style={{ textWrap: 'balance' }}
             >
-              Your Trusted Project Assessment Partner
+              Make Better-Informed Project Funding Decisions
             </h2>
             <p className="text-sm text-slate-600 font-inter leading-relaxed">
-              We help you prepare, apply, and secure Greenfield Project funding without confusion or delays.
+              Assess your project, understand funding gaps, organise your information and connect with the right professionals.
             </p>
           </Reveal>
 
@@ -604,9 +599,9 @@ export const HowItWorks: React.FC<HowItWorksProps> = ({
                 </div>
 
                 <div className="pt-4 border-t border-white/20 text-xs text-blue-100 font-inter flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-                  <span>✓ 100% Confidential</span>
-                  <span>✓ Bank-Ready Advisory</span>
-                  <span>✓ Greenfield Specialists</span>
+                  <span>✓ Preliminary Indicative Insights</span>
+                  <span>✓ Structured Teaser &amp; Checklist</span>
+                  <span>✓ Independent CA &amp; Consultant Access</span>
                 </div>
               </div>
             </div>

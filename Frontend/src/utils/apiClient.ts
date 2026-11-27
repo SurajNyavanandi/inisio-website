@@ -41,6 +41,7 @@ export const resolveApiUrl = (endpoint: string): string => {
 export async function fetchAuthenticatedBlob(endpoint: string): Promise<Blob> {
   const token = getAuthToken();
   const response = await fetch(resolveApiUrl(endpoint), {
+    credentials: 'include',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
@@ -52,7 +53,43 @@ export async function fetchAuthenticatedBlob(endpoint: string): Promise<Blob> {
   return response.blob();
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+let activeRefreshPromise: Promise<string | null> | null = null;
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (activeRefreshPromise) return activeRefreshPromise;
+  activeRefreshPromise = (async () => {
+    try {
+      const resp = await fetch(resolveApiUrl('/auth/refresh'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!resp.ok) return null;
+      const body = await resp.json().catch(() => ({}));
+      const nextToken = body?.data?.token || body?.token || null;
+      if (nextToken) {
+        localStorage.setItem('inisio_auth_token', nextToken);
+        const savedUser = localStorage.getItem('inisio_active_user');
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser);
+            localStorage.setItem('inisio_active_user', JSON.stringify({ ...parsed, token: nextToken }));
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return nextToken;
+    } catch {
+      return null;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+  return activeRefreshPromise;
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}, _retried = false): Promise<T> {
   const token = getAuthToken();
   const isMultipart = options.body instanceof FormData;
   const headers: Record<string, string> = isMultipart
@@ -71,10 +108,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   try {
     const response = await fetch(url, {
       ...options,
+      credentials: 'include',
       headers,
       signal: options.signal || controller.signal,
     });
     clearTimeout(timeoutId);
+
+    if (response.status === 401 && !_retried && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
+      const refreshedToken = await refreshAccessToken();
+      if (refreshedToken) {
+        return request<T>(endpoint, options, true);
+      }
+    }
 
     const data = await response.json().catch(() => ({}));
 
@@ -229,9 +274,14 @@ export const api = {
       request<any>('/leads/clear-all', {
         method: 'DELETE',
       }),
+    requestPromoterFundAssistance: (data: any) =>
+      request<any>('/leads/promoter-fund-assistance', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
-  // Consultations
+  // Consultations & Consultant Introductions
   consultations: {
     create: (data: any) =>
       request<any>('/consultations', {
@@ -244,6 +294,62 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify({ status, feedback }),
       }),
+    getIntroductions: () => request<any[]>('/consultations/introductions'),
+    createIntroduction: (data: any) =>
+      request<any>('/consultations/introductions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateIntroductionStatus: (id: string, data: { status?: string; callCenterStatus?: string; whatsappSharedToConsultant?: boolean }) =>
+      request<any>(`/consultations/introductions/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  // Consultant Discovery Directory & Nearest Match
+  consultants: {
+    getDirectory: (params?: {
+      projectLocation?: string;
+      service?: string;
+      city?: string;
+      state?: string;
+      sector?: string;
+      includeProsync?: boolean;
+    }) => {
+      const query = new URLSearchParams();
+      if (params?.projectLocation) query.append('projectLocation', params.projectLocation);
+      if (params?.service) query.append('service', params.service);
+      if (params?.city) query.append('city', params.city);
+      if (params?.state) query.append('state', params.state);
+      if (params?.sector) query.append('sector', params.sector);
+      if (params?.includeProsync !== undefined) query.append('includeProsync', String(params.includeProsync));
+      const qs = query.toString();
+      return request<any>(`/ca-admin/consultants/nearest${qs ? `?${qs}` : ''}`);
+    },
+  },
+
+  // Memberships & Payments
+  payments: {
+    getConfig: () => request<any>('/payments/config'),
+    getMembershipSummary: (params?: { email?: string; mobile?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.email) query.append('email', params.email);
+      if (params?.mobile) query.append('mobile', params.mobile);
+      const qs = query.toString();
+      return request<any>(`/payments/membership-summary${qs ? `?${qs}` : ''}`);
+    },
+    createOrder: (data: any) =>
+      request<any>('/payments/create-order', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    verifySignature: (data: any) =>
+      request<any>('/payments/verify-signature', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getHistory: () => request<any[]>('/payments/history'),
   },
 
   // Notifications

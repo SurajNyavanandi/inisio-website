@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import validator from 'validator';
+import config from '../config/env.js';
+
+const refreshTokenEntrySchema = new mongoose.Schema(
+  {
+    tokenHash: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
 
 const userSchema = new mongoose.Schema(
   {
@@ -14,16 +25,16 @@ const userSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       lowercase: true,
-      match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-        'Please add a valid email address',
-      ],
+      validate: {
+        validator: (value) => validator.isEmail(String(value || '')),
+        message: 'Please add a valid email address',
+      },
     },
     password: {
       type: String,
       required: [true, 'Please add a password'],
-      minlength: [6, 'Password must be at least 6 characters'],
-      select: false, // Don't return password by default
+      minlength: [8, 'Password must be at least 8 characters'],
+      select: false,
     },
     role: {
       type: String,
@@ -42,10 +53,36 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    membershipPlanId: {
+      type: String,
+      enum: ['free_plan', 'promoter_boost', 'promoter_plus'],
+      default: 'free_plan',
+    },
     membershipTier: {
       type: String,
-      default: 'Free',
+      default: 'Free Plan',
       trim: true,
+    },
+    membershipStatus: {
+      type: String,
+      enum: ['Free Plan', 'Active', 'Expiring Soon', 'Expired'],
+      default: 'Free Plan',
+    },
+    membershipActivatedAt: {
+      type: Date,
+      default: null,
+    },
+    membershipExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    autoRenew: {
+      type: Boolean,
+      default: false,
+    },
+    expiryNotifiedAt: {
+      type: Date,
+      default: null,
     },
     isVerified: {
       type: Boolean,
@@ -75,6 +112,15 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
+    refreshTokens: {
+      type: [refreshTokenEntrySchema],
+      default: [],
+      select: false,
+    },
     loginCount: {
       type: Number,
       default: 0,
@@ -100,27 +146,26 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ phone: 1 });
 userSchema.index({ role: 1 });
 
-// Hash password using bcryptjs before saving
+// Hash password using bcryptjs (>= 12 rounds) before saving
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) {
     return;
   }
-  const salt = await bcrypt.genSalt(10);
+  const rounds = config.BCRYPT_ROUNDS || 12;
+  const salt = await bcrypt.genSalt(rounds);
   this.password = await bcrypt.hash(this.password, salt);
 });
 
 // Compare user entered password with hashed password in database
 userSchema.methods.matchPassword = async function (enteredPassword) {
   if (!enteredPassword || !this.password) return false;
-  
-  // Direct bcrypt comparison
   try {
     return await bcrypt.compare(enteredPassword, this.password);
-  } catch (err) {
-    console.error('[User.matchPassword] bcrypt error:', err.message);
+  } catch {
     return false;
   }
 };
 
-const User = mongoose.models.User || mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+
 export default User;

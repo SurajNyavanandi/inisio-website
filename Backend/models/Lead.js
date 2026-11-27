@@ -265,6 +265,30 @@ const leadSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {}
     },
+    workingCapitalAssessedCr: {
+      type: mongoose.Schema.Types.Mixed,
+      default: '',
+    },
+    promoterContributionAvailable: {
+      type: String,
+      default: 'Yes',
+    },
+    promoterFundAssistanceStatus: {
+      type: String,
+      default: 'Not Requested',
+    },
+    promoterFundAssistanceTagged: {
+      type: Boolean,
+      default: false,
+    },
+    promoterFundAssistanceRequest: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    leadTags: {
+      type: [String],
+      default: [],
+    },
     timestamp: {
       type: Date,
       default: Date.now,

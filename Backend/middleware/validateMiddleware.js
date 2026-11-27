@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import validator from 'validator';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { sendError } from '../utils/responseHandler.js';
 
 /**
@@ -50,14 +52,26 @@ export const validateSchema = (schema) => {
   };
 };
 
-/**
- * Strict authentication & user schemas to reject unknown fields and prevent mass assignment
- */
+export const strongPasswordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters long')
+  .max(100, 'Password must not exceed 100 characters')
+  .refine((val) => /[A-Z]/.test(val), 'Password must include at least one uppercase letter')
+  .refine((val) => /[a-z]/.test(val), 'Password must include at least one lowercase letter')
+  .refine((val) => /\d/.test(val), 'Password must include at least one number')
+  .refine((val) => /[^A-Za-z0-9]/.test(val), 'Password must include at least one special character');
+
+const normalizedEmailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine((val) => validator.isEmail(val), 'Invalid email address');
+
 export const registerSchema = z
   .object({
-    name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-    email: z.string().email('Invalid email address').toLowerCase().trim(),
-    password: z.string().min(6, 'Password must be at least 6 characters').max(100),
+    name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+    email: normalizedEmailSchema,
+    password: strongPasswordSchema,
     phone: z.string().optional(),
     company: z.string().max(150).optional(),
     role: z.enum(['user', 'ca', 'dpr_consultant', 'prosync', 'prosync_admin', 'promoter']).default('user').optional(),
@@ -66,50 +80,48 @@ export const registerSchema = z
 
 export const loginSchema = z
   .object({
-    email: z.string().email('Invalid email address').toLowerCase().trim(),
+    email: normalizedEmailSchema,
     password: z.string().min(1, 'Password is required').max(100),
   })
   .strict();
 
 export const adminLoginSchema = z
   .object({
-    email: z
-      .string()
-      .email('Invalid email address')
-      .toLowerCase()
-      .trim()
-      .regex(/^[^\s@]+@gmail\.com$/i, 'Only valid @gmail.com addresses are permitted for admin access'),
+    email: normalizedEmailSchema.refine((val) => /^[^\s@]+@gmail\.com$/i.test(val), 'Only valid @gmail.com addresses are permitted for admin access'),
     password: z.string().min(1, 'Password is required').max(100),
   })
   .strict();
 
 export const otpVerifySchema = z
   .object({
-    email: z.string().email('Invalid email address').toLowerCase().trim(),
-    otp: z.string().regex(/^\d{6}$/, 'OTP must be exactly 6 digits'),
+    email: normalizedEmailSchema,
+    otp: z.string().trim().refine((val) => validator.isNumeric(val, { no_symbols: true }) && val.length === 6, 'OTP must be exactly 6 digits'),
   })
   .strict();
 
 export const emailOnlySchema = z
   .object({
-    email: z.string().email('Invalid email address').toLowerCase().trim(),
+    email: normalizedEmailSchema,
   })
   .strict();
 
 export const resetPasswordSchema = z
   .object({
-    email: z.string().email('Invalid email address').toLowerCase().trim(),
-    otp: z.string().regex(/^\d{6}$/, 'OTP must be exactly 6 digits'),
-    newPassword: z.string().min(6, 'Password must be at least 6 characters').max(100),
+    email: normalizedEmailSchema,
+    otp: z.string().trim().refine((val) => validator.isNumeric(val, { no_symbols: true }) && val.length === 6, 'OTP must be exactly 6 digits'),
+    newPassword: strongPasswordSchema,
   })
   .strict();
 
 export const updateProfileSchema = z
   .object({
-    name: z.string().min(2).max(100).optional(),
+    name: z.string().trim().min(2).max(100).optional(),
     phone: z.string().optional(),
     company: z.string().max(150).optional(),
-    avatarUrl: z.string().optional(),
+    avatarUrl: z
+      .string()
+      .optional()
+      .refine((val) => !val || validator.isURL(val, { protocols: ['https', 'http'], require_protocol: true }), 'Invalid avatar URL'),
   })
   .strict();
 
@@ -117,7 +129,7 @@ export const createOrderSchema = z
   .object({
     amount: z.coerce.number().positive('Payment amount must be greater than zero').max(10000000),
     currency: z.string().min(3).max(6).default('INR').optional(),
-    userEmail: z.string().email('Invalid email address').toLowerCase().trim().optional().or(z.literal('')),
+    userEmail: normalizedEmailSchema.optional().or(z.literal('')),
     userName: z.string().max(120).optional(),
     userPhone: z.string().max(24).optional(),
     itemType: z.string().max(60).optional(),
@@ -132,7 +144,7 @@ export const verifyPaymentSchema = z
     razorpay_order_id: z.string().trim().min(1, 'Order ID is required').max(120),
     razorpay_payment_id: z.string().trim().min(1, 'Payment ID is required').max(120),
     razorpay_signature: z.string().max(256).optional(),
-    userEmail: z.string().email('Invalid email address').toLowerCase().trim().optional().or(z.literal('')),
+    userEmail: normalizedEmailSchema.optional().or(z.literal('')),
     planName: z.string().max(120).optional(),
     paymentMethod: z.string().max(60).optional(),
   })
@@ -141,7 +153,7 @@ export const verifyPaymentSchema = z
 export const caProfileCreateSchema = z
   .object({
     name: z.string().trim().min(2, 'CA name is required').max(120),
-    email: z.string().email('Valid email address is required').toLowerCase().trim(),
+    email: normalizedEmailSchema,
     phone: z.string().max(30).optional(),
     firmName: z.string().max(160).optional(),
     membershipNumber: z.string().max(60).optional(),
@@ -154,7 +166,7 @@ export const caProfileCreateSchema = z
 export const activateCaSchema = z
   .object({
     token: z.string().trim().min(10, 'Invalid activation token').max(256),
-    password: z.string().min(6, 'Password must be at least 6 characters').max(100),
+    password: strongPasswordSchema,
     name: z.string().trim().min(2).max(120).optional(),
     phone: z.string().max(30).optional(),
     firmName: z.string().max(160).optional(),
@@ -165,14 +177,11 @@ export const activateCaSchema = z
 export const leadCreateSchema = z
   .object({
     fullName: z.string().trim().min(1, 'Full name is required').max(150),
-    email: z.string().email('Valid email address is required').toLowerCase().trim(),
+    email: normalizedEmailSchema,
     mobile: z.string().trim().min(10, 'Valid mobile number is required').max(24),
   })
   .passthrough();
 
-/**
- * Validate required fields in request body (legacy helper)
- */
 export const validateBody = (requiredFields = []) => {
   return (req, res, next) => {
     const missing = [];
@@ -203,19 +212,21 @@ export const validateIndianPhone = (field) => {
       return next();
     }
 
-    const clean = String(value).trim().replace(/[\s\-+()]/g, '')
-      .replace(/^91(?=\d{10}$)/, '')
-      .replace(/^0(?=\d{10}$)/, '');
+    const parsed = parsePhoneNumberFromString(String(value).trim(), 'IN');
+    const clean = parsed?.nationalNumber || String(value).trim().replace(/\D/g, '').slice(-10);
+
     const dummyNumbers = new Set(['0123456789', '1234567890', '9876543210', '9848012345']);
-    const isSequential = clean.length === 10 && clean.split('').every((digit, index, digits) => {
-      if (index === 0) return true;
-      const difference = Number(digit) - Number(digits[index - 1]);
-      return difference === 1 || difference === -1;
-    });
+    const isSequential =
+      clean.length === 10 &&
+      clean.split('').every((digit, index, digits) => {
+        if (index === 0) return true;
+        const difference = Number(digit) - Number(digits[index - 1]);
+        return difference === 1 || difference === -1;
+      });
 
     if (
+      (parsed && !parsed.isValid()) ||
       clean.length !== 10 ||
-      !/^\d{10}$/.test(clean) ||
       !/^[6-9]\d{9}$/.test(clean) ||
       /^(\d)\1{9}$/.test(clean) ||
       dummyNumbers.has(clean) ||
@@ -224,6 +235,7 @@ export const validateIndianPhone = (field) => {
       return sendError(res, `Please provide a valid 10-digit Indian mobile number for ${field}`, 400);
     }
 
+    req.body[field] = parsed?.number || `+91${clean}`;
     next();
   };
 };
@@ -232,6 +244,7 @@ export default {
   validateSchema,
   stripUnsafeKeys,
   escapeRegex,
+  strongPasswordSchema,
   registerSchema,
   loginSchema,
   adminLoginSchema,

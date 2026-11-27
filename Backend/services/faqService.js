@@ -4,7 +4,7 @@ import { isDBConnected } from '../config/db.js';
 import cache from '../utils/cache.js';
 
 let memoryFAQs = [...DEFAULT_FAQS];
-const CACHE_KEY = 'all_faqs';
+const CACHE_KEY = 'all_faqs_v2';
 
 export const getAllFAQs = async () => {
   const cached = cache.get(CACHE_KEY);
@@ -14,9 +14,12 @@ export const getAllFAQs = async () => {
   if (isDBConnected()) {
     try {
       const list = await FAQ.find({ active: true }).sort({ order: 1 }).lean();
-      if (list && list.length > 0) results = list;
+      // Only use DB FAQs if they match the updated 15-item Project Appraisal set
+      if (list && list.length >= 15 && list[0]?.category === 'Project Appraisal') {
+        results = list;
+      }
     } catch (err) {
-      console.warn('MongoDB query failed in getAllFAQs, using memory fallback:', err.message);
+      console.warn('MongoDB query failed in getAllFAQs, using updated Project Appraisal defaults:', err.message);
     }
   }
 

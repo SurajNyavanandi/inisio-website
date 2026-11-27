@@ -1,4 +1,5 @@
 import consultationService from '../services/consultationService.js';
+import introductionService from '../services/introductionService.js';
 import { sendSuccess } from '../utils/responseHandler.js';
 
 export const createConsultation = async (req, res, next) => {
@@ -38,9 +39,44 @@ export const updateConsultationStatus = async (req, res, next) => {
   }
 };
 
+export const createIntroduction = async (req, res, next) => {
+  try {
+    const result = await introductionService.createIntroductionRequest(req.body, req.user);
+    return sendSuccess(
+      res,
+      result,
+      'Consultant introduction request submitted and routed for call center confirmation',
+      201
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getIntroductions = async (req, res, next) => {
+  try {
+    const list = await introductionService.listIntroductionsForUser(req.user, req.query);
+    return sendSuccess(res, list, 'Introduction requests retrieved');
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateIntroductionTrackingStatus = async (req, res, next) => {
+  try {
+    const item = await introductionService.updateIntroductionStatus(req.params.id, req.body);
+    return sendSuccess(res, item, 'Introduction tracking status updated');
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   createConsultation,
   getConsultations,
   getConsultationById,
   updateConsultationStatus,
+  createIntroduction,
+  getIntroductions,
+  updateIntroductionTrackingStatus,
 };

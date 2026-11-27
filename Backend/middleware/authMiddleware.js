@@ -3,7 +3,10 @@ import { verifyToken } from '../utils/generateToken.js';
 import User from '../models/User.js';
 import { sendError } from '../utils/responseHandler.js';
 import { isDBConnected } from '../config/db.js';
+import config from '../config/env.js';
 import {
+  findMemoryUserByEmail,
+  findMemoryUserById,
   isAuthorizedAdminEmail,
   isAuthorizedAdminGmail,
   isAuthorizedCaAdminGmail,
@@ -38,12 +41,24 @@ export const authenticateUser = async (req, res, next) => {
             user = await User.findOne({ email: String(decoded.email).toLowerCase().trim() }).select('-password');
           }
           if (user) {
+            if (Number(user.tokenVersion || 0) !== Number(decoded.tokenVersion ?? 0)) {
+              return sendError(res, 'Session has been revoked. Please sign in again.', 401);
+            }
             req.user = user;
             return next();
           }
         } catch (dbErr) {
           console.warn('DB lookup in authMiddleware failed:', dbErr.message);
         }
+      }
+
+      if (!config.ALLOW_MEMORY_FALLBACK) {
+        return sendError(res, 'Not authorized, user session not found', 401);
+      }
+
+      const memUser = findMemoryUserById(decoded.id) || (decoded.email ? findMemoryUserByEmail(decoded.email) : null);
+      if (memUser && Number(memUser.tokenVersion || 0) !== Number(decoded.tokenVersion ?? 0)) {
+        return sendError(res, 'Session has been revoked. Please sign in again.', 401);
       }
 
       req.user = {
@@ -53,12 +68,12 @@ export const authenticateUser = async (req, res, next) => {
         role: decoded.role || 'user',
         company: decoded.company || '',
         phone: decoded.phone || '',
+        tokenVersion: Number(decoded.tokenVersion || 0),
         isVerified: decoded.isVerified ?? true,
       };
 
       return next();
     } catch (error) {
-      console.error('JWT Authentication Error:', error.message);
       return sendError(res, 'Not authorized, token invalid or expired', 401);
     }
   }

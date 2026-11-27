@@ -983,6 +983,131 @@ export const sendConsultationConfirmationEmail = async ({
   return results[0] || { success: true };
 };
 
+/**
+ * 9. Promoter Fund Assistance Request: Separate Emails to Promoter & Lead Owner
+ */
+export const sendPromoterFundAssistanceEmails = async ({
+  promoterEmail,
+  promoterName = 'Promoter',
+  promoterPhone = '',
+  leadOwnerEmail = '',
+  projectName = 'Greenfield Project',
+  requiredAmountCr = '',
+  assistanceType = 'Equity Co-Investment / Angel Syndication',
+  notes = '',
+}) => {
+  const adminFallback = getAdminNotifyEmail();
+  const targetOwnerEmail =
+    leadOwnerEmail && leadOwnerEmail.includes('@') ? leadOwnerEmail.trim().toLowerCase() : adminFallback;
+
+  const cleanPromoterEmail = String(promoterEmail || '').trim().toLowerCase();
+  const dashboardUrl = `${getAppUrl()}/dashboard`;
+  const adminUrl = `${getAppUrl()}/admin`;
+
+  const tasks = [];
+
+  // Separate Email #1: Confirmation to Promoter
+  if (cleanPromoterEmail && cleanPromoterEmail.includes('@')) {
+    const pText = [
+      `Hi ${promoterName},`,
+      '',
+      `Your Promoter Fund Assistance request for "${projectName}" has been received and tagged on Inisio.`,
+      `Required Equity Support Amount: INR ${requiredAmountCr || 'N/A'} Cr`,
+      `Preferred Structure: ${assistanceType}`,
+      '',
+      'Our lead advisory owner has been notified and will review suitability with potential funding partners. Note that facilitation is subject to eligibility and investor/lender terms.',
+      `View your project workspace: ${dashboardUrl}`,
+      '',
+      'Inisio Advisory',
+    ].join('\n');
+
+    const pHtml = buildMinimalEmailHtml({
+      heading: 'Promoter Fund Assistance Request Tagged',
+      greeting: `Hi ${promoterName},`,
+      paragraphs: [
+        `We have logged and tagged your Promoter Fund Assistance request for ${projectName}. The assigned lead owner has been notified separately for review.`,
+      ],
+      details: [
+        { label: 'Project', value: projectName },
+        { label: 'Required Equity Support', value: `INR ${requiredAmountCr || 'N/A'} Cr` },
+        { label: 'Structure Requested', value: assistanceType },
+        ...(notes ? [{ label: 'Notes', value: notes }] : []),
+      ],
+      ctaLabel: 'Open Promoter Dashboard',
+      ctaUrl: dashboardUrl,
+    });
+
+    tasks.push(
+      sendEmail(
+        {
+          to: cleanPromoterEmail,
+          subject: `Promoter Fund Assistance Request Received: ${projectName}`,
+          text: pText,
+          html: pHtml,
+        },
+        { type: 'promoter_fund_assistance_promoter' }
+      ).catch(() => null)
+    );
+  }
+
+  // Separate Email #2: Action Alert to Lead Owner / Admin
+  if (targetOwnerEmail && targetOwnerEmail.includes('@')) {
+    const oText = [
+      'ACTION REQUIRED: Promoter Fund Assistance Tagged Lead',
+      '',
+      `Promoter: ${promoterName}`,
+      `Email: ${cleanPromoterEmail || 'N/A'}`,
+      `Mobile: ${promoterPhone || 'N/A'}`,
+      `Project: ${projectName}`,
+      `Equity Gap / Support Needed: INR ${requiredAmountCr || 'N/A'} Cr`,
+      `Assistance Structure: ${assistanceType}`,
+      `Lead Tag: Promoter Fund Assistance`,
+      ...(notes ? [`Notes: ${notes}`] : []),
+      '',
+      `Review in Portal: ${adminUrl}`,
+    ].join('\n');
+
+    const oHtml = buildMinimalEmailHtml({
+      heading: 'Tagged Lead: Promoter Fund Assistance Requested',
+      greeting: 'Hi Lead Owner,',
+      paragraphs: [
+        `A promoter has requested equity/margin assistance during Step 2 of their project assessment. This lead has been tagged "Promoter Fund Assistance".`,
+      ],
+      details: [
+        { label: 'Lead Tag', value: 'Promoter Fund Assistance' },
+        { label: 'Promoter', value: promoterName },
+        { label: 'Promoter Email', value: cleanPromoterEmail || 'N/A' },
+        { label: 'Promoter Mobile', value: promoterPhone || 'N/A' },
+        { label: 'Project', value: projectName },
+        { label: 'Equity Support Needed', value: `INR ${requiredAmountCr || 'N/A'} Cr` },
+        { label: 'Structure Requested', value: assistanceType },
+        ...(notes ? [{ label: 'Notes', value: notes }] : []),
+      ],
+      ctaLabel: 'Review Tagged Lead',
+      ctaUrl: adminUrl,
+    });
+
+    tasks.push(
+      sendEmail(
+        {
+          to: targetOwnerEmail,
+          subject: `[Tagged: Promoter Fund Assistance] ${projectName} — INR ${requiredAmountCr || 'N/A'} Cr`,
+          text: oText,
+          html: oHtml,
+        },
+        { type: 'promoter_fund_assistance_owner' }
+      ).catch(() => null)
+    );
+  }
+
+  const results = await Promise.all(tasks);
+  return {
+    dispatchedCount: results.filter(Boolean).length,
+    promoterNotified: Boolean(cleanPromoterEmail),
+    leadOwnerEmail: targetOwnerEmail || null,
+  };
+};
+
 export default {
   isResendConfigured,
   sendEmail,
@@ -995,4 +1120,5 @@ export default {
   sendContactEnquiryAlertEmail,
   sendLeadAssessmentConfirmationEmail,
   sendConsultationConfirmationEmail,
+  sendPromoterFundAssistanceEmails,
 };

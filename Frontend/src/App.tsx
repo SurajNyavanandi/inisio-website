@@ -2,8 +2,6 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthUser } from './types';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { TrustNumbers } from './components/TrustNumbers';
-import { BankLogosCarousel } from './components/BankLogosCarousel';
 import { Footer } from './components/Footer';
 import { FloatingContactButtons } from './components/FloatingContactButtons';
 import { DashboardSkeleton, LoadingSpinner } from './components/common';
@@ -69,6 +67,7 @@ const ContactSection = lazyWithRetry(() => import('./components/ContactSection')
 const FinalCTA = lazyWithRetry(() => import('./components/FinalCTA').then(m => ({ default: m.FinalCTA })));
 const LatestBlogs = lazyWithRetry(() => import('./components/LatestBlogs').then(m => ({ default: m.LatestBlogs })));
 const BlogsPage = lazyWithRetry(() => import('./components/BlogsPage').then(m => ({ default: m.BlogsPage })));
+const MembershipSection = lazyWithRetry(() => import('./components/MembershipSection').then(m => ({ default: m.MembershipSection })));
 
 // Code-split modals
 const AuthModal = lazyWithRetry(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
@@ -101,6 +100,7 @@ export default function App() {
       return 'blogs';
     }
     if (path === '/assessment') return 'assessment';
+    if (path === '/pricing' || path === '/membership') return 'pricing';
     if (path === '/how-it-works') return 'how-it-works';
     if (path === '/about') return 'about';
     if (path === '/industries') return 'industries';
@@ -128,6 +128,7 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [membershipModalOpen, setMembershipModalOpen] = useState(false);
   const [membershipModalReason, setMembershipModalReason] = useState('');
+  const [membershipInitialPlanId, setMembershipInitialPlanId] = useState<'promoter_boost' | 'promoter_plus' | null>(null);
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup' | 'forgot-password' | 'reset-password'>('login');
   
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
@@ -178,6 +179,11 @@ export default function App() {
               company: data.data.company,
               phone: data.data.phone,
               token: token,
+              membershipPlanId: data.data.membershipPlanId,
+              membershipTier: data.data.membershipTier,
+              membershipStatus: data.data.membershipStatus,
+              membershipActivatedAt: data.data.membershipActivatedAt,
+              membershipExpiresAt: data.data.membershipExpiresAt,
             };
             setCurrentUser(user);
             localStorage.setItem('inisio_active_user', JSON.stringify(user));
@@ -290,6 +296,9 @@ export default function App() {
         }
       } else if (path === '/assessment') {
         setActiveTab('assessment');
+      } else if (path === '/pricing' || path === '/membership') {
+        setActiveHomeSection('');
+        setActiveTab('pricing');
       } else if (path === '/how-it-works') {
         setActiveHomeSection('');
         setActiveTab('how-it-works');
@@ -433,6 +442,12 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    const token = localStorage.getItem('inisio_auth_token');
+    fetch(resolveApiUrl('/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).catch(() => {});
     setCurrentUser(null);
     localStorage.removeItem('inisio_active_user');
     localStorage.removeItem('inisio_auth_token');
@@ -654,9 +669,6 @@ export default function App() {
                 />
               </div>
 
-              <BankLogosCarousel />
-              <TrustNumbers />
-
               {/* Solutions & How It Works Anchor Section */}
               <div id="solutions" className="scroll-mt-20">
                 <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
@@ -675,6 +687,20 @@ export default function App() {
                   />
                 </Suspense>
               </div>
+
+              {/* Promoter Membership Plans Section (placed after Benefits for Promoters) */}
+              <Suspense fallback={<div className="py-16 flex justify-center"><LoadingSpinner size="lg" /></div>}>
+                <MembershipSection
+                  currentUser={currentUser}
+                  onStartFreeAssessment={() => handleOpenAssessment()}
+                  onUpgradePlan={(planId) => {
+                    setMembershipInitialPlanId(planId);
+                    setMembershipModalReason('');
+                    setMembershipModalOpen(true);
+                  }}
+                  onViewAllBenefits={() => handleSelectTab('pricing')}
+                />
+              </Suspense>
 
               {/* Industries & Sectors Anchor Section */}
               <div id="industries" className="scroll-mt-20">
@@ -749,10 +775,12 @@ export default function App() {
                     user={currentUser}
                     onOpenAssessment={(projectToEdit) => handleOpenAssessment('', projectToEdit)}
                     onOpenConsultation={() => setConsultationModalOpen(true)}
-                    onOpenMembership={() => {
-                      setMembershipModalReason('');
+                    onOpenMembership={(reason?: string, planId?: 'promoter_boost' | 'promoter_plus') => {
+                      setMembershipModalReason(reason || '');
+                      setMembershipInitialPlanId(planId || null);
                       setMembershipModalOpen(true);
                     }}
+                    onOpenAuth={(mode = 'login') => handleOpenAuth(mode)}
                     onLogout={handleLogout}
                     onNavigateHome={() => handleSelectTab('home')}
                   />
@@ -1010,6 +1038,24 @@ export default function App() {
               </div>
             </Suspense>
           )}
+
+          {activeTab === 'pricing' && (
+            <Suspense fallback={<DashboardSkeleton />}>
+              <div className="animate-in fade-in duration-300">
+                <MembershipSection
+                  isStandalone
+                  currentUser={currentUser}
+                  onStartFreeAssessment={() => handleOpenAssessment()}
+                  onUpgradePlan={(planId) => {
+                    setMembershipInitialPlanId(planId);
+                    setMembershipModalReason('');
+                    setMembershipModalOpen(true);
+                  }}
+                  onNavigateToPage={(tab) => handleSelectTab(tab)}
+                />
+              </div>
+            </Suspense>
+          )}
         </main>
       </div>
 
@@ -1053,11 +1099,31 @@ export default function App() {
         <Suspense fallback={null}>
           <MembershipPlansModal
             isOpen={membershipModalOpen}
-            onClose={() => setMembershipModalOpen(false)}
+            onClose={() => {
+              setMembershipModalOpen(false);
+              setMembershipInitialPlanId(null);
+            }}
             currentUser={currentUser}
             onOpenAuth={handleOpenAuth}
             onOpenConsultation={() => setConsultationModalOpen(true)}
+            onViewFullPricingPage={() => handleSelectTab('pricing')}
+            onMembershipActivated={(result) => {
+              if (currentUser) {
+                const updated: AuthUser = {
+                  ...currentUser,
+                  membershipPlanId: result.planId,
+                  membershipTier: result.planName,
+                  membershipPlan: result.planName,
+                  membershipStatus: 'Active',
+                  membershipActivatedAt: result.activatedAt,
+                  membershipExpiresAt: result.expiresAt,
+                };
+                setCurrentUser(updated);
+                localStorage.setItem('inisio_active_user', JSON.stringify(updated));
+              }
+            }}
             initialReason={membershipModalReason}
+            initialPlanId={membershipInitialPlanId}
           />
         </Suspense>
       )}

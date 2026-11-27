@@ -81,36 +81,36 @@ export const Hero: React.FC<HeroProps> = ({
   const slides = [
     {
       id: 'slide-1',
-      badge: '100% Free Initial Assessment',
-      headline: 'Planning a Greenfield Project? Loan Syndication & DPR',
-      description: 'Assess feasibility, evaluate institutional bankability ratings, and prepare audit-ready DPR financial models for bank loan sanctions.',
+      badge: 'Free First Project Assessment',
+      headline: 'Planning a Greenfield Project? Assess Feasibility Before Approaching Banks',
+      description: 'Understand your project funding readiness, evaluate indicative bankability insights, and organise your project details before connecting with professionals.',
       primaryBtnText: 'Start Free Assessment',
-      secondaryBtnText: 'Talk to an Expert',
-      trustPoints: ['100% Free First Assessment', 'Instant Bankability Rating', 'Bank-Grade Teaser PDF'],
+      secondaryBtnText: 'Request Consultation',
+      trustPoints: ['Free First Project Assessment', 'Indicative Bankability Insights', 'Editable Project Teaser DOCX'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786547187/ChatGPT_Image_Aug_12_2026_08_34_57_PM_hb8xi9.png',
-      imageAlt: 'Indian entrepreneur reviewing greenfield project finance assessment and DPR feasibility with Inisio Capital advisor in Hyderabad'
+      imageAlt: 'Indian entrepreneur reviewing greenfield project assessment and financial readiness on Inisio'
     },
     {
       id: 'slide-2',
-      badge: 'Greenfield Feasibility & Bankability',
-      headline: 'Validate Your Greenfield Project: Debt & DSCR Norms',
-      description: 'Evaluate capital expenditure viability, equity-debt structure, and lender readiness before approaching banks and institutional funds.',
+      badge: 'Project Feasibility & Funding Structure',
+      headline: 'Review Your Project Cost, Debt-to-Equity & DSCR Readiness',
+      description: 'Evaluate capital expenditure structure, equity contribution, and indicative debt servicing capacity prior to approaching banks and financial institutions.',
       primaryBtnText: 'Start Free Assessment',
-      secondaryBtnText: 'Free Consultation',
-      trustPoints: ['Debt-to-Equity & DSCR Checks', 'Capex & Means of Finance', 'Bankability Scorecard'],
+      secondaryBtnText: 'Request Consultation',
+      trustPoints: ['Indicative Debt-to-Equity & DSCR', 'Capex & Means of Finance', 'Readiness Gap Insights'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786536547/start_your_business_fx8g11.png',
-      imageAlt: 'Business promoter evaluating bank loan eligibility, DSCR norms, and CMA modeling with Inisio Capital consultant'
+      imageAlt: 'Business promoter evaluating indicative DSCR norms and project structure on Inisio'
     },
     {
       id: 'slide-3',
-      badge: 'Institutional Funding Readiness',
-      headline: 'Prepare for Institutional Funding & Term Loan Sanctions',
-      description: 'Get bank-grade feasibility scores, CMA models, and expert CA guidance for consortium term debt syndication across India.',
+      badge: 'Connect with Independent Experts',
+      headline: 'Organise Your Project File & Connect With CA, DPR & TEV Consultants',
+      description: 'Generate a preliminary project teaser, keep project tracking in one workspace, and discover independent CAs and project finance advisors.',
       primaryBtnText: 'Start Free Assessment',
       secondaryBtnText: 'Contact Us',
-      trustPoints: ['Credit Committee Ready', 'Detailed Risk Scorer', 'Dedicated CA Advisory'],
+      trustPoints: ['Editable Project Teaser', 'Project Tracking Workspace', 'Independent CA & DPR Directory'],
       image: 'https://res.cloudinary.com/aessymvl/image/upload/v1786543850/Business_ootwt8.png',
-      imageAlt: 'Promoter and chartered accountant reviewing bankable Detailed Project Report and term loan syndication plan in India'
+      imageAlt: 'Promoter reviewing project teaser and financial readiness plan with project finance consultant'
     }
   ];
 
@@ -404,7 +404,7 @@ export const Hero: React.FC<HeroProps> = ({
             Greenfield Project Assessment Made Simple
           </h2>
           <p className="text-xs sm:text-sm text-slate-600">
-            We handle the hard work so you can ensure your project is viable, bankable, and ready for institutional funding.
+            We structure the financial inputs so you can evaluate whether your project is viable, structured, and prepared for institutional funding.
           </p>
         </div>
 
@@ -444,13 +444,13 @@ export const Hero: React.FC<HeroProps> = ({
               <div className="space-y-2 text-left">
                 <p className="text-xs font-bold uppercase tracking-widest text-emerald-400 flex items-center gap-1.5">
                   <Award className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Free Initial Appraisal · Institutional Teaser</span>
+                  <span>Free Initial Appraisal · Editable Project Teaser</span>
                 </p>
                 <h2 className="font-manrope text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
-                  Tangible Outputs You Receive in Your Free Report
+                  Tangible Outputs You Receive in Your Free Assessment
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-300 max-w-2xl font-inter">
-                  Evaluate your greenfield project with bank-grade precision before spending on expensive DPRs or approaching lenders.
+                  Review indicative project numbers and funding readiness before engaging independent DPR, CMA, or TEV professionals.
                 </p>
               </div>
               <button
@@ -498,9 +498,9 @@ export const Hero: React.FC<HeroProps> = ({
                 <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm">
                   04
                 </div>
-                <h3 className="font-manrope font-bold text-sm text-white">Bankable Executive Teaser (PDF)</h3>
+                <h3 className="font-manrope font-bold text-sm text-white">Editable Project Teaser (DOCX &amp; PDF)</h3>
                 <p className="text-xs text-slate-300 leading-relaxed font-inter">
-                  Downloadable institutional teaser summary formatted for lender appraisal desks and credit committees.
+                  Download a structured preliminary teaser summary to review and verify before sharing with consultants or lenders.
                 </p>
               </div>
 
@@ -518,68 +518,68 @@ export const Hero: React.FC<HeroProps> = ({
         </div>
       </section>
 
-      {/* WHY CHOOSE INISIO (Simple Comparison - Light Theme) */}
+      {/* THE INISIO ADVANTAGE (Comparative Appraisal Comparison - Light Theme) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 sm:mt-16">
         <div className="bg-gradient-to-b from-blue-50/70 to-slate-50 rounded-3xl p-6 sm:p-10 border border-blue-100 shadow-sm space-y-8">
-          <div className="text-center max-w-xl mx-auto space-y-2">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
             <p className="text-xs font-bold uppercase tracking-widest text-blue-700">
-              Comparative Appraisal Advantage
+              The Inisio Advantage
             </p>
-            <h2 className="font-manrope text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Higher Approval. Zero Stress.
+            <h2 className="font-manrope text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
+              Be Better Prepared Before Approaching Banks
             </h2>
             <p className="text-xs sm:text-sm text-slate-600">
-              See why thousands of project promoters trust Inisio for greenfield project assessment.
+              Understand your project&apos;s funding readiness, identify gaps and connect with the right professionals.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Without Inisio */}
+            {/* Left Column */}
             <div className="bg-white/90 rounded-2xl p-6 border border-rose-200/80 shadow-xs space-y-3 text-left">
               <div className="flex items-center gap-2 text-rose-600 font-bold text-xs uppercase tracking-wider">
-                <XCircle className="w-4 h-4 text-rose-500" />
-                <span>Pursuing On Your Own</span>
+                <XCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                <span>Approaching Banks Without Prior Assessment</span>
               </div>
               <ul className="space-y-2.5 text-xs sm:text-sm text-slate-700 leading-relaxed">
                 <li className="flex items-start gap-2">
                   <span className="text-rose-500 font-bold">•</span>
-                  <span>High risk of project rejection due to missing or wrongly formatted documents.</span>
+                  <span>Unstructured project figures and missing financial assumptions that invite avoidable lender queries.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-rose-500 font-bold">•</span>
-                  <span>Confusing bank questions, unexpected delays, and multiple branch visits.</span>
+                  <span>Limited visibility on debt-to-equity balance, promoter margin gaps, and indicative DSCR prior to bank meetings.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-rose-500 font-bold">•</span>
-                  <span>Missed government subsidies and lower interest rate schemes.</span>
+                  <span>Difficulty finding relevant Chartered Accountants, DPR, CMA, or TEV specialists for project documentation.</span>
                 </li>
               </ul>
             </div>
 
-            {/* With Inisio */}
+            {/* Right Column */}
             <div className="bg-white rounded-2xl p-6 border border-blue-500/80 shadow-xs space-y-3 text-left relative overflow-hidden">
               <div className="flex items-center gap-2 text-blue-700 font-bold text-xs uppercase tracking-wider">
-                <CheckCircle2 className="w-4 h-4 text-blue-600" />
-                <span>Assessing With Inisio</span>
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>Assessing Your Project With Inisio</span>
               </div>
               <ul className="space-y-2.5 text-xs sm:text-sm text-slate-800 leading-relaxed font-medium">
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
-                  <span>Approval success with bank-approved formatting and expert preparation.</span>
+                  <span>Preliminary feasibility check and indicative bankability insights to spot readiness gaps early.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
-                  <span>Dedicated assessment advisor handles your evaluation from start to finish.</span>
+                  <span>Organised project cost breakup, means of finance, and an editable preliminary project teaser for review.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-blue-600 font-bold">•</span>
-                  <span>Comprehensive feasibility report with complete advice on institutional requirements.</span>
+                  <span>Guided access to independent CAs, DPR/CMA/TEV consultants, and workspace tracking as you prepare.</span>
                 </li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-2 text-center">
+          <div className="pt-2 text-center space-y-4">
             <button
               onClick={onOpenAssessment}
               className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md hover:shadow-lg transition-all inline-flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
@@ -587,6 +587,10 @@ export const Hero: React.FC<HeroProps> = ({
               <Calculator className="w-4 h-4" />
               <span>Start Free Assessment</span>
             </button>
+
+            <p className="text-[11px] text-slate-500 max-w-2xl mx-auto leading-relaxed">
+              Disclaimer: Project appraisal and bankability insights on Inisio are preliminary and indicative, based on promoter-submitted information. They do not constitute a formal credit rating, bank appraisal, or loan approval guarantee.
+            </p>
           </div>
 
         </div>

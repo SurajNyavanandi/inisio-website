@@ -65,6 +65,7 @@ export interface TeaserPDFData {
   promoterContributionCr?: number | string;
   termLoanCr?: number | string;
   otherFinanceCr?: number | string;
+  workingCapitalAssessedCr?: number | string;
   machineryCostCr?: number | string;
   civilCostCr?: number | string;
   consultancyCostCr?: number | string;
@@ -151,6 +152,7 @@ export interface ResolvedDocumentData {
   termLoanNum: number;
   promoterEquityNum: number;
   otherFinanceNum: number;
+  workingCapitalAssessedNum: number | null;
   totalFundingNum: number;
   debtPct: number | null;
   eqPct: number | null;
@@ -318,6 +320,7 @@ export function mapLeadRecordToPdfData(lead: LeadRecord): TeaserPDFData {
     promoterContribCr: fin.promoterContributionCr || mof.equityCr || lead.promoterContribCr,
     promoterContributionCr: fin.promoterContributionCr || mof.equityCr || lead.promoterContribCr,
     otherFinanceCr: fin.otherFinanceCr ?? mof.subsidyCr ?? mof.otherCr,
+    workingCapitalAssessedCr: (lead as any).workingCapitalAssessedCr ?? fin.workingCapitalAssessedCr,
 
     machineryCostCr: fin.machineryCostCr,
     civilCostCr: fin.civilCostCr,
@@ -479,6 +482,9 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
   );
   const rawOtherFin =
     parseNum(data.otherFinanceCr ?? data.meansOfFinance?.subsidyCr ?? data.meansOfFinance?.otherCr) ?? 0;
+  const workingCapitalAssessedNum = parseNum(
+    data.workingCapitalAssessedCr ?? data.financials?.workingCapitalAssessedCr
+  );
 
   const parsedCustomFinance = (Array.isArray(data.customFinanceComponents) ? data.customFinanceComponents : [])
     .map((item) => ({
@@ -990,6 +996,10 @@ export function resolveDocumentData(data: TeaserPDFData): ResolvedDocumentData {
     termLoanNum,
     promoterEquityNum,
     otherFinanceNum,
+    workingCapitalAssessedNum:
+      workingCapitalAssessedNum !== null && workingCapitalAssessedNum > 0
+        ? workingCapitalAssessedNum
+        : null,
     totalFundingNum,
     debtPct,
     eqPct,
@@ -1576,6 +1586,13 @@ export function generateProjectTeaserPDF(
     });
   }
 
+  if (r.workingCapitalAssessedNum !== null && r.workingCapitalAssessedNum > 0) {
+    builder.drawKeyValueList(
+      [['Working Capital Assessed (Optional Input)', fmtCr(r.workingCapitalAssessedNum)]],
+      70
+    );
+  }
+
   // Section 5: Preferred Bank & Next Steps
   builder.drawSectionHeading('5. PREFERRED BANK & NEXT STEPS');
   if (r.bankRows.length > 0) {
@@ -1790,4 +1807,71 @@ export function generateDprExecutiveSummaryPDF(
 
   const filename = `${makeSafeFileSlug(r.projectName)}_DPR.pdf`;
   return builder.output(action, filename, r, 'dpr');
+}
+
+// ============================================================================
+// 3. Project Readiness & Bank Documentation Checklist PDF Generator
+// ============================================================================
+
+export function generateProjectChecklistPDF(data: TeaserPDFData): PdfGenerationResult {
+  const r = resolveDocumentData(data);
+
+  const builder = new InstitutionalPdfBuilder({
+    docTitle: 'Project Readiness & Bank Submission Checklist',
+    projectName: r.projectName,
+    refCode: r.refCode,
+    dateStr: r.dateStr,
+    footerLabel: 'Inisio Advisory  |  Indicative Bank Documentation Checklist',
+  });
+
+  builder.drawMainHeader(
+    `${r.sector}  |  ${r.location}`,
+    'INDICATIVE DOCUMENT CHECKLIST'
+  );
+
+  builder.drawSectionHeading('1. PROJECT & FUNDING OVERVIEW');
+  const overviewList: Array<[string, string]> = [
+    ['Project Name', r.projectName],
+    ['Location', r.location],
+    ['Lead Promoter', r.promoter],
+    ['Estimated Project Cost', r.totalCostNum > 0 ? fmtCr(r.totalCostNum) : 'To be finalized'],
+    ['Proposed Term Loan', r.termLoanNum > 0 ? fmtCr(r.termLoanNum) : 'To be finalized'],
+    ['Promoter Equity Contribution', r.promoterEquityNum > 0 ? fmtCr(r.promoterEquityNum) : 'To be finalized'],
+  ];
+  if (r.workingCapitalAssessedNum !== null && r.workingCapitalAssessedNum > 0) {
+    overviewList.push(['Working Capital Assessed', fmtCr(r.workingCapitalAssessedNum)]);
+  }
+  builder.drawKeyValueList(overviewList, 62);
+
+  builder.drawSectionHeading('2. STANDARD BANK & CONSULTANT DOCUMENTATION CHECKLIST');
+  const checklistItems = [
+    ['Promoter KYC & Net Worth Statement', 'PAN, Aadhaar, 3-Year ITRs, CA-certified Net Worth & CIBIL consent'],
+    ['Entity Constitutional Documents', 'COI / Partnership Deed / MOA & AOA / Udyam & GST Registration'],
+    ['Land & Site Title Documents', `Registered Sale Deed / Lease Agreement / Allotment Letter (${cleanAsciiText(data.landStatus, 'Verify status')})`],
+    ['Collateral / Security Papers', `Title deeds, EC & valuation report (${cleanAsciiText(data.collateralStatus, 'To confirm')})`],
+    ['Detailed Project Report (DPR)', 'Technical & commercial feasibility prepared with independent DPR/TEV consultant'],
+    ['CMA Data & Financial Projections', '5-10 Year projected Balance Sheet, P&L, Cash Flow & DSCR working via CA'],
+    ['Quotations & Civil Estimates', 'Vendor proforma invoices for Plant & Machinery + Architect/Engineer civil estimate'],
+    ['Statutory Clearances & NOCs', 'Pollution PCB consent, power load sanction, FSSAI / factory / municipal approvals'],
+    ['Promoter Margin Availability Proof', 'Bank statements / FD / liquid investment proofs showing promoter margin'],
+  ];
+
+  builder.drawTable({
+    headers: [
+      { label: 'Checklist Item', width: 66 },
+      { label: 'Indicative Requirement / Action', width: 112 },
+    ],
+    rows: checklistItems.map(([item, desc]) => ({
+      cells: [item, desc],
+    })),
+    caption: 'This checklist is indicative, not exhaustive, and may differ from bank to bank.',
+  });
+
+  builder.drawParagraphBox(
+    'Important Indicative Disclaimer',
+    'This checklist is generated on a preliminary, indicative basis from information entered on Inisio. Exact documentation requirements vary across banks, NBFCs, and project categories. Please review requirements directly with your Chartered Accountant, technical consultant, and target lending institution.'
+  );
+
+  const filename = `${makeSafeFileSlug(r.projectName)}_Checklist.pdf`;
+  return builder.output('download', filename, r, 'teaser');
 }

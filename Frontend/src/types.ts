@@ -20,7 +20,12 @@ export interface AuthUser {
   phone?: string;
   token?: string;
   id?: string;
+  membershipPlanId?: 'free_plan' | 'promoter_boost' | 'promoter_plus';
   membershipPlan?: string;
+  membershipTier?: string;
+  membershipStatus?: 'Free Plan' | 'Active' | 'Expiring Soon' | 'Expired';
+  membershipActivatedAt?: string;
+  membershipExpiresAt?: string;
   createdAt?: string;
   lastLoginAt?: string;
 }
@@ -56,6 +61,12 @@ export interface TrustNumber {
 export interface TestimonialItem {
   id?: string;
   testimonialId?: string;
+  recordType?: 'case_study' | 'testimonial';
+  projectType?: string;
+  fundingRequirement?: string;
+  advisoryScope?: string;
+  advisoryPartner?: string;
+  writtenPermission?: boolean;
   name: string;
   title: string;
   company: string;

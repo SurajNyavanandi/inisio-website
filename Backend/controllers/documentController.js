@@ -1,10 +1,8 @@
-import fs from 'fs/promises';
-import path from 'path';
 import Document from '../models/Document.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
 import { sendError, sendSuccess } from '../utils/responseHandler.js';
-import { storageRoot } from '../middleware/uploadMiddleware.js';
+import { persistUploadedFile, retrieveStoredFile } from '../utils/fileStorage.js';
 import { isDBConnected } from '../config/db.js';
 
 const matchesAssignment = (assignment, user, team) => {
@@ -44,12 +42,19 @@ export const uploadDocument = async (req, res, next) => {
     const { type, record } = projectRecord;
     if (!canAccess(record, req.user)) return sendError(res, 'You are not authorized to upload to this project', 403);
 
+    const stored = await persistUploadedFile({
+      localPath: req.file.path,
+      storageName: req.file.filename,
+      mimeType: req.file.mimetype,
+    });
+
     const document = await Document.create({
       ...(type === 'lead' ? { leadId: record._id } : { projectId: record._id }),
       userId: record.userId || req.user._id,
       category,
       originalName: req.file.originalname,
-      storageName: req.file.filename,
+      storageName: stored.key,
+      storageProvider: stored.provider,
       mimeType: req.file.mimetype,
       size: req.file.size,
     });
@@ -115,15 +120,24 @@ export const downloadDocument = async (req, res, next) => {
       ? { record: await Project.findById(document.projectId).catch(() => null) }
       : { record: await Lead.findById(document.leadId).catch(() => null) };
     if (!canAccess(projectRecord.record, req.user)) return sendError(res, 'You are not authorized to access this document', 403);
-    const storageName = path.basename(document.storageName || '');
-    if (!storageName) return sendError(res, 'Document file is unavailable', 404);
-    const filePath = path.join(storageRoot, storageName);
+    let retrieved = null;
     try {
-      await fs.access(filePath);
+      retrieved = await retrieveStoredFile({
+        storageProvider: document.storageProvider || 'local',
+        storageName: document.storageName,
+      });
     } catch {
       return sendError(res, 'Document file is unavailable', 404);
     }
-    return res.download(filePath, document.originalName, {
+    if (!retrieved) return sendError(res, 'Document file is unavailable', 404);
+
+    if (retrieved.provider === 's3' && retrieved.buffer) {
+      res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(document.originalName)}"`);
+      return res.send(retrieved.buffer);
+    }
+
+    return res.download(retrieved.filePath, document.originalName, {
       headers: { 'Content-Type': document.mimeType || 'application/octet-stream' },
     }, (error) => {
       if (error && !res.headersSent) next(error);

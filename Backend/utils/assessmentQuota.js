@@ -4,9 +4,15 @@ import Project from '../models/Project.js';
 import Assessment from '../models/Assessment.js';
 import User from '../models/User.js';
 import Payment from '../models/Payment.js';
+import IntroductionRequest from '../models/IntroductionRequest.js';
 import { isDBConnected } from '../config/db.js';
 import { getMemoryPaymentsByUser } from './memoryPaymentStore.js';
 import { findMemoryUserByEmail, findMemoryUserById } from './memoryUserStore.js';
+import {
+  MEMBERSHIP_PLAN_CATALOG,
+  resolvePlanDefinition,
+  computeMembershipStatusLabel,
+} from './membershipPlans.js';
 
 export const FREE_ASSESSMENT_LIMIT = 1;
 export const FREE_ASSESSMENT_LIMIT_CODE = 'FREE_ASSESSMENT_LIMIT_REACHED';
@@ -28,7 +34,11 @@ const PRIVILEGED_ROLES = new Set([
 const FREE_TIER_NAMES = new Set([
   '',
   'free',
+  'free_plan',
+  'free plan',
   'free starter',
+  'free_starter',
+  'free – project assessment',
   'standard',
   'starter',
   'basic',
@@ -63,7 +73,6 @@ export const isPaidMembershipTier = (tier) => {
 
 /**
  * Determine whether a Lead payload/record represents a Project Assessment / Teaser submission
- * (rather than a Contact Us form inquiry, CA consultation request, or general newsletter lead).
  */
 export const isAssessmentLeadRecord = (record) => {
   if (!record || typeof record !== 'object') return false;
@@ -81,7 +90,9 @@ export const isAssessmentLeadRecord = (record) => {
     src.includes('newsletter') ||
     src.includes('dpr request') ||
     src.includes('funding request') ||
-    src.includes('promoter fund assistance');
+    src.includes('promoter fund assistance') ||
+    src.includes('nearby ca') ||
+    src.includes('prosync featured');
 
   if (isInquirySource) {
     return false;
@@ -95,7 +106,8 @@ export const isAssessmentLeadRecord = (record) => {
     src.includes('project');
 
   const hasProjectMetrics = Boolean(
-    (record.projectName && String(record.projectName).trim()) &&
+    record.projectName &&
+      String(record.projectName).trim() &&
       (Number(record.feasibilityScore || 0) > 0 ||
         Number(record.totalCostCr || record.projectCost || 0) > 0 ||
         (record.clientProjectId && String(record.clientProjectId).trim()))
@@ -106,9 +118,6 @@ export const isAssessmentLeadRecord = (record) => {
 
 const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/**
- * Build a MongoDB $or identity filter matching userId, normalized email, or 10-digit trailing mobile.
- */
 export const buildIdentityOrFilter = ({ userId, email, mobile10 }) => {
   const orConditions = [];
   if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
@@ -149,56 +158,77 @@ const getProjectDedupeKey = (rec) => {
 };
 
 /**
- * Resolve whether the user has an active paid membership tier from User doc or captured Payment records.
+ * Resolve the user's authoritative membership tier, activation & expiry dates, and live status label
  */
 export const resolveUserMembership = async ({ user, email }) => {
   const cleanEmail = normalizeEmail(user?.email || email);
   const userId = user?._id || user?.id || null;
 
-  if (isPaidMembershipTier(user?.membershipTier || user?.membershipPlan)) {
-    return {
-      hasPaidMembership: true,
-      membershipTier: user.membershipTier || user.membershipPlan,
-    };
+  let planId = 'free_plan';
+  let membershipTier = MEMBERSHIP_PLAN_CATALOG.free_plan.name;
+  let activatedAt = null;
+  let expiresAt = null;
+
+  const applyRecord = (rec) => {
+    if (!rec) return;
+    const rawTier = rec.membershipPlanId || rec.membershipTier || rec.membershipPlan || rec.planName;
+    const resolved = resolvePlanDefinition(rawTier);
+    if (resolved.id !== 'free_plan') {
+      planId = resolved.id;
+      membershipTier = resolved.name;
+      activatedAt = rec.membershipActivatedAt || rec.createdAt || activatedAt;
+      if (rec.membershipExpiresAt) {
+        expiresAt = rec.membershipExpiresAt;
+      } else if (resolved.validityDays && activatedAt) {
+        expiresAt = new Date(new Date(activatedAt).getTime() + resolved.validityDays * 86400000);
+      }
+    }
+  };
+
+  if (user && isPaidMembershipTier(user.membershipPlanId || user.membershipTier || user.membershipPlan)) {
+    applyRecord(user);
   }
 
-  if (isDBConnected()) {
+  if (isDBConnected() && (userId || cleanEmail)) {
     try {
       let dbUser = null;
       if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
-        dbUser = await User.findById(userId).select('membershipTier role email phone').lean();
-      } else if (cleanEmail) {
-        dbUser = await User.findOne({ email: cleanEmail }).select('membershipTier role email phone').lean();
-      }
-
-      if (dbUser && isPaidMembershipTier(dbUser.membershipTier)) {
-        return {
-          hasPaidMembership: true,
-          membershipTier: dbUser.membershipTier,
-        };
-      }
-
-      const paymentOr = [];
-      if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
-        paymentOr.push({ userId: new mongoose.Types.ObjectId(String(userId)) });
-      }
-      if (cleanEmail) {
-        paymentOr.push({ userEmail: cleanEmail });
-      }
-
-      if (paymentOr.length > 0) {
-        const capturedPayment = await Payment.findOne({
-          $or: paymentOr,
-          status: 'captured',
-        })
-          .sort({ createdAt: -1 })
+        dbUser = await User.findById(userId)
+          .select('membershipPlanId membershipTier membershipStatus membershipActivatedAt membershipExpiresAt role email phone')
           .lean();
+      } else if (cleanEmail) {
+        dbUser = await User.findOne({ email: cleanEmail })
+          .select('membershipPlanId membershipTier membershipStatus membershipActivatedAt membershipExpiresAt role email phone')
+          .lean();
+      }
 
-        if (capturedPayment) {
-          return {
-            hasPaidMembership: true,
-            membershipTier: capturedPayment.planName || 'Institutional Plan',
-          };
+      if (dbUser && isPaidMembershipTier(dbUser.membershipPlanId || dbUser.membershipTier)) {
+        applyRecord(dbUser);
+      } else {
+        const paymentOr = [];
+        if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
+          paymentOr.push({ userId: new mongoose.Types.ObjectId(String(userId)) });
+        }
+        if (cleanEmail) {
+          paymentOr.push({ userEmail: cleanEmail });
+        }
+
+        if (paymentOr.length > 0) {
+          const capturedPayment = await Payment.findOne({
+            $or: paymentOr,
+            status: 'captured',
+            itemType: 'membership',
+          })
+            .sort({ createdAt: -1 })
+            .lean();
+
+          if (capturedPayment) {
+            applyRecord({
+              membershipPlanId: capturedPayment.planId || capturedPayment.planName,
+              membershipTier: capturedPayment.planName,
+              membershipActivatedAt: capturedPayment.updatedAt || capturedPayment.createdAt,
+            });
+          }
         }
       }
     } catch (err) {
@@ -206,36 +236,53 @@ export const resolveUserMembership = async ({ user, email }) => {
     }
   }
 
-  // Fallback memory user & memory payment check
-  const memUser =
-    (userId && findMemoryUserById(userId)) || (cleanEmail && findMemoryUserByEmail(cleanEmail));
-  if (memUser && isPaidMembershipTier(memUser.membershipTier)) {
-    return {
-      hasPaidMembership: true,
-      membershipTier: memUser.membershipTier,
-    };
-  }
-
-  if (cleanEmail) {
-    const memPayments = getMemoryPaymentsByUser(cleanEmail) || [];
-    const captured = memPayments.find((p) => p.status === 'captured');
-    if (captured) {
-      return {
-        hasPaidMembership: true,
-        membershipTier: captured.planName || 'Institutional Plan',
-      };
+  if (planId === 'free_plan') {
+    const memUser =
+      (userId && findMemoryUserById(userId)) || (cleanEmail && findMemoryUserByEmail(cleanEmail));
+    if (memUser && isPaidMembershipTier(memUser.membershipPlanId || memUser.membershipTier)) {
+      applyRecord(memUser);
+    } else if (cleanEmail) {
+      const memPayments = getMemoryPaymentsByUser(cleanEmail) || [];
+      const captured = memPayments.find((p) => p.status === 'captured');
+      if (captured) {
+        applyRecord({
+          membershipPlanId: captured.planId || captured.planName,
+          membershipTier: captured.planName,
+          membershipActivatedAt: captured.updatedAt || captured.createdAt,
+        });
+      }
     }
   }
 
+  const statusInfo = computeMembershipStatusLabel({ planId, expiresAt });
+
+  // Condition #7: When paid membership is expired, revert active limits back to Free Plan (preserving all historical records!)
+  const activePlan = statusInfo.isPaidActive
+    ? resolvePlanDefinition(planId)
+    : MEMBERSHIP_PLAN_CATALOG.free_plan;
+
   return {
-    hasPaidMembership: false,
-    membershipTier: 'Free',
+    planId,
+    activePlanId: activePlan.id,
+    hasPaidMembership: statusInfo.isPaidActive,
+    membershipTier: planId === 'free_plan' ? MEMBERSHIP_PLAN_CATALOG.free_plan.name : membershipTier,
+    statusLabel: statusInfo.statusLabel,
+    isExpired: statusInfo.isExpired,
+    isExpiringSoon: statusInfo.isExpiringSoon,
+    daysRemaining: statusInfo.daysRemaining,
+    activatedAt,
+    expiresAt,
+    autoRenew: false,
+    assessmentsLimit: activePlan.assessmentsLimit,
+    consultantIntroLimit: activePlan.consultantIntroLimit,
+    prosyncIntroLimit: activePlan.prosyncIntroLimit,
+    totalIntroLimit: activePlan.totalIntroLimit,
   };
 };
 
 /**
- * Authoritative server-side check enforcing 1 free assessment per valid user
- * across userId, normalized email, and normalized 10-digit mobile number.
+ * Authoritative server-side check enforcing plan assessment limits (Free: 1, Boost: 1, Plus: 3)
+ * and returning comprehensive usage + introduction metrics.
  */
 export const checkUserAssessmentQuota = async ({
   user = null,
@@ -253,9 +300,19 @@ export const checkUserAssessmentQuota = async ({
       allowed: true,
       unlimited: true,
       hasPaidMembership: true,
+      planId: 'promoter_plus',
       membershipTier: 'Staff / Institutional',
+      statusLabel: 'Active',
       usedCount: 0,
       limit: null,
+      remainingCount: null,
+      consultantUsed: 0,
+      consultantLimit: 99,
+      consultantRemaining: 99,
+      prosyncUsed: 0,
+      prosyncLimit: 99,
+      prosyncRemaining: 99,
+      prosyncStatus: 'Staff Access',
       existingProjectId: null,
       existingProjectName: null,
       existingClientProjectId: null,
@@ -335,7 +392,6 @@ export const checkUserAssessmentQuota = async ({
       }
     }
 
-    // Also include in-memory records when DB is offline or memory fallback is active
     for (const lead of memoryLeads || []) {
       if (recordMatchesIdentity(lead, identity) && isAssessmentLeadRecord(lead)) {
         matchedRecords.push({
@@ -376,7 +432,7 @@ export const checkUserAssessmentQuota = async ({
     }
   }
 
-  // Deduplicate records that represent the same logical project
+  // Condition #2: Deduplicate records that represent the same logical project
   const uniqueProjectsMap = new Map();
   for (const rec of matchedRecords) {
     const key = getProjectDedupeKey(rec);
@@ -384,7 +440,6 @@ export const checkUserAssessmentQuota = async ({
       uniqueProjectsMap.set(key, rec);
     } else {
       const existing = uniqueProjectsMap.get(key);
-      // Prefer lead record ID so dashboard resume links directly to the lead/project
       if (existing.kind !== 'lead' && rec.kind === 'lead') {
         uniqueProjectsMap.set(key, rec);
       }
@@ -395,7 +450,6 @@ export const checkUserAssessmentQuota = async ({
   const usedCount = distinctProjects.length;
   const primaryExisting = distinctProjects[0] || null;
 
-  // Check if incoming request is updating one of the user's already-counted existing projects
   const isUpdatingExisting = Boolean(
     (incomingClientProjectId &&
       matchedRecords.some((r) => r.clientProjectId && r.clientProjectId === incomingClientProjectId)) ||
@@ -403,58 +457,102 @@ export const checkUserAssessmentQuota = async ({
         matchedRecords.some((r) => r._id && String(r._id) === incomingRecordId))
   );
 
-  if (membership.hasPaidMembership) {
-    return {
-      allowed: true,
-      unlimited: true,
-      hasPaidMembership: true,
-      membershipTier: membership.membershipTier,
-      usedCount,
-      limit: null,
-      existingProjectId: primaryExisting?._id || null,
-      existingProjectName: primaryExisting?.projectName || null,
-      existingClientProjectId: primaryExisting?.clientProjectId || null,
-      isUpdatingExisting,
-    };
+  // Separate Prosync vs independent consultant introductions tracking
+  let consultantUsed = 0;
+  let prosyncUsed = 0;
+  let prosyncStatus = 'Not Requested';
+
+  if (isDBConnected() && (userId || cleanEmail)) {
+    try {
+      const introOr = [];
+      if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
+        introOr.push({ userId: new mongoose.Types.ObjectId(String(userId)) });
+      }
+      if (cleanEmail) {
+        introOr.push({ userEmail: cleanEmail });
+      }
+      if (introOr.length > 0) {
+        const intros = await IntroductionRequest.find({ $or: introOr }).sort({ createdAt: -1 }).lean();
+        const counted = intros.filter(
+          (i) => i.countedAgainstQuota !== false && i.status !== 'Unavailable / Cancelled'
+        );
+        consultantUsed = counted.filter((i) => !i.isProsync).length;
+        prosyncUsed = counted.filter((i) => Boolean(i.isProsync)).length;
+        const latestProsync = intros.find((i) => Boolean(i.isProsync));
+        if (latestProsync) {
+          prosyncStatus = latestProsync.status;
+        }
+      }
+    } catch (introErr) {
+      console.warn('[assessmentQuota] Intro tracking check warning:', introErr.message);
+    }
   }
 
-  if (usedCount >= FREE_ASSESSMENT_LIMIT && !isUpdatingExisting) {
-    return {
-      allowed: false,
-      unlimited: false,
-      hasPaidMembership: false,
-      membershipTier: 'Free',
-      usedCount,
-      limit: FREE_ASSESSMENT_LIMIT,
-      code: FREE_ASSESSMENT_LIMIT_CODE,
-      existingProjectId: primaryExisting?._id || null,
-      existingProjectName: primaryExisting?.projectName || 'Your Free Project',
-      existingClientProjectId: primaryExisting?.clientProjectId || null,
-      isUpdatingExisting: false,
-      reason: `You have already used your 1 free project assessment${
-        primaryExisting?.projectName ? ` for "${primaryExisting.projectName}"` : ''
-      }. You can still view, edit, and re-download your existing project from your Dashboard, or upgrade to a membership plan to assess additional projects.`,
-    };
-  }
+  const assessmentLimit = membership.assessmentsLimit;
+  const remainingAssessments = Math.max(0, assessmentLimit - usedCount);
+  const consultantRemaining = Math.max(
+    0,
+    membership.activePlanId === 'promoter_plus'
+      ? membership.totalIntroLimit - prosyncUsed - consultantUsed
+      : membership.consultantIntroLimit - consultantUsed
+  );
+  const prosyncRemaining = Math.max(0, membership.prosyncIntroLimit - prosyncUsed);
 
-  return {
-    allowed: true,
+  const allowed = isUpdatingExisting || usedCount < assessmentLimit;
+
+  const basePayload = {
+    allowed,
     unlimited: false,
-    hasPaidMembership: false,
-    membershipTier: 'Free',
+    planId: membership.planId,
+    activePlanId: membership.activePlanId,
+    hasPaidMembership: membership.hasPaidMembership,
+    membershipTier: membership.membershipTier,
+    statusLabel: membership.statusLabel,
+    isExpired: membership.isExpired,
+    isExpiringSoon: membership.isExpiringSoon,
+    daysRemaining: membership.daysRemaining,
+    activatedAt: membership.activatedAt,
+    expiresAt: membership.expiresAt,
+    autoRenew: false,
     usedCount,
-    limit: FREE_ASSESSMENT_LIMIT,
+    limit: assessmentLimit,
+    remainingCount: remainingAssessments,
+    consultantUsed,
+    consultantLimit:
+      membership.activePlanId === 'promoter_plus'
+        ? Math.max(0, membership.totalIntroLimit - prosyncUsed)
+        : membership.consultantIntroLimit,
+    consultantRemaining,
+    prosyncUsed,
+    prosyncLimit: membership.prosyncIntroLimit,
+    prosyncRemaining,
+    prosyncStatus,
     existingProjectId: primaryExisting?._id || null,
     existingProjectName: primaryExisting?.projectName || null,
     existingClientProjectId: primaryExisting?.clientProjectId || null,
     isUpdatingExisting,
   };
+
+  if (!allowed) {
+    return {
+      ...basePayload,
+      code: FREE_ASSESSMENT_LIMIT_CODE,
+      reason:
+        membership.activePlanId === 'promoter_plus'
+          ? `You have used all ${assessmentLimit} project assessments included in your Promoter Plus membership.`
+          : `You have already used your ${assessmentLimit} project assessment${
+              primaryExisting?.projectName ? ` for "${primaryExisting.projectName}"` : ''
+            }. You can view, edit, and re-download your existing project from your Dashboard, or upgrade to Promoter Plus for up to 3 assessments.`,
+    };
+  }
+
+  return basePayload;
 };
 
 export const createQuotaExceededError = (quotaResult) => {
   const err = new Error(
     quotaResult?.reason ||
-      'You have already used your 1 free project assessment. Upgrade to a paid membership plan to create additional project assessments.'
+      'Project assessment limit reached for your current plan. Upgrade to Promoter Plus for up to 3 project assessments.'
   );
   err.statusCode = 403;
   err.code = FREE_ASSESSMENT_LIMIT_CODE;

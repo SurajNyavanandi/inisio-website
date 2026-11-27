@@ -54,14 +54,14 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
           )}
 
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed">
-            Most greenfield projects face delays or loan rejections because promoters approach banks without institutional credit appraisal readiness. Based in Madhapur, Hyderabad and serving industrial promoters across Telangana and India, Inisio Capital structures your debt capacity, CMA financial ratios, Detailed Project Reports (DPR), and technical feasibility to clear lender underwriting committees.
+            Most projects face preventable delays when promoters approach lenders without structured feasibility and documentation. Inisio helps promoters evaluate indicative funding readiness, organise capital outlays, and connect with independent project finance professionals.
           </p>
         </Reveal>
 
-        {/* 1. Asymmetric Zig-Zag Bento Grid of Core Capabilities (7/5 then 5/7) */}
+        {/* 1. Core Platform Capabilities (2 Cards) */}
         <StaggerGroup className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
-          {/* Bento Card 1 (Col Span 7) */}
-          <StaggerItem className="lg:col-span-7 h-full">
+          {/* Card 1 (Col Span 6) */}
+          <StaggerItem className="lg:col-span-6 h-full">
             <div className="h-full bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-16px_rgba(37,99,235,0.18)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
               <div className="space-y-5">
                 <div className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
@@ -70,36 +70,36 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
 
                 <div className="space-y-2">
                   <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                    Bank-Grade DPR &amp; CMA Financial Modeling
+                    Project Feasibility &amp; Indicative Structuring
                   </CardHeading>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    Lenders scrutinize capex structure, sensitivity margins, and debt service coverage capacity (DSCR). We prepare credit-grade Detailed Project Reports (DPR) and CMA data aligned strictly with PSU &amp; Private commercial bank norms.
+                    Assess estimated project cost, means of finance, indicative debt-to-equity structure, and preliminary DSCR insights, and generate an editable preliminary project teaser before engaging independent professionals.
                   </p>
                 </div>
 
                 <div className="pt-2 grid grid-cols-2 sm:grid-cols-3 gap-4 border-t border-slate-100">
                   <div className="space-y-0.5 pt-2">
-                    <span className="text-xs font-medium text-slate-500 block">DSCR Target</span>
+                    <span className="text-xs font-medium text-slate-500 block">Indicative DSCR</span>
                     <span className="font-manrope font-bold text-base text-slate-900 tabular-nums">
-                      ≥ 1.35x – 1.60x
+                      Debt Servicing Check
                     </span>
                   </div>
                   <div className="space-y-0.5 pt-2">
-                    <span className="text-xs font-medium text-slate-500 block">Debt-to-Equity</span>
+                    <span className="text-xs font-medium text-slate-500 block">Means of Finance</span>
                     <span className="font-manrope font-bold text-base text-slate-900 tabular-nums">
-                      70:30 – 75:25
+                      Debt vs Equity Split
                     </span>
                   </div>
                   <div className="space-y-0.5 pt-2 col-span-2 sm:col-span-1">
-                    <span className="text-xs font-medium text-slate-500 block">Audit Alignment</span>
-                    <span className="font-manrope font-bold text-base text-blue-700">CA Verified</span>
+                    <span className="text-xs font-medium text-slate-500 block">Project Teaser</span>
+                    <span className="font-manrope font-bold text-base text-blue-700">Editable DOCX &amp; PDF</span>
                   </div>
                 </div>
               </div>
 
               <div className="pt-5 flex items-center justify-between gap-3 border-t border-slate-100 mt-6">
                 <span className="text-xs font-medium text-slate-500">
-                  Includes 7–10 year financial projections
+                  Preliminary indicative evaluation only
                 </span>
                 {onOpenAssessment && (
                   <button
@@ -115,55 +115,8 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
             </div>
           </StaggerItem>
 
-          {/* Bento Card 2 (Col Span 5) */}
-          <StaggerItem className="lg:col-span-5 h-full">
-            <div className="h-full bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-16px_rgba(37,99,235,0.18)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
-              <div className="space-y-5">
-                <div className="w-11 h-11 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                  <Landmark className="w-5 h-5 stroke-[2.2]" />
-                </div>
-
-                <div className="space-y-2">
-                  <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                    Multi-Bank Syndication Liaison
-                  </CardHeading>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    Instead of single-bank dependency, we connect your project to an active network of 30+ leading PSU banks, private institutions, and specialized clean-tech infrastructure funds (IREDA, REC, PFC, SIDBI).
-                  </p>
-                </div>
-
-                <div className="pt-2 space-y-2.5 border-t border-slate-100">
-                  <div className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700 font-medium pt-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>Direct submission to relevant credit &amp; zonal committees</span>
-                  </div>
-                  <div className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700 font-medium">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>Competitive interest rates &amp; flexible moratorium structuring</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-5 border-t border-slate-100 mt-6 flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-slate-500 tabular-nums">
-                  Term Loans ₹5 Cr – ₹250+ Cr
-                </span>
-                {onOpenConsultation && (
-                  <button
-                    type="button"
-                    onClick={onOpenConsultation}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 group cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 rounded"
-                  >
-                    <span>Talk to Advisor</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </StaggerItem>
-
-          {/* Bento Card 3 (Col Span 5) */}
-          <StaggerItem className="lg:col-span-5 h-full">
+          {/* Card 2 (Col Span 6) */}
+          <StaggerItem className="lg:col-span-6 h-full">
             <div className="h-full bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-16px_rgba(37,99,235,0.18)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
               <div className="space-y-5">
                 <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
@@ -172,87 +125,32 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
 
                 <div className="space-y-2">
                   <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                    Transparent Promoter Tracking Desk
+                    Transparent Promoter Tracking &amp; Expert Directory
                   </CardHeading>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    Track every stage of your project finance lifecycle through a real-time dashboard. Receive live updates on technical appraisals, CA sign-offs, document compliance, and lender reviews.
+                    Keep your project information, uploaded documents, consultant introductions, and readiness progress organised in one dashboard while connecting with independent CAs, DPR, CMA, and TEV consultants.
                   </p>
                 </div>
 
                 <div className="pt-4 border-t border-slate-100 space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-800">Project Appraisal Pipeline</span>
-                    <span className="text-emerald-700 font-semibold">Live Tracking</span>
+                    <span className="font-semibold text-slate-800">Project Readiness Workspace</span>
+                    <span className="text-emerald-700 font-semibold">Organised Tracking</span>
                   </div>
                   <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                     <div className="bg-blue-600 h-2 rounded-full w-3/4" />
                   </div>
                   <div className="flex justify-between text-xs text-slate-500 font-medium">
-                    <span>Intake &amp; TEFR</span>
-                    <span>Credit Sizing</span>
-                    <span>Bank Sanction</span>
+                    <span>Project Details</span>
+                    <span>Teaser &amp; Checklist</span>
+                    <span>Expert Connect</span>
                   </div>
                 </div>
               </div>
 
               <div className="pt-5 border-t border-slate-100 mt-6 flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-slate-500">256-Bit SSL Encrypted Vault</span>
-                <span className="text-xs font-semibold text-emerald-700">DPDP Compliant</span>
-              </div>
-            </div>
-          </StaggerItem>
-
-          {/* Bento Card 4 (Col Span 7) */}
-          <StaggerItem className="lg:col-span-7 h-full">
-            <div className="h-full bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.05)] hover:shadow-[0_18px_36px_-16px_rgba(37,99,235,0.18)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex flex-col justify-between">
-              <div className="space-y-5">
-                <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-xs">
-                  <Scale className="w-5 h-5 stroke-[2.2]" />
-                </div>
-
-                <div className="space-y-2">
-                  <CardHeading className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                    Capital Structuring &amp; State/Central Subsidies
-                  </CardHeading>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    Optimize your capital outlays through eligible central and state incentives, including PMKSY, PM-KUSUM, TUFS textile schemes, interest subventions, and capital investment subsidies (up to 35%–50%).
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
-                  <div className="space-y-1 pt-1">
-                    <span className="text-xs font-bold text-slate-900 block font-manrope">
-                      Subsidies Integration
-                    </span>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Accurate mapping of eligible industrial &amp; clean-tech capital grants.
-                    </p>
-                  </div>
-                  <div className="space-y-1 pt-1">
-                    <span className="text-xs font-bold text-slate-900 block font-manrope">
-                      Equity Gap Solutions
-                    </span>
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Advisory for promoter contribution readiness and co-investor tie-ups.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-5 border-t border-slate-100 mt-6 flex items-center justify-between gap-3">
-                <span className="text-xs font-medium text-slate-500">
-                  Government Incentive Structuring
-                </span>
-                {onOpenConsultation && (
-                  <button
-                    type="button"
-                    onClick={onOpenConsultation}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1 group cursor-pointer whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 rounded"
-                  >
-                    <span>Explore Schemes</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-                )}
+                <span className="text-xs font-medium text-slate-500">Encrypted Document Workspace</span>
+                <span className="text-xs font-semibold text-emerald-700">DPDP Aligned</span>
               </div>
             </div>
           </StaggerItem>
@@ -296,22 +194,22 @@ export const WhyChooseInisio: React.FC<WhyChooseInisioProps> = ({
                   03. Documentation
                 </span>
                 <h3 className="font-manrope font-bold text-base text-white">
-                  Bank-Grade DPR Compilation
+                  Preliminary Teaser &amp; Checklist
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                  Accredited CA &amp; DPR partner certification matching target bank appraisal norms.
+                  Editable project teaser and indicative document checklist before engaging professionals.
                 </p>
               </div>
 
               <div className="space-y-2">
                 <span className="font-manrope text-xs font-bold text-emerald-400 tabular-nums">
-                  04. Disbursement
+                  04. Expert Connect
                 </span>
                 <h3 className="font-manrope font-bold text-base text-white">
-                  Sanction &amp; Debt Closing
+                  CA, DPR &amp; Advisory Discovery
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                  Direct representation before lender credit committees to achieve final sanction.
+                  Connect with independent CAs, DPR/TEV consultants, or Prosync Consulting as needed.
                 </p>
               </div>
             </div>

@@ -3,6 +3,8 @@ import {
   register,
   login,
   adminLogin,
+  refreshSession,
+  logout,
   verifyEmail,
   getMe,
   updateProfile,
@@ -11,7 +13,7 @@ import {
   resetPassword,
   sendVerificationOtp,
 } from '../controllers/authController.js';
-import { authenticateUser } from '../middleware/authMiddleware.js';
+import { authenticateUser, optionalAuth } from '../middleware/authMiddleware.js';
 import {
   validateSchema,
   registerSchema,
@@ -31,6 +33,8 @@ const router = express.Router();
 router.post('/register', authLimiter, validateSchema(registerSchema), validateIndianPhone('phone'), register);
 router.post('/login', authLimiter, validateSchema(loginSchema), login);
 router.post('/admin-login', authLimiter, validateSchema(adminLoginSchema), adminLogin);
+router.post('/refresh', authLimiter, refreshSession);
+router.post('/logout', optionalAuth, logout);
 
 // OTP routes (Strict rate limiting)
 router.post('/verify-email', otpLimiter, validateSchema(otpVerifySchema), verifyEmail);

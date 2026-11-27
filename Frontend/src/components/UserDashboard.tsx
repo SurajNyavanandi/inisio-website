@@ -19,9 +19,21 @@ import {
   FileCheck,
   Eye,
   RefreshCw,
+  MapPin,
+  Users,
+  PhoneCall,
+  AlertCircle,
+  Receipt,
+  Star,
 } from 'lucide-react';
 import { fetchLeadsFromDatabase, getStoredLeads, LeadRecord } from '../utils/leadStore';
-import { fetchServerAssessmentQuota, AssessmentQuotaStatus } from '../utils/membershipStore';
+import {
+  fetchServerAssessmentQuota,
+  AssessmentQuotaStatus,
+  OFFICIAL_DISCLAIMERS,
+} from '../utils/membershipStore';
+import { api } from '../utils/apiClient';
+import { NearbyConsultantModal, DirectoryConsultant } from './NearbyConsultantModal';
 import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import { useToast } from './ui/Toast';
 import { DashboardLayout } from './dashboard/DashboardLayout';
@@ -41,18 +53,27 @@ interface UserDashboardProps {
   user: AuthUser | null;
   onOpenAssessment: (projectToEdit?: any) => void;
   onOpenConsultation: () => void;
-  onOpenMembership: () => void;
+  onOpenMembership: (reason?: string, planId?: 'promoter_boost' | 'promoter_plus') => void;
+  onOpenAuth?: (mode?: 'login' | 'signup') => void;
   onLogout?: () => void;
   onNavigateHome?: () => void;
 }
 
 type UserTab = 'overview' | 'projects' | 'appraisal' | 'consultations' | 'membership';
 
+const CONSULTANT_SERVICES = [
+  'All',
+  'CMA & Financial Analysis',
+  'DPR Preparation',
+  'TEV Studies',
+  'Debt Syndication',
+];
+
 export const UserDashboard: React.FC<UserDashboardProps> = ({
   user,
   onOpenAssessment,
-  onOpenConsultation,
   onOpenMembership,
+  onOpenAuth,
   onLogout,
   onNavigateHome,
 }) => {
@@ -62,6 +83,19 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
   const [quotaStatus, setQuotaStatus] = useState<AssessmentQuotaStatus | null>(null);
+  const [consultants, setConsultants] = useState<DirectoryConsultant[]>([]);
+  const [prosyncPartner, setProsyncPartner] = useState<DirectoryConsultant | null>(null);
+  const [areaAvailableCount, setAreaAvailableCount] = useState<number>(0);
+  const [consultantsLoading, setConsultantsLoading] = useState(false);
+  const [serviceFilter, setServiceFilter] = useState('All');
+  const [cityFilter, setCityFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
+  const [sectorFilter, setSectorFilter] = useState('');
+  const [introductions, setIntroductions] = useState<any[]>([]);
+  const [introductionsLoading, setIntroductionsLoading] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [nearbyModalOpen, setNearbyModalOpen] = useState(false);
+  const [selectedConsultant, setSelectedConsultant] = useState<DirectoryConsultant | null>(null);
   const { toast: showToast } = useToast();
 
   const handleStartNewAssessment = () => {
@@ -70,10 +104,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         'Your 1 free project assessment is already used. You can edit or re-download your existing project anytime, or upgrade to assess another project.',
         { type: 'info', title: 'Free Assessment Limit Reached' }
       );
-      onOpenMembership();
+      onOpenMembership('Your plan assessment limit has been reached. Upgrade to assess additional projects.', 'promoter_plus');
       return;
     }
     onOpenAssessment();
+  };
+
+  const handleDownloadProjectChecklist = async (lead: LeadRecord) => {
+    try {
+      const { mapLeadRecordToPdfData, generateProjectChecklistPDF } = await import('../utils/pdfGenerator');
+      const payload = mapLeadRecordToPdfData(lead);
+      const res = generateProjectChecklistPDF(payload);
+      showToast(`Downloaded ${res.filename}`, { type: 'success' });
+    } catch (err) {
+      console.error('Failed to generate Checklist PDF:', err);
+      showToast('Could not generate Project Checklist PDF. Please try again.', { type: 'error' });
+    }
   };
 
   const handleDownloadProjectDocx = async (lead: LeadRecord) => {
@@ -156,12 +202,67 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     }
   };
 
+  const loadConsultantDirectory = async () => {
+    setConsultantsLoading(true);
+    try {
+      const res = await api.consultants.getDirectory({
+        service: serviceFilter !== 'All' ? serviceFilter : undefined,
+        city: cityFilter.trim() || undefined,
+        state: stateFilter.trim() || undefined,
+        sector: sectorFilter.trim() || undefined,
+        projectLocation: leads[0]?.location || undefined,
+        includeProsync: true,
+      });
+      const payload = (res as any)?.data || res;
+      if (payload) {
+        setConsultants(Array.isArray(payload.consultants) ? payload.consultants : []);
+        setProsyncPartner(payload.featuredPartner || payload.prosyncPartner || null);
+        setAreaAvailableCount(Number(payload.areaAvailableCount || 0));
+      }
+    } catch (err) {
+      console.warn('Error loading consultant directory:', err);
+    } finally {
+      setConsultantsLoading(false);
+    }
+  };
+
+  const loadIntroductionsAndPayments = async () => {
+    if (!user?.token) return;
+    setIntroductionsLoading(true);
+    try {
+      const [introRes, payRes] = await Promise.all([
+        api.consultations.getIntroductions().catch(() => null),
+        api.payments.getHistory().catch(() => null),
+      ]);
+      const introList = Array.isArray(introRes) ? introRes : (introRes as any)?.data;
+      if (Array.isArray(introList)) {
+        setIntroductions(introList);
+      }
+      const payList = Array.isArray(payRes) ? payRes : (payRes as any)?.data;
+      if (Array.isArray(payList)) {
+        setPaymentHistory(payList);
+      }
+    } finally {
+      setIntroductionsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadUserProjects();
-    const handleUpdate = () => loadUserProjects();
+    loadIntroductionsAndPayments();
+    const handleUpdate = () => {
+      loadUserProjects();
+      loadIntroductionsAndPayments();
+    };
     window.addEventListener('inisio_lead_added', handleUpdate);
     return () => window.removeEventListener('inisio_lead_added', handleUpdate);
   }, [user]);
+
+  useEffect(() => {
+    if (activeTab === 'consultations') {
+      loadConsultantDirectory();
+    }
+  }, [activeTab, serviceFilter, cityFilter, stateFilter, sectorFilter]);
 
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
@@ -191,8 +292,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
     { id: 'overview' as UserTab, label: 'Overview', mobileLabel: 'Overview', icon: LayoutDashboard },
     { id: 'projects' as UserTab, label: 'My Projects', mobileLabel: 'Projects', icon: FolderOpen, count: leads.length },
     { id: 'appraisal' as UserTab, label: 'New Appraisal', mobileLabel: 'Appraisal', icon: Calculator },
-    { id: 'consultations' as UserTab, label: 'CA Advisory', mobileLabel: 'Advisory', icon: Calendar },
-    { id: 'membership' as UserTab, label: 'Membership Plan', mobileLabel: 'Plan', icon: Crown },
+    { id: 'consultations' as UserTab, label: 'Find a CA / Consultant', mobileLabel: 'Consultants', icon: Users },
+    { id: 'membership' as UserTab, label: 'My Membership', mobileLabel: 'Membership', icon: Crown },
   ];
 
   const handleSelectTab = (tab: string) => {
@@ -250,20 +351,23 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         activeTab === 'consultations' ? (
           <button
             type="button"
-            onClick={onOpenConsultation}
+            onClick={() => {
+              setSelectedConsultant(null);
+              setNearbyModalOpen(true);
+            }}
             className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Calendar className="w-4 h-4 shrink-0" />
-            <span>Schedule 1-on-1 CA Session</span>
+            <Users className="w-4 h-4 shrink-0" />
+            <span>Find a Consultant</span>
           </button>
         ) : activeTab === 'membership' ? (
           <button
             type="button"
-            onClick={onOpenMembership}
+            onClick={() => onOpenMembership('', 'promoter_plus')}
             className="w-full min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
           >
             <Crown className="w-4 h-4 shrink-0" />
-            <span>Explore All Membership Plans</span>
+            <span>Upgrade / Renew Plan</span>
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -278,11 +382,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             {activeTab === 'overview' && (
               <button
                 type="button"
-                onClick={onOpenConsultation}
+                onClick={() => setActiveTab('consultations')}
                 className="min-h-[44px] px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap"
               >
-                <Calendar className="w-4 h-4 shrink-0" />
-                <span>CA Advisory</span>
+                <Users className="w-4 h-4 shrink-0" />
+                <span>Find a Consultant</span>
               </button>
             )}
           </div>
@@ -331,11 +435,11 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={onOpenConsultation}
+                  onClick={() => setActiveTab('consultations')}
                   className="min-h-[44px] sm:min-h-[38px] px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>Book CA Advisory</span>
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Find a Consultant</span>
                 </button>
               </div>
             }
@@ -436,7 +540,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                         {Number(lead.projectCost || lead.totalCostCr || 0).toFixed(2)} Cr
                       </p>
                     </div>
-                    <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+                    <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
                       <div className="hidden sm:block">
                         <DashboardStatusBadge status={lead.status || 'Underwriting Review'} icon={Clock} />
                       </div>
@@ -457,6 +561,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                       >
                         <FileCheck className="w-3.5 h-3.5 shrink-0" />
                         <span>DPR PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadProjectChecklist(lead)}
+                        title="Download Project Document Checklist PDF"
+                        className="min-h-[44px] sm:min-h-[34px] px-2.5 py-2 sm:py-1.5 text-xs font-semibold text-slate-700 hover:text-indigo-700 bg-slate-100 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
+                      >
+                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                        <span>Checklist</span>
                       </button>
                       <button
                         type="button"
@@ -551,7 +664,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => handleOpenProjectPdf(lead, 'teaser')}
@@ -567,6 +680,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                     >
                       <FileCheck className="w-3.5 h-3.5 shrink-0" />
                       <span>DPR</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadProjectChecklist(lead)}
+                      className="min-h-[44px] px-2.5 py-2 text-xs font-semibold text-slate-700 hover:text-indigo-700 bg-slate-100 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1 whitespace-nowrap"
+                    >
+                      <FileText className="w-3.5 h-3.5 shrink-0" />
+                      <span>Checklist</span>
                     </button>
                     <button
                       type="button"
@@ -664,6 +785,15 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                           </button>
                           <button
                             type="button"
+                            onClick={() => handleDownloadProjectChecklist(lead)}
+                            title="Download Project Document Checklist PDF"
+                            className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-indigo-700 bg-slate-100 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 whitespace-nowrap"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>Checklist</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => onOpenAssessment(lead)}
                             className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
                           >
@@ -738,86 +868,450 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
-      {/* 4. CA Advisory Tab */}
+      {/* 4. Find a CA / Consultant Tab */}
       {activeTab === 'consultations' && (
         <div className="space-y-6">
           <DashboardSectionBanner
-            eyebrow="Empaneled CA & Debt Syndication Advisory"
-            eyebrowIcon={Calendar}
-            title="Chartered Accountant Advisory Desk"
-            description="Schedule direct one-on-one consultation with senior credit appraisers and chartered accountants to review your CMA data and debt structure."
+            eyebrow="Independent Professionals & Advisory Network"
+            eyebrowIcon={Users}
+            title="Find a CA / Consultant"
+            description="Connect with independent CAs and specialised consultants for project finance services."
             actions={
               <button
                 type="button"
-                onClick={onOpenConsultation}
+                onClick={() => {
+                  setSelectedConsultant(null);
+                  setNearbyModalOpen(true);
+                }}
                 className="hidden lg:inline-flex min-h-[40px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer items-center gap-2 whitespace-nowrap"
               >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Schedule 1-on-1 CA Session</span>
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Find a Consultant</span>
               </button>
             }
           />
 
-          <DashboardCard className="p-4 sm:p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 font-manrope">What We Cover During Advisory</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">
-              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>CMA Data preparation and audited ratio sign-off</span>
+          {/* Contextual Membership Upgrade Banner when on Free Plan or Exhausted */}
+          {(!quotaStatus?.hasPaidMembership || ((quotaStatus?.consultantRemaining ?? 0) <= 0 && (quotaStatus?.prosyncRemaining ?? 0) <= 0)) && (
+            <div className="p-4 sm:p-5 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Crown className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs">
+                  <div className="font-bold text-amber-950">
+                    {!quotaStatus?.hasPaidMembership
+                      ? 'Consultant Introductions Require Promoter Boost or Promoter Plus'
+                      : 'All Plan Consultant Introductions Utilised'}
+                  </div>
+                  <p className="text-amber-800 leading-relaxed">
+                    {!quotaStatus?.hasPaidMembership
+                      ? 'Upgrade to Promoter Boost (₹2,999 + GST · 2 consultant introductions + 1 Prosync consultation request) or Promoter Plus (₹9,999 + GST · up to 6 introductions including Prosync priority).'
+                      : 'You have used your included consultant introductions for this validity window. Renew or upgrade your plan to unlock more introductions.'}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Term loan structuring and repayment tenure optimization</span>
-              </div>
-              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Collateral security and promoter guarantee structuring</span>
-              </div>
-              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-slate-50 border border-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Commercial bank credit committee query resolution</span>
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenMembership(
+                    'Upgrade your membership to unlock consultant introductions and Prosync advisory requests.',
+                    !quotaStatus?.hasPaidMembership ? 'promoter_boost' : 'promoter_plus'
+                  )
+                }
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors shrink-0 cursor-pointer whitespace-nowrap"
+              >
+                Upgrade Plan
+              </button>
+            </div>
+          )}
+
+          {/* Service Category Filters + Location/Sector Search */}
+          <DashboardCard className="p-4 sm:p-5 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {CONSULTANT_SERVICES.map((svc) => (
+                <button
+                  key={svc}
+                  type="button"
+                  onClick={() => setServiceFilter(svc)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                    serviceFilter === svc
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {svc}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <input
+                type="text"
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                placeholder="Filter by City (e.g. Hyderabad, Mumbai)"
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+              <input
+                type="text"
+                value={stateFilter}
+                onChange={(e) => setStateFilter(e.target.value)}
+                placeholder="Filter by State (e.g. Telangana)"
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+              <input
+                type="text"
+                value={sectorFilter}
+                onChange={(e) => setSectorFilter(e.target.value)}
+                placeholder="Filter by Sector Experience"
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium">
+              Showing {areaAvailableCount || consultants.length} independent professional{((areaAvailableCount || consultants.length) === 1 ? '' : 's')} matching your filters.
             </div>
           </DashboardCard>
-        </div>
-      )}
 
-      {/* 5. Membership Plan Tab */}
-      {activeTab === 'membership' && (
-        <div className="space-y-6">
-          <DashboardSectionBanner
-            eyebrow="Bankability & Syndication Membership"
-            eyebrowIcon={Crown}
-            title="Promoter Membership & Advisory Tiers"
-            description="Unlock priority debt syndication, unlimited financial model evaluations, and direct lender consortium representation."
-          />
-
-          <div className="p-5 sm:p-6 rounded-xl border border-blue-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-blue-700">Active Tier</span>
-              <h3 className="text-lg font-extrabold text-slate-900 font-manrope">
-                {quotaStatus?.hasPaidMembership
-                  ? quotaStatus.membershipTier
-                  : user?.membershipPlan || 'Inisio Greenfield Starter (1 Free Assessment)'}
-              </h3>
-              <p className="text-xs text-slate-600">
-                {quotaStatus?.hasPaidMembership
-                  ? 'Unlimited greenfield project evaluations, institutional DPR/CMA models, and direct syndication desk access.'
-                  : quotaStatus && !quotaStatus.allowed
-                  ? 'Free quota status: 1 of 1 free assessment used. You can view, edit, and re-download PDF/DOCX for your existing project anytime. Upgrade to evaluate additional projects.'
-                  : 'Free quota status: 0 of 1 free assessment used. Includes full bankability appraisal and downloadable Project Teaser (PDF & DOCX).'}
-              </p>
+          {/* Featured Advisor - Prosync Consulting */}
+          {prosyncPartner && (
+            <div className="p-5 sm:p-6 rounded-xl bg-slate-900 text-white border border-blue-500/30 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-bold">
+                    <Star className="w-3 h-3 text-amber-400" />
+                    <span>Featured Advisory Partner (Separate Terms Apply)</span>
+                  </div>
+                  <h3 className="text-lg font-extrabold font-manrope text-white">{prosyncPartner.firm || prosyncPartner.name}</h3>
+                  <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+                    {prosyncPartner.specialization} · Location: {prosyncPartner.city}, {prosyncPartner.state}. Access via membership represents an introduction/consultation request subject to project suitability and availability.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedConsultant(prosyncPartner);
+                    setNearbyModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap inline-flex items-center gap-1.5"
+                >
+                  <span>Request Consultation</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {(prosyncPartner.servicesOffered || []).map((svc, idx) => (
+                  <span key={idx} className="px-2.5 py-1 bg-slate-800 text-slate-200 rounded-md text-[11px] font-medium border border-slate-700">
+                    {svc}
+                  </span>
+                ))}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={onOpenMembership}
-              className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer shrink-0 whitespace-nowrap"
-            >
-              Explore All Membership Plans
-            </button>
+          )}
+
+          {/* Onboarded Independent Consultants Grid */}
+          <DashboardCard className="p-4 sm:p-6 space-y-4">
+            <DashboardCardHeader
+              title="Independent CA & Specialist Directory"
+              description="Professionals listed here operate independently and agree fees & scope directly with promoters."
+            />
+            {consultantsLoading ? (
+              <DashboardLoadingState label="Loading consultant directory..." />
+            ) : consultants.length === 0 ? (
+              <DashboardEmptyState
+                icon={Users}
+                title="No consultants matched your current filters"
+                description="Try clearing city/state/sector filters or request assistance via our consultation team so an appropriate professional can be identified."
+                action={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setServiceFilter('All');
+                      setCityFilter('');
+                      setStateFilter('');
+                      setSectorFilter('');
+                    }}
+                    className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
+                }
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {consultants.map((c) => (
+                  <div key={c.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white transition-colors flex flex-col justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 font-manrope">{c.name}</h4>
+                          <p className="text-xs font-medium text-slate-600">{c.firm}</p>
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                          <MapPin className="w-3 h-3 text-blue-600" />
+                          {c.city}, {c.state}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">{c.specialization}</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(c.servicesOffered || []).slice(0, 4).map((svc, idx) => (
+                          <span key={idx} className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-semibold">
+                            {svc}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {c.feeNote || 'Professional fees and engagement scope agreed independently with the consultant.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedConsultant(c);
+                        setNearbyModalOpen(true);
+                      }}
+                      className="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5"
+                    >
+                      <span>Request Consultation</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DashboardCard>
+
+          {/* Introduction Request Tracker */}
+          <DashboardCard className="p-4 sm:p-6 space-y-4">
+            <DashboardCardHeader
+              title="Consultation & Introduction Requests"
+              description="Track introductions from Submitted through Discussion and Engagement."
+            />
+            {introductionsLoading ? (
+              <DashboardLoadingState label="Loading introduction requests..." />
+            ) : introductions.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No consultant introduction requests submitted yet. Select a consultant above or click "Find a Consultant" to initiate an introduction.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {introductions.map((item) => (
+                  <div key={item._id || item.id} className="p-3.5 rounded-xl border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-slate-900">{item.consultantName || 'Consultant'}</span>
+                        {item.isProsyncPartner && (
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">Prosync Partner</span>
+                        )}
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">{item.serviceRequired}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Project: {item.projectName || 'General Advisory'} · Requested on {new Date(item.createdAt).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <DashboardStatusBadge status={item.status || 'Submitted'} icon={Clock} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </DashboardCard>
+
+          {/* Important Disclaimer */}
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs text-slate-600 leading-relaxed">
+            <div className="font-bold text-slate-900">Important Disclaimer</div>
+            <p>
+              Inisio facilitates introductions between project promoters and independent professionals such as Chartered Accountants, DPR consultants, TEV specialists and financial advisors. These professionals operate independently and are solely responsible for their services, advice, deliverables, timelines and fees.
+            </p>
+            <p>
+              Any professional fee, engagement terms or scope of work must be agreed directly between the promoter and the consultant.
+            </p>
+            <p>
+              Prosync Consulting is featured on Inisio as an Advisory Partner. Requests for consultation with Prosync are subject to project suitability and availability.
+            </p>
+            <p>
+              Neither Inisio nor any listed professional guarantees loan sanction, subsidy approval, institutional finance or funding outcomes.
+            </p>
           </div>
         </div>
       )}
+
+      {/* 5. My Membership Tab */}
+      {activeTab === 'membership' && (
+        <div className="space-y-6">
+          <DashboardSectionBanner
+            eyebrow="Promoter Plan & Validity"
+            eyebrowIcon={Crown}
+            title="My Membership"
+            description="Review your current membership tier, validity window, remaining assessment & introduction allocations, and tax invoices."
+            actions={
+              <div className="hidden lg:flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenMembership('', quotaStatus?.activePlanId === 'promoter_boost' ? 'promoter_plus' : 'promoter_boost')}
+                  className="min-h-[40px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                >
+                  Upgrade Plan
+                </button>
+                {quotaStatus?.hasPaidMembership && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenMembership('', quotaStatus.activePlanId === 'promoter_plus' ? 'promoter_plus' : 'promoter_boost')}
+                    className="min-h-[40px] px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                  >
+                    Renew Plan
+                  </button>
+                )}
+              </div>
+            }
+          />
+
+          {quotaStatus?.isExpiringSoon && (
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3 text-xs text-amber-900">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Membership Expiring Soon: </span>
+                Your paid membership expires in {quotaStatus.daysRemaining} day{quotaStatus.daysRemaining === 1 ? '' : 's'}. No automatic renewal applies; renew manually when ready.
+              </div>
+            </div>
+          )}
+
+          <DashboardCard className="p-5 sm:p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <div className="text-xs font-semibold text-slate-500">Current Membership Plan</div>
+                <h3 className="text-lg font-extrabold text-slate-900 font-manrope mt-0.5">
+                  {quotaStatus?.membershipTier || user?.membershipTier || 'Free – Project Assessment'}
+                </h3>
+              </div>
+              <span
+                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold self-start sm:self-auto ${
+                  quotaStatus?.statusLabel === 'Active'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : quotaStatus?.statusLabel === 'Expiring Soon'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                    : quotaStatus?.statusLabel === 'Expired'
+                    ? 'bg-red-50 text-red-700 border border-red-200'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                {quotaStatus?.statusLabel || 'Free Plan'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="text-[11px] font-semibold text-slate-500">Activation Date</div>
+                <div className="text-sm font-bold text-slate-900 mt-1">
+                  {quotaStatus?.activatedAt ? new Date(quotaStatus.activatedAt).toLocaleDateString('en-IN') : '—'}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="text-[11px] font-semibold text-slate-500">Expiry Date (No Auto-Renewal)</div>
+                <div className="text-sm font-bold text-slate-900 mt-1">
+                  {quotaStatus?.expiresAt ? new Date(quotaStatus.expiresAt).toLocaleDateString('en-IN') : '—'}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="text-[11px] font-semibold text-slate-500">Project Assessments</div>
+                <div className="text-sm font-bold text-slate-900 mt-1 tabular-nums">
+                  {quotaStatus?.usedCount ?? leads.length} used · {quotaStatus?.unlimited ? 'Unlimited' : `${quotaStatus?.remainingCount ?? Math.max(0, (quotaStatus?.limit ?? 1) - (quotaStatus?.usedCount ?? leads.length))} remaining`}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="text-[11px] font-semibold text-slate-500">Consultant Introductions</div>
+                <div className="text-sm font-bold text-slate-900 mt-1 tabular-nums">
+                  {quotaStatus?.consultantUsed ?? 0} of {quotaStatus?.consultantLimit ?? 0} used · {quotaStatus?.consultantRemaining ?? 0} remaining
+                </div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 sm:col-span-2">
+                <div className="text-[11px] font-semibold text-slate-500">Featured Partner – Prosync Introduction Status</div>
+                <div className="text-sm font-bold text-slate-900 mt-1">
+                  {quotaStatus?.prosyncStatus || ((quotaStatus?.prosyncLimit ?? 0) > 0 ? `${quotaStatus?.prosyncUsed ?? 0} of ${quotaStatus?.prosyncLimit ?? 0} used` : 'Not included in Free Plan')}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => onOpenMembership('', 'promoter_boost')}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Upgrade Plan
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenMembership('', 'promoter_plus')}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Renew / View Plan Benefits
+              </button>
+            </div>
+          </DashboardCard>
+
+          {paymentHistory.length > 0 && (
+            <DashboardCard className="p-5 sm:p-6 space-y-3">
+              <DashboardCardHeader title="Payment & GST Invoices" description="Verified membership payment records" />
+              <div className="space-y-2.5">
+                {paymentHistory.map((p) => (
+                  <div key={p._id || p.orderId} className="p-3 rounded-lg border border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Receipt className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div>
+                        <div className="font-bold text-slate-900">{p.planName}</div>
+                        <div className="text-[11px] text-slate-500">
+                          Base ₹{p.baseAmount || p.amount} + GST ₹{p.gstAmount || 0} = ₹{p.amount} INR · {new Date(p.createdAt).toLocaleDateString('en-IN')}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+                      {p.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </DashboardCard>
+          )}
+
+          <div className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs text-slate-600 leading-relaxed">
+            <div className="font-bold text-slate-900">{OFFICIAL_DISCLAIMERS.membership.title}</div>
+            {OFFICIAL_DISCLAIMERS.membership.paragraphs.map((p, idx) => (
+              <p key={idx}>{p}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <NearbyConsultantModal
+        isOpen={nearbyModalOpen}
+        onClose={() => {
+          setNearbyModalOpen(false);
+          setSelectedConsultant(null);
+        }}
+        currentUser={user}
+        project={
+          leads[0]
+            ? {
+                id: leads[0].id || leads[0]._id,
+                projectName: leads[0].projectName,
+                location: leads[0].location,
+                industry: leads[0].industry,
+                totalCostCr: leads[0].totalCostCr || leads[0].projectCost,
+              }
+            : undefined
+        }
+        initialConsultant={selectedConsultant}
+        initialService={serviceFilter !== 'All' ? serviceFilter : 'CMA & Financial Analysis'}
+        onOpenAuth={onOpenAuth}
+        onOpenMembership={(reason, planId) => {
+          setNearbyModalOpen(false);
+          onOpenMembership(reason, planId);
+        }}
+        onIntroductionCreated={() => {
+          loadUserProjects();
+          loadIntroductionsAndPayments();
+        }}
+      />
+
       <PdfPreviewModal preview={pdfPreview} onClose={() => setPdfPreview(null)} />
     </DashboardLayout>
   );

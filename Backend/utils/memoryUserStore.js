@@ -69,15 +69,15 @@ export const isAuthorizedCaAdminGmail = (email) => {
 };
 
 export const getAdminTestPassword = () => {
-  if (process.env.NODE_ENV === 'production') {
+  if (config.isProduction || process.env.NODE_ENV === 'production') {
     return null;
   }
-  const configured = (process.env.ADMIN_TEST_PASSWORD || 'password26@gmail.com').trim();
-  return configured || 'password26@gmail.com';
+  const configured = (process.env.ADMIN_TEST_PASSWORD || '').trim();
+  return configured || null;
 };
 
 export const isAdminTestPasswordMatch = (enteredPassword) => {
-  if (process.env.NODE_ENV === 'production') {
+  if (config.isProduction || process.env.NODE_ENV === 'production') {
     return false;
   }
   const testPassword = getAdminTestPassword();
@@ -107,7 +107,7 @@ export const getMemoryUsers = () => {
   const caAdmin = getCaAdminEmail();
   const testPassword = getAdminTestPassword();
   const getSeedPasswordHash = () =>
-    bcrypt.hashSync(testPassword || crypto.randomBytes(24).toString('hex'), 10);
+    bcrypt.hashSync(testPassword || crypto.randomBytes(24).toString('hex'), config.BCRYPT_ROUNDS || 12);
   const seedInitialized = Boolean(testPassword);
 
   if (caAdmin && !memoryUsers.some((u) => u.email.toLowerCase() === caAdmin)) {

@@ -10,19 +10,24 @@ import {
   getMemoryPaymentsByUser,
   findMemoryPaymentByOrderId,
 } from '../utils/memoryPaymentStore.js';
-import { updateMemoryUser, findMemoryUserByEmail } from '../utils/memoryUserStore.js';
+import { updateMemoryUser } from '../utils/memoryUserStore.js';
+import {
+  resolvePlanDefinition,
+  calculatePlanPricing,
+} from '../utils/membershipPlans.js';
+import notificationService from './notificationService.js';
 
 /**
- * Generate a unique sequential invoice number
+ * Generate a unique sequential tax invoice number
  */
 const generateInvoiceNumber = () => {
   const year = new Date().getFullYear();
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const randomSuffix = Math.floor(10000 + Math.random() * 90000);
   return `INV-INISIO-${year}-${randomSuffix}`;
 };
 
 /**
- * Create a new Razorpay order
+ * Create a new Razorpay order with GST separation and mandatory terms consent check
  */
 export const createOrder = async ({
   amount,
@@ -32,20 +37,55 @@ export const createOrder = async ({
   userPhone = '',
   itemType = 'membership',
   itemId = '',
-  planName = 'Starter',
+  planId = '',
+  planName = 'Promoter Boost',
   billingCycle = 'quarterly',
+  consentAccepted = false,
   notes = {},
 }) => {
-  if (!amount || isNaN(amount) || Number(amount) <= 0) {
-    const error = new Error('A valid positive payment amount is required');
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const numAmount = Number(amount);
-  const amountPaise = Math.round(numAmount * 100);
   const cleanEmail = (userEmail || '').trim().toLowerCase();
 
+  let baseAmount = Number(amount) || 0;
+  let gstRate = 0;
+  let gstAmount = 0;
+  let totalPayableInr = baseAmount;
+  let resolvedPlanId = planId || itemId || '';
+  let resolvedPlanName = planName;
+  let resolvedBillingCycle = billingCycle;
+
+  // Enforce authoritative server-side pricing and GST separation for memberships
+  if (itemType === 'membership') {
+    if (!consentAccepted) {
+      const error = new Error(
+        'Please accept the Inisio Membership Terms and Conditions before proceeding to payment.'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const pricing = calculatePlanPricing(planId || itemId || planName);
+    if (pricing.totalPayableInr <= 0) {
+      const error = new Error('Selected plan is free and does not require checkout.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    resolvedPlanId = pricing.planId;
+    resolvedPlanName = pricing.planName;
+    resolvedBillingCycle = pricing.billingCycle;
+    baseAmount = pricing.basePriceInr;
+    gstRate = pricing.gstRate;
+    gstAmount = pricing.gstAmountInr;
+    totalPayableInr = pricing.totalPayableInr;
+  } else {
+    if (!amount || isNaN(amount) || Number(amount) <= 0) {
+      const error = new Error('A valid positive payment amount is required');
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  const amountPaise = Math.round(totalPayableInr * 100);
   const receipt = `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const config = getRazorpayConfig();
   const razorpay = getRazorpayInstance();
@@ -53,7 +93,10 @@ export const createOrder = async ({
   let razorpayOrderId = '';
   let orderData = null;
 
-  if (razorpay && config.isConfigured) {
+  // Detect live vs dummy test keys cleanly
+  const isDummyTestKey = !config.key_id || config.key_id.includes('dummy');
+
+  if (razorpay && config.isConfigured && !isDummyTestKey) {
     try {
       const options = {
         amount: amountPaise,
@@ -61,7 +104,10 @@ export const createOrder = async ({
         receipt,
         notes: {
           itemType,
-          planName,
+          planId: resolvedPlanId,
+          planName: resolvedPlanName,
+          baseAmount,
+          gstAmount,
           userEmail: cleanEmail,
           ...notes,
         },
@@ -74,10 +120,9 @@ export const createOrder = async ({
       throw err;
     }
   } else {
-    if (config.isProd) {
-      throw new Error('Razorpay payment gateway is not configured. RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are required in production.');
+    if (config.isProd && !config.isTestMode) {
+      throw new Error('Razorpay payment gateway is not configured for live transactions.');
     }
-    // Dev/test only: simulate order when keys are absent
     razorpayOrderId = `order_sim_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   }
 
@@ -88,18 +133,27 @@ export const createOrder = async ({
     userEmail: cleanEmail,
     userName,
     userPhone,
-    amount: numAmount,
+    amount: totalPayableInr,
+    baseAmount,
+    gstRate,
+    gstAmount,
     amountPaise,
     currency: currency.toUpperCase(),
     status: 'created',
     itemType,
-    itemId,
-    planName,
-    billingCycle,
+    itemId: resolvedPlanId || itemId,
+    planId: resolvedPlanId,
+    planName: resolvedPlanName,
+    billingCycle: resolvedBillingCycle,
+    consentAccepted: Boolean(consentAccepted),
+    consentAcceptedAt: consentAccepted ? new Date() : null,
     receipt,
     notes: {
       ...notes,
-      isTestMode: config.isTestMode,
+      baseAmount,
+      gstAmount,
+      totalPayableInr,
+      isTestMode: config.isTestMode || isDummyTestKey,
     },
     rawRazorpayResponse: orderData,
   };
@@ -108,7 +162,6 @@ export const createOrder = async ({
 
   if (isDBConnected()) {
     try {
-      // Find userId if exists
       const user = await User.findOne({ email: cleanEmail });
       if (user) {
         paymentRecordData.userId = user._id;
@@ -131,13 +184,18 @@ export const createOrder = async ({
   return {
     orderId: razorpayOrderId,
     amount: amountPaise,
-    amountINR: numAmount,
+    amountINR: totalPayableInr,
+    baseAmount,
+    gstRate,
+    gstAmount,
     currency: currency.toUpperCase(),
     receipt,
     keyId: config.key_id || '',
-    isTestMode: config.isTestMode,
-    planName,
-    billingCycle,
+    isTestMode: config.isTestMode || isDummyTestKey,
+    isSimulatedOrder: razorpayOrderId.startsWith('order_sim_'),
+    planId: resolvedPlanId,
+    planName: resolvedPlanName,
+    billingCycle: resolvedBillingCycle,
     user: {
       name: userName,
       email: cleanEmail,
@@ -146,14 +204,139 @@ export const createOrder = async ({
   };
 };
 
+const timingSafeHexEqual = (a = '', b = '') => {
+  const bufA = Buffer.from(String(a || '').trim().toLowerCase(), 'utf8');
+  const bufB = Buffer.from(String(b || '').trim().toLowerCase(), 'utf8');
+  if (!bufA.length || bufA.length !== bufB.length) return false;
+  try {
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+};
+
 /**
- * Verify Razorpay payment signature and fulfill the purchase
+ * Shared idempotent payment finalization + membership activation (used by verifyPayment and webhook)
+ */
+const finalizeCapturedPaymentAndActivateMembership = async ({
+  orderId,
+  paymentId,
+  signature = '',
+  userEmail = '',
+  planId = '',
+  planName = '',
+  paymentMethod = 'Razorpay Gateway',
+}) => {
+  const now = new Date();
+  let existingRecord = null;
+
+  if (isDBConnected()) {
+    existingRecord = await Payment.findOne({ orderId }).catch(() => null);
+  } else {
+    existingRecord = findMemoryPaymentByOrderId(orderId);
+  }
+
+  const cleanEmail = (userEmail || existingRecord?.userEmail || '').trim().toLowerCase();
+  const alreadyCaptured = existingRecord?.status === 'captured' && Boolean(existingRecord?.invoiceNumber);
+  const invoiceNumber = existingRecord?.invoiceNumber || generateInvoiceNumber();
+
+  const updateFields = {
+    paymentId: paymentId || existingRecord?.paymentId || '',
+    signature: signature || existingRecord?.signature || '',
+    status: 'captured',
+    invoiceNumber,
+    paymentMethod: paymentMethod || existingRecord?.paymentMethod || 'Razorpay Gateway',
+    updatedAt: now,
+  };
+
+  let updatedRecord = existingRecord;
+  if (!alreadyCaptured) {
+    if (isDBConnected()) {
+      try {
+        updatedRecord = await Payment.findOneAndUpdate(
+          { orderId },
+          { $set: updateFields },
+          { new: true }
+        );
+      } catch (err) {
+        console.warn('DB error updating verified payment:', err.message);
+      }
+    }
+    if (!updatedRecord || !isDBConnected()) {
+      updatedRecord = updateMemoryPayment(orderId, updateFields) || updatedRecord;
+    }
+  }
+
+  const resolvedPlan = resolvePlanDefinition(
+    planId || updatedRecord?.planId || planName || updatedRecord?.planName
+  );
+  let activatedAt = existingRecord?.updatedAt || now;
+  let expiresAt = resolvedPlan.validityDays
+    ? new Date(now.getTime() + resolvedPlan.validityDays * 86400000)
+    : null;
+
+  if (!alreadyCaptured && cleanEmail && resolvedPlan.id !== 'free_plan') {
+    const membershipFields = {
+      membershipPlanId: resolvedPlan.id,
+      membershipTier: resolvedPlan.name,
+      membershipStatus: 'Active',
+      membershipActivatedAt: activatedAt,
+      membershipExpiresAt: expiresAt,
+      autoRenew: false,
+    };
+
+    if (isDBConnected()) {
+      try {
+        const existingUser = await User.findOne({ email: cleanEmail });
+        if (
+          existingUser &&
+          existingUser.membershipExpiresAt &&
+          new Date(existingUser.membershipExpiresAt) > now &&
+          existingUser.membershipPlanId === resolvedPlan.id
+        ) {
+          expiresAt = new Date(
+            new Date(existingUser.membershipExpiresAt).getTime() + resolvedPlan.validityDays * 86400000
+          );
+          membershipFields.membershipExpiresAt = expiresAt;
+          membershipFields.membershipActivatedAt = existingUser.membershipActivatedAt || activatedAt;
+          activatedAt = membershipFields.membershipActivatedAt;
+        }
+        await User.findOneAndUpdate({ email: cleanEmail }, { $set: membershipFields });
+      } catch (uErr) {
+        console.warn('DB error activating user membership:', uErr.message);
+      }
+    }
+
+    updateMemoryUser(cleanEmail, membershipFields);
+
+    notificationService.createNotification({
+      type: 'MEMBERSHIP_ACTIVATED',
+      title: `${resolvedPlan.name} Activated`,
+      message: `${cleanEmail} activated ${resolvedPlan.name} (₹${updatedRecord?.amount || resolvedPlan.totalPayableInr}, Invoice ${invoiceNumber}).`,
+      userEmail: cleanEmail,
+    }).catch(() => {});
+  }
+
+  return {
+    updatedRecord,
+    resolvedPlan,
+    cleanEmail,
+    invoiceNumber,
+    activatedAt,
+    expiresAt,
+    alreadyCaptured,
+  };
+};
+
+/**
+ * Verify Razorpay payment signature and activate membership ONLY after confirmed payment
  */
 export const verifyPayment = async ({
   razorpay_order_id,
   razorpay_payment_id,
   razorpay_signature,
   userEmail,
+  planId,
   planName,
   paymentMethod = 'Razorpay Gateway',
 }) => {
@@ -170,81 +353,73 @@ export const verifyPayment = async ({
   }
 
   const config = getRazorpayConfig();
+  const isProd = envConfig.isProduction || process.env.NODE_ENV === 'production';
+  const isLocalSimulatedOrder = !isProd && razorpay_order_id.startsWith('order_sim_') && config.isTestMode;
   let isSignatureValid = false;
 
-  if (config.isConfigured && config.key_secret && razorpay_signature) {
+  if (razorpay_signature && config.key_secret) {
     try {
-      const generated_signature = crypto
+      const expectedHmac = crypto
         .createHmac('sha256', config.key_secret)
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
         .digest('hex');
 
-      isSignatureValid = generated_signature === razorpay_signature;
-    } catch (e) {
-      console.error('Signature verification calculation error:', e);
+      isSignatureValid = timingSafeHexEqual(expectedHmac, razorpay_signature);
+    } catch {
       isSignatureValid = false;
     }
-  } else {
-    // No Razorpay keys configured — always fail verification
-    isSignatureValid = false;
+  }
+
+  // Only allow simulated test orders in explicit non-production test environments when key_secret is not configured cleanly or via explicit dev test signature
+  if (!isSignatureValid && isLocalSimulatedOrder && !isProd && process.env.ALLOW_SIMULATED_PAYMENTS !== 'false') {
+    const expectedSim = config.key_secret
+      ? crypto.createHmac('sha256', config.key_secret).update(`${razorpay_order_id}|${razorpay_payment_id}`).digest('hex')
+      : '';
+    if (timingSafeHexEqual(expectedSim, razorpay_signature) || String(razorpay_signature || '').startsWith('sim_sig_')) {
+      isSignatureValid = true;
+    }
   }
 
   if (!isSignatureValid) {
-    const error = new Error('Invalid Razorpay signature. Payment verification failed.');
+    const error = new Error('Invalid payment signature. Membership will not be activated.');
     error.statusCode = 400;
     throw error;
   }
 
-  const invoiceNumber = generateInvoiceNumber();
-  const updateFields = {
+  const {
+    updatedRecord,
+    resolvedPlan,
+    cleanEmail,
+    invoiceNumber,
+    activatedAt,
+    expiresAt,
+  } = await finalizeCapturedPaymentAndActivateMembership({
+    orderId: razorpay_order_id,
     paymentId: razorpay_payment_id,
     signature: razorpay_signature || '',
-    status: 'captured',
-    invoiceNumber,
+    userEmail,
+    planId,
+    planName,
     paymentMethod,
-    updatedAt: new Date(),
-  };
-
-  let updatedRecord = null;
-  const cleanEmail = (userEmail || '').trim().toLowerCase();
-
-  if (isDBConnected()) {
-    try {
-      updatedRecord = await Payment.findOneAndUpdate(
-        { orderId: razorpay_order_id },
-        { $set: updateFields },
-        { new: true }
-      );
-      if (cleanEmail && planName) {
-        await User.findOneAndUpdate(
-          { email: cleanEmail },
-          { $set: { membershipTier: planName } }
-        );
-      }
-    } catch (err) {
-      console.warn('DB error updating verified payment:', err.message);
-    }
-  }
-
-  if (!updatedRecord) {
-    updatedRecord = updateMemoryPayment(razorpay_order_id, updateFields);
-    if (cleanEmail && planName) {
-      updateMemoryUser(cleanEmail, { membershipTier: planName });
-    }
-  }
+  });
 
   return {
     success: true,
-    message: 'Payment successfully captured and verified.',
+    message: `${resolvedPlan.name} activated successfully!`,
     paymentId: razorpay_payment_id,
     orderId: razorpay_order_id,
     invoiceNumber,
     status: 'captured',
-    planName: planName || updatedRecord?.planName || 'Active',
-    amount: updatedRecord?.amount || 0,
+    planId: resolvedPlan.id,
+    planName: resolvedPlan.name,
+    baseAmount: updatedRecord?.baseAmount ?? resolvedPlan.basePriceInr,
+    gstAmount: updatedRecord?.gstAmount ?? resolvedPlan.gstAmountInr,
+    amount: updatedRecord?.amount ?? resolvedPlan.totalPayableInr,
     currency: updatedRecord?.currency || 'INR',
+    activatedAt,
+    expiresAt,
     receipt: updatedRecord?.receipt || '',
-    userEmail: cleanEmail || updatedRecord?.userEmail,
+    userEmail: cleanEmail,
   };
 };
 
@@ -287,9 +462,82 @@ export const getPaymentDetails = async (identifier) => {
   return findMemoryPaymentByOrderId(identifier);
 };
 
+/**
+ * Verify X-Razorpay-Signature against exact raw webhook payload and process payment.captured / payment.failed
+ */
+export const verifyAndProcessWebhook = async ({ rawBody, signature }) => {
+  const config = getRazorpayConfig();
+  if (!config.webhook_secret) {
+    const err = new Error('Razorpay webhook secret is not configured.');
+    err.statusCode = 500;
+    throw err;
+  }
+  if (!signature) {
+    const err = new Error('Missing X-Razorpay-Signature header.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const rawBuffer = Buffer.isBuffer(rawBody)
+    ? rawBody
+    : Buffer.from(typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody || {}));
+
+  const expectedSignature = crypto
+    .createHmac('sha256', config.webhook_secret)
+    .update(rawBuffer)
+    .digest('hex');
+
+  if (!timingSafeHexEqual(expectedSignature, signature)) {
+    const err = new Error('Invalid webhook signature.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  let parsedBody = {};
+  try {
+    parsedBody = JSON.parse(rawBuffer.toString('utf8'));
+  } catch {
+    const err = new Error('Invalid JSON webhook body.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const event = parsedBody.event || '';
+  const paymentEntity = parsedBody?.payload?.payment?.entity || null;
+
+  if (event === 'payment.captured' && paymentEntity?.order_id) {
+    await finalizeCapturedPaymentAndActivateMembership({
+      orderId: paymentEntity.order_id,
+      paymentId: paymentEntity.id || '',
+      signature: String(signature),
+      userEmail: paymentEntity.email || paymentEntity?.notes?.userEmail || '',
+      planId: paymentEntity?.notes?.planId || '',
+      planName: paymentEntity?.notes?.planName || '',
+      paymentMethod: paymentEntity.method || 'Razorpay Webhook',
+    });
+  } else if (event === 'payment.failed' && paymentEntity?.order_id) {
+    const failFields = {
+      status: 'failed',
+      paymentId: paymentEntity.id || '',
+      updatedAt: new Date(),
+    };
+    if (isDBConnected()) {
+      await Payment.findOneAndUpdate(
+        { orderId: paymentEntity.order_id, status: { $ne: 'captured' } },
+        { $set: failFields }
+      ).catch(() => {});
+    } else {
+      updateMemoryPayment(paymentEntity.order_id, failFields);
+    }
+  }
+
+  return { status: 'ok', eventReceived: event };
+};
+
 export default {
   createOrder,
   verifyPayment,
+  verifyAndProcessWebhook,
   getUserPayments,
   getPaymentDetails,
 };

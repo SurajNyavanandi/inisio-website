@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getGatewayConfig,
+  getMembershipSummary,
   createCheckoutOrder,
   verifyPaymentSignature,
   getPaymentHistory,
@@ -18,6 +19,9 @@ const router = express.Router();
 
 // Public gateway configuration
 router.get('/config', getGatewayConfig);
+
+// Authoritative membership status & quota summary
+router.get('/membership-summary', optionalAuth, getMembershipSummary);
 
 // Create checkout order
 router.post('/create-order', optionalAuth, validateSchema(createOrderSchema), createCheckoutOrder);

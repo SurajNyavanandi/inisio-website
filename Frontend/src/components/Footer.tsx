@@ -149,13 +149,22 @@ export const Footer: React.FC<FooterProps> = ({
                 </a>
               </li>
               <li>
+                <a
+                  href="/pricing"
+                  onClick={(e) => handleNav('pricing', e)}
+                  className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block"
+                >
+                  Promoter Membership Plans
+                </a>
+              </li>
+              <li>
                 <a href="/blogs" onClick={(e) => handleNav('blogs', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
                   Advisory Blogs &amp; Guides
                 </a>
               </li>
               <li>
                 <a href="/faq" onClick={(e) => handleNav('faq', e)} className="hover:text-white transition-colors cursor-pointer text-left text-blue-400 block">
-                  Greenfield Funding FAQs
+                  Project Appraisal FAQs
                 </a>
               </li>
             </ul>
@@ -201,13 +210,12 @@ export const Footer: React.FC<FooterProps> = ({
                   <span>WhatsApp: +91 63020 26462</span>
                 </a>
 
-                {/* TODO: Confirm official contact email (contact@inisio.com here vs advisory@inisio.in in ContactSection) */}
                 <a
-                  href="mailto:contact@inisio.com"
+                  href="mailto:advisory@inisio.in"
                   className="flex items-center gap-2 text-slate-300 hover:text-white font-medium transition-colors"
                 >
                   <Mail className="w-3.5 h-3.5 text-blue-400" />
-                  <span>contact@inisio.com</span>
+                  <span>advisory@inisio.in</span>
                 </a>
               </div>
             </div>

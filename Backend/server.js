@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
+import mongoSanitize from 'express-mongo-sanitize';
+import hpp from 'hpp';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -10,9 +13,10 @@ import mongoose from 'mongoose';
 import connectDB, { isDBConnected } from './config/db.js';
 import apiRouter from './routes/index.js';
 import visitorRoutes from './routes/visitorRoutes.js';
+import { handleWebhook } from './controllers/paymentController.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import { generalApiLimiter } from './middleware/rateLimitMiddleware.js';
-import logger from './utils/logger.js';
+import logger, { httpLogger } from './utils/logger.js';
 import config from './config/env.js';
 import { getEmailSenderStatus } from './utils/emailService.js';
 
@@ -31,12 +35,24 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = config.PORT;
 
-// Security headers (CSP & frameguard disabled so embedded preview, OCR WASM, and PDF blobs work cleanly)
+// Security headers with properly scoped CSP for PDF preview blobs, Cloudinary assets, and Razorpay checkout
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", 'https://checkout.razorpay.com'],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://res.cloudinary.com', 'https://images.unsplash.com'],
+        connectSrc: ["'self'", 'https://api.razorpay.com', 'https://lumberjack.razorpay.com', 'https://ipapi.co'],
+        frameSrc: ["'self'", 'blob:', 'https://api.razorpay.com', 'https://checkout.razorpay.com'],
+        objectSrc: ["'self'", 'blob:'],
+        workerSrc: ["'self'", 'blob:'],
+      },
+    },
     crossOriginEmbedderPolicy: false,
-    frameguard: false,
+    frameguard: { action: 'sameorigin' },
   })
 );
 
@@ -46,18 +62,20 @@ app.use(compression());
 // Connect to MongoDB Atlas
 connectDB().catch(() => {});
 
-// CORS Configuration
-const corsOrigin = config.CORS_ORIGIN || process.env.CORS_ORIGIN || '*';
+// Strict CORS Configuration (rejects disallowed origins instead of falling back to permissive allow)
+const allowedOrigins = config.ALLOWED_ORIGINS || [];
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests or wildcard
-    if (!origin || corsOrigin === '*') return callback(null, true);
-    const origins = corsOrigin.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
-    if (origins.includes(origin) || origins.includes('*') || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = origin.trim().replace(/\/$/, '');
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(cleanOrigin)) {
       return callback(null, true);
     }
-    return callback(null, true);
+    if (!config.isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS origin denied: ${cleanOrigin}`), false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -68,15 +86,18 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Body parsers with 1MB payload limits
+// Mount Razorpay webhook raw JSON body parser BEFORE express.json() for byte-exact HMAC signature verification
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+
+// Cookie parser, Body parsers with 1MB payload limits, NoSQL injection & HTTP Parameter Pollution hardening
+app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(mongoSanitize({ replaceWith: '_' }));
+app.use(hpp());
 
-// Request logging (sanitized, non-production verbose)
-app.use((req, res, next) => {
-  logger.debug(`${req.method} ${req.originalUrl}`);
-  next();
-});
+// Structured HTTP request logger (Pino)
+app.use(httpLogger);
 
 // Log Resend sender readiness once on startup (non-blocking)
 getEmailSenderStatus()

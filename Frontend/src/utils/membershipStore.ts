@@ -3,6 +3,7 @@ import { api } from './apiClient';
 
 export const FREE_ASSESSMENT_LIMIT = 1;
 export const FREE_ASSESSMENT_LIMIT_CODE = 'FREE_ASSESSMENT_LIMIT_REACHED';
+export const MEMBERSHIP_GST_RATE = 0.18;
 
 const COMPLETED_EMAILS_KEY = 'inisio_completed_assessments';
 const PAID_MEMBERSHIPS_KEY = 'inisio_paid_memberships';
@@ -26,7 +27,11 @@ const PRIVILEGED_ROLES = new Set([
 const FREE_TIER_NAMES = new Set([
   '',
   'free',
+  'free_plan',
+  'free plan',
   'free starter',
+  'free_starter',
+  'free – project assessment',
   'standard',
   'starter',
   'basic',
@@ -34,78 +39,195 @@ const FREE_TIER_NAMES = new Set([
   'standard feasibility',
 ]);
 
+export type MembershipPlanId = 'free_plan' | 'promoter_boost' | 'promoter_plus';
+
 export interface MembershipPlanTier {
-  id: 'free_starter' | 'plus_pack' | 'pro_growth';
+  id: MembershipPlanId;
   name: string;
+  basePriceInr: number;
   priceInr: number;
+  gstRate: number;
+  gstAmountInr: number;
+  totalPayableInr: number;
   priceLabel: string;
   period: string;
-  assessmentsIncluded: number | null;
+  validityLabel: string;
+  validityDays: number | null;
+  assessmentsIncluded: number;
+  consultantIntroIncluded: number;
+  prosyncIntroIncluded: number;
+  positioning: string;
   description: string;
   features: string[];
   popular?: boolean;
+  badgeText?: string;
   buttonText: string;
 }
 
 export const MEMBERSHIP_PLAN_TIERS: MembershipPlanTier[] = [
   {
-    id: 'free_starter',
-    name: 'Free Starter',
+    id: 'free_plan',
+    name: 'Free – Project Assessment',
+    basePriceInr: 0,
     priceInr: 0,
+    gstRate: 0,
+    gstAmountInr: 0,
+    totalPayableInr: 0,
     priceLabel: '₹0',
-    period: 'forever',
+    period: 'Free Plan',
+    validityLabel: '—',
+    validityDays: null,
     assessmentsIncluded: 1,
-    description: 'Try Inisio risk-free with 1 complete greenfield project assessment and instant score preview.',
+    consultantIntroIncluded: 0,
+    prosyncIntroIncluded: 0,
+    positioning: 'Start your project assessment.',
+    description: 'Start your project assessment with preliminary bankability insights and an editable teaser.',
     features: [
-      '1 free complete project assessment',
-      'Bankability score & preliminary DSCR check',
-      'AI project teaser summary preview',
-      'Saved in your promoter dashboard',
+      'One project assessment',
+      'Preliminary project feasibility and bankability insights',
+      'Project cost and means-of-finance assessment',
+      'Indicative debt-to-equity analysis and DSCR',
+      'AI-generated project teaser',
+      'Personal project dashboard',
+      'Access to basic project tracking',
     ],
-    buttonText: 'Start Free',
+    buttonText: 'Start Free Assessment',
   },
   {
-    id: 'plus_pack',
-    name: 'Plus Pack',
-    priceInr: 299,
-    priceLabel: '₹299',
-    period: 'pack',
-    assessmentsIncluded: 5,
-    description: 'Affordable pack for founders evaluating multiple project ideas or revised funding structures.',
+    id: 'promoter_boost',
+    name: 'Promoter Boost',
+    basePriceInr: 2999,
+    priceInr: 2999,
+    gstRate: MEMBERSHIP_GST_RATE,
+    gstAmountInr: Number((2999 * MEMBERSHIP_GST_RATE).toFixed(2)),
+    totalPayableInr: Number((2999 * (1 + MEMBERSHIP_GST_RATE)).toFixed(2)),
+    priceLabel: '₹2,999',
+    period: '3 months from activation',
+    validityLabel: '3 months',
+    validityDays: 90,
+    assessmentsIncluded: 1,
+    consultantIntroIncluded: 2,
+    prosyncIntroIncluded: 1,
+    positioning: 'Move your project forward with professional guidance.',
+    description: 'Includes all Free Plan benefits, plus independent consultant and Prosync introductions.',
     features: [
-      'Up to 5 additional project assessments',
-      'Full downloadable AI Teaser PDF & editable DOCX',
-      'Complete Means of Finance & ratio breakdowns',
-      'Dashboard tracking & re-download access',
+      'Two relevant consultant introductions',
+      'One introduction to Prosync Consulting, Inisio’s Featured Advisory Partner',
+      'Consultation request and follow-up tracking',
+      'Access to independent DPR, CMA and TEV professionals',
+      'Project documentation gap identification',
+      'Priority consultation coordination',
     ],
     popular: true,
-    buttonText: 'Choose Plus Pack',
+    badgeText: 'Recommended Entry Paid Plan',
+    buttonText: 'Upgrade to Promoter Boost',
   },
   {
-    id: 'pro_growth',
-    name: 'Pro Growth',
-    priceInr: 899,
-    priceLabel: '₹899',
-    period: '6 months',
-    assessmentsIncluded: null,
-    description: 'Built for repeat assessments, consultants, and founders preparing bank-ready files.',
+    id: 'promoter_plus',
+    name: 'Promoter Plus',
+    basePriceInr: 9999,
+    priceInr: 9999,
+    gstRate: MEMBERSHIP_GST_RATE,
+    gstAmountInr: Number((9999 * MEMBERSHIP_GST_RATE).toFixed(2)),
+    totalPayableInr: Number((9999 * (1 + MEMBERSHIP_GST_RATE)).toFixed(2)),
+    priceLabel: '₹9,999',
+    period: '12 months from activation',
+    validityLabel: '12 months',
+    validityDays: 365,
+    assessmentsIncluded: 3,
+    consultantIntroIncluded: 5,
+    prosyncIntroIncluded: 1,
+    positioning: 'Comprehensive support for serious project promoters.',
+    description: 'Includes all Promoter Boost benefits, plus multi-project assessments and extended 12-month support.',
     features: [
-      'Unlimited project assessments for 6 months',
-      'Full DOCX & PDF outputs for every project',
-      'CMA & DPR readiness checklist included',
-      'Priority advisory callback & CA desk routing',
+      'Up to three project assessments during membership validity',
+      'Up to six professional introductions in total, including the Prosync introduction',
+      'Priority access to the Prosync advisory desk for suitable projects',
+      'Project readiness review and follow-up',
+      'Assistance identifying suitable funding pathways',
+      'Priority access to the Inisio consultant network',
+      'Extended project tracking for 12 months',
     ],
-    buttonText: 'Choose Pro Growth',
+    buttonText: 'Upgrade to Promoter Plus',
   },
 ];
+
+export const MEMBERSHIP_COMPARISON_ROWS = [
+  { feature: 'Price', free: 'Free', boost: '₹2,999', plus: '₹9,999' },
+  { feature: 'Validity', free: '—', boost: '3 months', plus: '12 months' },
+  { feature: 'Project assessments', free: '1', boost: '1', plus: 'Up to 3' },
+  { feature: 'Bankability insights', free: 'Yes', boost: 'Yes', plus: 'Yes' },
+  { feature: 'AI project teaser', free: 'Yes', boost: 'Yes', plus: 'Yes' },
+  { feature: 'Project dashboard', free: 'Yes', boost: 'Yes', plus: 'Yes' },
+  { feature: 'Consultant introductions', free: 'Not included', boost: '2', plus: 'Up to 6 Featured consultants on priority' },
+  { feature: 'Project readiness follow-up', free: 'Not included', boost: 'Basic', plus: 'Extended' },
+  { feature: 'Project tracking', free: 'Basic', boost: '3 months', plus: '12 months' },
+];
+
+export const OFFICIAL_DISCLAIMERS = {
+  membership: {
+    title: 'Membership Disclaimer',
+    paragraphs: [
+      "Inisio memberships provide access to the platform's project assessment features, project information tools and the professional connection benefits specified under each plan.",
+      'Membership fees do not include professional fees charged separately by Chartered Accountants, DPR consultants, TEV consultants, financial advisors or other independent professionals.',
+      'Consultant introductions are subject to professional availability, project suitability and the applicable plan limits. An introduction does not constitute acceptance of a professional engagement or guarantee delivery of any particular service.',
+      "Prosync Consulting is Inisio's Featured Advisory Partner. Any advisory engagement with Prosync will be governed by separate engagement terms, scope of work and professional fees.",
+      'Inisio does not guarantee project feasibility, bankability, loan eligibility, loan sanction, subsidy approval, interest rates or funding disbursement.',
+    ],
+  },
+  assessment: {
+    title: 'Project Assessment Disclaimer',
+    paragraphs: [
+      'Project assessments and bankability insights generated through Inisio are preliminary and indicative, based on the information and documents submitted by the promoter.',
+      'The assessment is not a formal credit rating, statutory valuation, lender appraisal, technical feasibility certificate, DPR, TEV report or loan sanction recommendation.',
+      'Financial indicators such as DSCR and debt-to-equity ratios are indicative and should be independently reviewed before being relied upon for financial or lending decisions.',
+      'Final project appraisal and lending decisions rest exclusively with the respective banks and financial institutions.',
+    ],
+  },
+  consultantNetwork: {
+    title: 'Consultant Network Disclaimer',
+    paragraphs: [
+      'Inisio facilitates introductions between project promoters and independent professionals. Such professionals operate independently and are responsible for their professional services, advice, deliverables, fees and timelines.',
+      'The promoter and consultant must independently agree on the scope of work, professional fees and engagement terms.',
+      'Inisio does not guarantee the quality, outcome or completion of services provided by independent professionals, subject to its own applicable platform obligations.',
+    ],
+  },
+  prosyncAdvisory: {
+    title: 'Featured Advisory Partner – Prosync Consulting',
+    paragraphs: [
+      'Prosync Consulting is an independent advisory partner featured on Inisio. Access to Prosync through a membership plan means an introduction or consultation request, subject to project suitability and availability.',
+      'Any further advisory, debt syndication or financial structuring engagement will be governed by a separate agreement with Prosync Consulting. Professional fees, scope and deliverables will be communicated separately.',
+      'Neither Inisio nor Prosync guarantees loan sanction or disbursement.',
+    ],
+  },
+  consentStatement:
+    'I have read and agree to the Inisio Membership Terms and Conditions. I understand that membership does not guarantee loan sanction, funding, consultant engagement or any specific professional outcome.',
+};
 
 export interface AssessmentQuotaStatus {
   allowed: boolean;
   unlimited?: boolean;
+  planId?: MembershipPlanId;
+  activePlanId?: MembershipPlanId;
   hasPaidMembership: boolean;
   membershipTier: string;
+  statusLabel?: 'Free Plan' | 'Active' | 'Expiring Soon' | 'Expired';
+  isExpired?: boolean;
+  isExpiringSoon?: boolean;
+  daysRemaining?: number | null;
+  activatedAt?: string | null;
+  expiresAt?: string | null;
+  autoRenew?: boolean;
   usedCount: number;
   limit: number | null;
+  remainingCount?: number | null;
+  consultantUsed?: number;
+  consultantLimit?: number;
+  consultantRemaining?: number;
+  prosyncUsed?: number;
+  prosyncLimit?: number;
+  prosyncRemaining?: number;
+  prosyncStatus?: string;
   code?: string;
   reason?: string;
   existingProjectId?: string | null;
@@ -143,13 +265,30 @@ export function isPaidTierName(tier?: string | null): boolean {
   return !FREE_TIER_NAMES.has(clean);
 }
 
+export function getPlanByIdOrName(idOrName?: string | null): MembershipPlanTier {
+  const clean = String(idOrName || '').trim().toLowerCase();
+  const match = MEMBERSHIP_PLAN_TIERS.find(
+    (p) => p.id === clean || p.name.toLowerCase() === clean
+  );
+  if (match) return match;
+  if (clean.includes('plus') && !clean.includes('pack')) return MEMBERSHIP_PLAN_TIERS[2];
+  if (clean.includes('boost')) return MEMBERSHIP_PLAN_TIERS[1];
+  return MEMBERSHIP_PLAN_TIERS[0];
+}
+
 export function hasActivePaidMembership(userOrEmail?: AuthUser | string | null): boolean {
   if (!userOrEmail) return false;
 
   if (typeof userOrEmail === 'object') {
     if (isPrivilegedUserRole(userOrEmail.role)) return true;
-    const plan = (userOrEmail as any).membershipTier || userOrEmail.membershipPlan;
-    if (isPaidTierName(plan)) return true;
+    if (userOrEmail.membershipStatus === 'Expired') return false;
+    const plan = (userOrEmail as any).membershipPlanId || (userOrEmail as any).membershipTier || userOrEmail.membershipPlan;
+    if (isPaidTierName(plan)) {
+      if (userOrEmail.membershipExpiresAt && new Date(userOrEmail.membershipExpiresAt).getTime() <= Date.now()) {
+        return false;
+      }
+      return true;
+    }
   }
 
   const email = normalizeEmail(typeof userOrEmail === 'string' ? userOrEmail : userOrEmail.email);
@@ -159,20 +298,44 @@ export function hasActivePaidMembership(userOrEmail?: AuthUser | string | null):
     const raw = localStorage.getItem(PAID_MEMBERSHIPS_KEY);
     if (!raw) return false;
     const map = JSON.parse(raw);
-    return Boolean(map && isPaidTierName(map[email]));
+    const entry = map?.[email];
+    if (!entry) return false;
+    if (typeof entry === 'string') return isPaidTierName(entry);
+    if (entry.expiresAt && new Date(entry.expiresAt).getTime() <= Date.now()) return false;
+    return isPaidTierName(entry.planName || entry.planId);
   } catch {
     return false;
   }
 }
 
-export function setLocalPaidMembership(email: string, tierName: string): void {
+export function setLocalPaidMembership(
+  email: string,
+  tierName: string,
+  meta?: { planId?: string; activatedAt?: string | null; expiresAt?: string | null }
+): void {
   const clean = normalizeEmail(email);
   if (!clean) return;
   try {
     const raw = localStorage.getItem(PAID_MEMBERSHIPS_KEY);
     const map = raw ? JSON.parse(raw) : {};
-    map[clean] = tierName;
+    map[clean] = meta ? { planName: tierName, ...meta } : tierName;
     localStorage.setItem(PAID_MEMBERSHIPS_KEY, JSON.stringify(map));
+
+    // Also update inisio_active_user if it belongs to same email
+    const activeRaw = localStorage.getItem('inisio_active_user');
+    if (activeRaw) {
+      const parsed = JSON.parse(activeRaw);
+      if (normalizeEmail(parsed?.email) === clean) {
+        const planDef = getPlanByIdOrName(meta?.planId || tierName);
+        parsed.membershipPlanId = planDef.id;
+        parsed.membershipTier = planDef.name;
+        parsed.membershipPlan = planDef.name;
+        if (meta?.activatedAt) parsed.membershipActivatedAt = meta.activatedAt;
+        if (meta?.expiresAt) parsed.membershipExpiresAt = meta.expiresAt;
+        parsed.membershipStatus = planDef.id === 'free_plan' ? 'Free Plan' : 'Active';
+        localStorage.setItem('inisio_active_user', JSON.stringify(parsed));
+      }
+    }
   } catch {
     // ignore storage quota errors
   }
@@ -211,6 +374,7 @@ export function canUserStartAssessment(
     isEditingExisting?: boolean;
     hasPaidMembership?: boolean;
     role?: string;
+    planId?: string;
   }
 ): { allowed: boolean; reason?: string; code?: string } {
   if (options?.isEditingExisting) {
@@ -223,17 +387,20 @@ export function canUserStartAssessment(
     return { allowed: true };
   }
 
-  const isPaid = Boolean(options?.hasPaidMembership) || hasActivePaidMembership(userOrEmail);
-  if (isPaid) {
-    return { allowed: true };
-  }
+  const resolvedPlan = getPlanByIdOrName(
+    options?.planId ||
+      (typeof userOrEmail === 'object' && userOrEmail
+        ? userOrEmail.membershipPlanId || userOrEmail.membershipTier || userOrEmail.membershipPlan
+        : undefined)
+  );
+  const isPaidActive = Boolean(options?.hasPaidMembership) || hasActivePaidMembership(userOrEmail);
+  const limit = isPaidActive ? resolvedPlan.assessmentsIncluded : FREE_ASSESSMENT_LIMIT;
 
   const email =
     typeof userOrEmail === 'string'
       ? normalizeEmail(userOrEmail)
       : normalizeEmail(userOrEmail?.email);
 
-  // Guests can start Steps 1-2 freely; they will be gated at Step 3 to sign up / sign in
   if (!email && submittedAssessmentCount < FREE_ASSESSMENT_LIMIT) {
     return { allowed: true };
   }
@@ -243,12 +410,14 @@ export function canUserStartAssessment(
     email ? getRecordedCompletionCount(email) : 0
   );
 
-  if (effectiveCount >= FREE_ASSESSMENT_LIMIT) {
+  if (effectiveCount >= limit) {
     return {
       allowed: false,
       code: FREE_ASSESSMENT_LIMIT_CODE,
       reason:
-        'You have already used your 1 free project assessment. You can view, edit, or re-download your existing project from your Dashboard, or upgrade to a membership plan to evaluate additional projects.',
+        limit === 1
+          ? 'You have already used your 1 project assessment. You can view, edit, or re-download your existing project from your Dashboard, or upgrade to Promoter Plus for up to 3 assessments.'
+          : `You have used all ${limit} project assessments included in your current plan.`,
     };
   }
 
@@ -256,7 +425,7 @@ export function canUserStartAssessment(
 }
 
 /**
- * Authoritative server-side quota check with safe local fallback.
+ * Authoritative server-side quota & membership check with safe local fallback.
  */
 export async function fetchServerAssessmentQuota(params?: {
   email?: string;
@@ -274,8 +443,13 @@ export async function fetchServerAssessmentQuota(params?: {
       projectId: params?.projectId,
     });
     if (res && typeof res.allowed === 'boolean') {
-      if (res.hasPaidMembership && (params?.email || params?.user?.email) && res.membershipTier) {
-        setLocalPaidMembership(params?.email || params?.user?.email || '', res.membershipTier);
+      const targetEmail = params?.email || params?.user?.email || '';
+      if (targetEmail && res.membershipTier) {
+        setLocalPaidMembership(targetEmail, res.membershipTier, {
+          planId: res.planId,
+          activatedAt: res.activatedAt,
+          expiresAt: res.expiresAt,
+        });
       }
       return res as AssessmentQuotaStatus;
     }
@@ -290,13 +464,30 @@ export async function fetchServerAssessmentQuota(params?: {
       isEditingExisting: Boolean(params?.projectId),
     }
   );
+  const isPaid = hasActivePaidMembership(params?.user || params?.email);
+  const plan = isPaid && typeof params?.user === 'object'
+    ? getPlanByIdOrName(params?.user?.membershipPlanId || params?.user?.membershipTier || params?.user?.membershipPlan)
+    : MEMBERSHIP_PLAN_TIERS[0];
+
+  const usedCount = Math.max(0, Number(params?.localCompletedCount ?? (localCheck.allowed ? 0 : 1)));
 
   return {
     allowed: localCheck.allowed,
-    hasPaidMembership: hasActivePaidMembership(params?.user || params?.email),
-    membershipTier: hasActivePaidMembership(params?.user || params?.email) ? 'Paid Plan' : 'Free',
-    usedCount: localCheck.allowed ? 0 : 1,
-    limit: FREE_ASSESSMENT_LIMIT,
+    planId: plan.id,
+    activePlanId: isPaid ? plan.id : 'free_plan',
+    hasPaidMembership: isPaid,
+    membershipTier: plan.name,
+    statusLabel: isPaid ? 'Active' : 'Free Plan',
+    usedCount,
+    limit: plan.assessmentsIncluded,
+    remainingCount: Math.max(0, plan.assessmentsIncluded - usedCount),
+    consultantUsed: 0,
+    consultantLimit: plan.consultantIntroIncluded,
+    consultantRemaining: plan.consultantIntroIncluded,
+    prosyncUsed: 0,
+    prosyncLimit: plan.prosyncIntroIncluded,
+    prosyncRemaining: plan.prosyncIntroIncluded,
+    prosyncStatus: plan.prosyncIntroIncluded > 0 ? 'Not Requested' : 'Not Included',
     code: localCheck.code,
     reason: localCheck.reason,
   };
@@ -373,18 +564,15 @@ export function loadAssessmentDraft(userEmail?: string | null): AssessmentDraftD
     return null;
   };
 
-  // 1. If logged in, try user-scoped draft first
   const clean = normalizeEmail(userEmail);
   if (clean) {
     const userDraft = tryParse(localStorage, getDraftStorageKey(clean));
     if (userDraft) return userDraft;
   }
 
-  // 2. Fallback to guest draft (e.g., started before signing in)
   const guestDraft = tryParse(localStorage, getDraftStorageKey(null));
   if (guestDraft) return guestDraft;
 
-  // 3. Migrate legacy sessionStorage draft if any
   const legacyDraft = tryParse(sessionStorage, LEGACY_SESSION_DRAFT_KEY);
   if (legacyDraft) return legacyDraft;
 

@@ -20,8 +20,7 @@ import { calculateComprehensiveRiskScore } from '../utils/underwritingScorer';
 import { updateLeadRecord, saveLeadRecord } from '../utils/leadStore';
 import { calculateSystemDscr, reconcileProjectFinancials } from '../utils/financialUtils';
 import { MembershipPlansModal } from './MembershipPlansModal';
-import { DPRRequestModal } from './DPRRequestModal';
-import { FundingRequestModal } from './FundingRequestModal';
+import { NearbyConsultantModal } from './NearbyConsultantModal';
 import { PromoterFundAssistanceModal } from './PromoterFundAssistanceModal';
 import { PdfPreviewModal, PdfPreviewState } from './PdfPreviewModal';
 import {
@@ -34,6 +33,7 @@ import {
   migrateGuestDraftToUser,
   clearAssessmentDraft,
   FREE_ASSESSMENT_LIMIT_CODE,
+  OFFICIAL_DISCLAIMERS,
 } from '../utils/membershipStore';
 import { UISelect } from './ui/Select';
 import { Input } from './ui/Input';
@@ -148,8 +148,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
   const [isDownloadingDprPdf, setIsDownloadingDprPdf] = useState(false);
   const [pdfPreview, setPdfPreview] = useState<PdfPreviewState | null>(null);
   const [isMembershipModalOpen, setIsMembershipModalOpen] = useState(false);
-  const [isDPRModalOpen, setIsDPRModalOpen] = useState(false);
-  const [isFundingModalOpen, setIsFundingModalOpen] = useState(false);
+  const [membershipSelectedPlanId, setMembershipSelectedPlanId] = useState<'promoter_boost' | 'promoter_plus' | null>(null);
+  const [isNearbyConsultantOpen, setIsNearbyConsultantOpen] = useState(false);
+  const [isDownloadingChecklist, setIsDownloadingChecklist] = useState(false);
   const [isPromoterFundAssistanceModalOpen, setIsPromoterFundAssistanceModalOpen] = useState(false);
   const [actionToast, setActionToast] = useState<string | null>(null);
 
@@ -192,7 +193,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     if (completedSteps.includes(stepId)) return true;
     switch (stepId) {
       case 1:
-        return Boolean(formData.projectName?.trim() && formData.industry && formData.location?.trim());
+        return Boolean(formData.projectName?.trim() && formData.location?.trim());
       case 2:
         return Boolean(formData.totalCostCr && parseFloat(formData.totalCostCr) > 0 && formData.promoterContribCr && isEquityEligible);
       case 3:
@@ -406,6 +407,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     termLoanCr: string;
     promoterContributionCr: string;
     otherFinanceCr: string;
+    workingCapitalAssessedCr: string;
     totalProjectCost?: string;
     totalMeansOfFinance?: string;
   }>({
@@ -416,6 +418,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     termLoanCr: '',
     promoterContributionCr: '',
     otherFinanceCr: '',
+    workingCapitalAssessedCr: '',
     totalProjectCost: '',
     totalMeansOfFinance: ''
   });
@@ -667,6 +670,11 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
             ? projContrib.toFixed(2)
             : '',
           otherFinanceCr: hasSavedStr(savedFin.otherFinanceCr) ? String(savedFin.otherFinanceCr) : '0.00',
+          workingCapitalAssessedCr: hasSavedStr(savedFin.workingCapitalAssessedCr)
+            ? String(savedFin.workingCapitalAssessedCr)
+            : hasSavedStr(editingProject.workingCapitalAssessedCr)
+            ? String(editingProject.workingCapitalAssessedCr)
+            : '',
           totalProjectCost: hasSavedStr(savedFin.totalProjectCost)
             ? String(savedFin.totalProjectCost)
             : projCost > 0
@@ -687,6 +695,9 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
           termLoanCr: projLoan > 0 ? projLoan.toFixed(2) : '',
           promoterContributionCr: Number.isFinite(rawProjContrib) ? projContrib.toFixed(2) : '',
           otherFinanceCr: '0.00',
+          workingCapitalAssessedCr: hasSavedStr(editingProject.workingCapitalAssessedCr)
+            ? String(editingProject.workingCapitalAssessedCr)
+            : '',
           totalProjectCost: projCost > 0 ? projCost.toFixed(2) : '',
           totalMeansOfFinance: projCost > 0 ? projCost.toFixed(2) : ''
         });
@@ -870,6 +881,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       termLoanCr: '',
       promoterContributionCr: '',
       otherFinanceCr: '',
+      workingCapitalAssessedCr: '',
       totalProjectCost: '',
       totalMeansOfFinance: '',
     });
@@ -956,8 +968,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       if (trimmedProjectName !== formData.projectName) {
         setFormData((prev) => ({ ...prev, projectName: trimmedProjectName }));
       }
-      if (!trimmedProjectName || !formData.industry || !formData.location.trim()) {
-        showToast('Please enter your Project Name, select Industry, and choose Location to continue.', { type: 'warning', title: 'Missing Information' });
+      if (!trimmedProjectName || !formData.location.trim()) {
+        showToast('Please enter your Project Name and choose State and City to continue.', { type: 'warning', title: 'Missing Information' });
         return;
       }
       markStepComplete(1);
@@ -1193,6 +1205,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       termLoanCr: reconciled.termLoanFormatted,
       promoterContributionCr: reconciled.promoterContributionFormatted,
       otherFinanceCr: reconciled.otherFinanceFormatted,
+      workingCapitalAssessedCr: financials.workingCapitalAssessedCr || undefined,
       machineryCostCr: reconciled.hasExplicitBreakdown ? reconciled.machineryFormatted : undefined,
       civilCostCr: reconciled.hasExplicitBreakdown ? reconciled.civilFormatted : undefined,
       consultancyCostCr: reconciled.hasExplicitBreakdown ? reconciled.consultancyFormatted : undefined,
@@ -1675,6 +1688,31 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
     }
   };
 
+  const handleDownloadChecklist = async (mode: 'download' | 'preview' = 'download') => {
+    if (!ensureDownloadEligible()) return;
+    try {
+      setIsDownloadingChecklist(true);
+      const pdfData = getPDFData();
+      const { generateProjectChecklistPDF } = await import('../utils/pdfGenerator');
+      const result = generateProjectChecklistPDF(pdfData);
+      if (mode === 'preview') {
+        setPdfPreview({
+          blobUrl: result.blobUrl,
+          filename: result.filename,
+          title: 'Project Document Checklist',
+          subtitle: 'Bank & Investor Submission Readiness',
+        });
+      } else {
+        showToast(`Downloaded ${result.filename}`, { type: 'success' });
+      }
+    } catch (err) {
+      console.error('Checklist PDF generation error:', err);
+      showToast('Could not generate Project Checklist PDF. Please try again.', { type: 'error' });
+    } finally {
+      setTimeout(() => setIsDownloadingChecklist(false), 400);
+    }
+  };
+
   const handleSaveAndRedirectToOutputs = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!formData.projectName.trim()) {
@@ -1769,6 +1807,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       feasibilityScore: computed.feasibilityScore,
       bankabilityRating: activeBankability,
       dscrEstimate: systemDscr,
+      workingCapitalAssessedCr: updatedFinancials.workingCapitalAssessedCr || '',
       promoterContributionAvailable: formData.promoterContributionAvailable || 'Yes',
       promoterFundAssistanceStatus: formData.promoterFundAssistanceRequest ? 'Request Submitted' : (editingProject?.promoterFundAssistanceStatus || 'Not Requested'),
       promoterFundAssistanceRequest: formData.promoterFundAssistanceRequest || editingProject?.promoterFundAssistanceRequest,
@@ -1861,6 +1900,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       feasibilityScore: computed.feasibilityScore,
       bankabilityRating: activeBankability,
       dscrEstimate: systemDscr,
+      workingCapitalAssessedCr: financials.workingCapitalAssessedCr || '',
       promoterContributionAvailable: formData.promoterContributionAvailable || 'Yes',
       promoterFundAssistanceStatus: formData.promoterFundAssistanceRequest ? 'Request Submitted' : (editingProject?.promoterFundAssistanceStatus || 'Not Requested'),
       promoterFundAssistanceRequest: formData.promoterFundAssistanceRequest || editingProject?.promoterFundAssistanceRequest,
@@ -1938,6 +1978,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       feasibilityScore: computed.feasibilityScore,
       bankabilityRating: activeBankability,
       dscrEstimate: systemDscr,
+      workingCapitalAssessedCr: financials.workingCapitalAssessedCr || '',
       promoterContributionAvailable: formData.promoterContributionAvailable || 'Yes',
       promoterFundAssistanceStatus: formData.promoterFundAssistanceRequest ? 'Request Submitted' : (editingProject?.promoterFundAssistanceStatus || 'Not Requested'),
       promoterFundAssistanceRequest: formData.promoterFundAssistanceRequest || editingProject?.promoterFundAssistanceRequest,
@@ -2534,7 +2575,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
 
                     <div className="md:col-span-2">
                       <label className="block text-xs font-bold text-gray-700 mb-1">
-                        Industry / Sector <span className="text-red-500">*</span>
+                        Industry / Sector <span className="text-slate-400 font-normal">(Optional)</span>
                       </label>
                       <UISelect
                         value={formData.industry}
@@ -2560,9 +2601,6 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         ]}
                         triggerClassName="bg-gray-50 border-gray-200 text-xs font-medium"
                       />
-                      {submittedSteps[1] && !formData.industry && (
-                        <p className="text-[11px] text-red-600 mt-1 font-medium">Please select an industry sector</p>
-                      )}
                     </div>
 
                     <div className="md:col-span-2">
@@ -2816,7 +2854,8 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                           }
                           const p = parseFloat(formData.promoterContribCr) || 0;
                           const l = Math.max(0, c - p);
-                          setFinancials({
+                          setFinancials((prev) => ({
+                            ...prev,
                             machineryCostCr: (c * 0.65).toFixed(2),
                             civilCostCr: (c * 0.25).toFixed(2),
                             consultancyCostCr: (c * 0.05).toFixed(2),
@@ -2826,7 +2865,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                             otherFinanceCr: '0.00',
                             totalProjectCost: c.toFixed(2),
                             totalMeansOfFinance: c.toFixed(2)
-                          });
+                          }));
                         }}
                         className="px-3 py-1.5 text-[11px] font-bold bg-white hover:bg-slate-100 text-blue-700 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs w-fit"
                       >
@@ -3042,6 +3081,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         options={[
                           'Freehold (Clear Title)',
                           'Prime Land & Building Mortgage',
+                          'Promoter / Relatives Property',
                           'Plant & Machinery Hypothecation',
                           'Factory Premises & Fixed Assets',
                           'Leasehold (Bank Clause)',
@@ -3512,6 +3552,18 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
               </div>
             </div>
 
+            {/* Feasibility Interpretation Banner */}
+            <div className="p-4 sm:p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2">
+              <p className="text-xs sm:text-sm font-bold text-emerald-950 leading-relaxed">
+                Congratulations! Your project is feasible, bankers and investors will show interest in your project, however due to industry inherent risks and collateral coverage, your score is {results.feasibilityScore}/100.
+              </p>
+              <div className="space-y-1 text-[11px] text-emerald-800 leading-relaxed">
+                {OFFICIAL_DISCLAIMERS.assessment.paragraphs.map((p, idx) => (
+                  <p key={idx}>{p}</p>
+                ))}
+              </div>
+            </div>
+
             {/* Feasibility Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-5 bg-slate-900 text-white rounded-2xl">
@@ -3703,6 +3755,13 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 <div className="text-lg font-black text-emerald-900 font-manrope mt-0.5">₹ {formData.promoterContribCr} Cr</div>
                 <div className="text-xs text-emerald-700 mt-0.5">{results.eqPct}% Equity contribution</div>
               </div>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 leading-relaxed space-y-1">
+              <div className="font-bold text-slate-800">{OFFICIAL_DISCLAIMERS.assessment.title}</div>
+              {OFFICIAL_DISCLAIMERS.assessment.paragraphs.map((p, idx) => (
+                <p key={idx}>{p}</p>
+              ))}
             </div>
 
             {/* Next Steps & Action Banner */}
@@ -3955,7 +4014,7 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                     />
                     {totalFin > 0 && <div className="text-[10px] font-medium text-emerald-600 text-right">{eqPct}% Allocation</div>}
                   </div>
-                  <div className="space-y-1.5">
+                    <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-gray-600">Other Sources / Grants (Cr)</label>
                     <Input
                       type="text"
@@ -3966,6 +4025,20 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                         setFinancials((prev) => ({ ...prev, otherFinanceCr: sanitizeDecimalInput(e.target.value, 2) }))
                       }
                       placeholder="Optional (e.g. 0.00)"
+                      className="text-xs font-semibold"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-gray-600">Working Capital Assessed (₹ Cr) <span className="text-slate-400 font-normal">(Optional)</span></label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={financials.workingCapitalAssessedCr}
+                      onKeyDown={(e) => blockInvalidNumberKeys(e, true)}
+                      onChange={(e) =>
+                        setFinancials((prev) => ({ ...prev, workingCapitalAssessedCr: sanitizeDecimalInput(e.target.value, 2) }))
+                      }
+                      placeholder="Optional (leave blank if N/A)"
                       className="text-xs font-semibold"
                     />
                   </div>
@@ -4741,25 +4814,19 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                       <Eye className="w-3.5 h-3.5 text-emerald-400" />
                       <span>Preview DPR Summary</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadChecklist('download')}
+                      disabled={isDownloadingChecklist}
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer whitespace-nowrap"
+                    >
+                      {!activeUser && <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                      <FileText className="w-3.5 h-3.5 text-blue-400" />
+                      <span>{isDownloadingChecklist ? 'Generating...' : 'Generate Checklist'}</span>
+                    </button>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!activeUser) {
-                          handleRequireAuth('login', 'Please sign in or create an account to book your CA consultation.');
-                          return;
-                        }
-                        onOpenConsultation();
-                      }}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 border border-slate-700 cursor-pointer"
-                    >
-                      {!activeUser && <Lock className="w-3.5 h-3.5 text-amber-400" />}
-                      <PhoneCall className="w-3.5 h-3.5" />
-                      <span>Consult CA &amp; Project Advisor</span>
-                    </button>
-
                     <button
                       type="button"
                       onClick={() => {
@@ -4815,86 +4882,42 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
                 </div>
               </div>
 
-              {/* DPR & Funding Monetization Pathways (2-Column Grid) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* DPR Pathway Card */}
-                <div className="bg-linear-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-indigo-500/30 flex flex-col justify-between relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-                  
-                  <div className="relative z-10 space-y-3">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-bold border border-indigo-400/30">
-                      <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>DPR &amp; Bank TEV Preparation</span>
-                    </div>
-
-                    <h3 className="text-xl sm:text-2xl font-black font-manrope text-white tracking-tight">
-                      Need a Detailed Project Report (DPR)?
-                    </h3>
-
-                    <p className="text-sm font-semibold text-indigo-200">
-                      Get Connected With our DPR Partner.
-                    </p>
-
-                    <p className="text-xs text-slate-300 leading-relaxed font-inter">
-                      Get your bank-compliant Techno-Economic Viability (TEV) study and Detailed Project Report drafted by empaneled Chartered Engineers and financial analysts for fast loan sanction.
-                    </p>
-                  </div>
-
-                  <div className="relative z-10 mt-6 pt-4 border-t border-indigo-900/60 flex items-center justify-between">
-                    <div className="text-[11px] text-slate-400 font-medium">
-                      ✓ SBI &amp; Consortium Ready Format
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsDPRModalOpen(true)}
-                      className="px-5 py-2.5 bg-linear-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-indigo-500/30 flex items-center gap-2 cursor-pointer"
-                    >
-                      <span>Request DPR Assistance</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Funding Pathway Card */}
-                <div className="bg-linear-to-br from-slate-900 via-teal-950 to-slate-900 text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-emerald-500/30 flex flex-col justify-between relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-                  
-                  <div className="relative z-10 space-y-3">
+              {/* Get Assistance — Nearby CA / Consultant Card */}
+              <div className="bg-linear-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-indigo-500/30 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-2.5 max-w-2xl">
                     <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-xs font-bold border border-emerald-400/30">
-                      <Landmark className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Debt Syndication &amp; Project Finance</span>
+                      <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>CMA · DPR Preparation · TEV Studies · Debt Syndication</span>
                     </div>
-
                     <h3 className="text-xl sm:text-2xl font-black font-manrope text-white tracking-tight">
-                      Looking for Project Funding?
+                      Get Assistance! Connect to Nearby CA / Consultant Now
                     </h3>
-
-                    <p className="text-sm font-semibold text-emerald-200">
-                      Connect with our debt syndication network.
-                    </p>
-
-                    <p className="text-xs text-slate-300 leading-relaxed font-inter">
-                      Direct access to senior credit desks across leading PSU Consortiums, Private Banks, SIDBI MSME capital schemes, and structured debt funds.
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-inter">
+                      Discover independent CAs and specialised consultants near {formData.location || 'your project location'}, or request an introduction with Inisio's featured advisory partner (Prosync Consulting).
                     </p>
                   </div>
-
-                  <div className="relative z-10 mt-6 pt-4 border-t border-teal-900/60 flex items-center justify-between">
-                    <div className="text-[11px] text-slate-400 font-medium">
-                      ✓ ₹1 Cr - ₹100+ Cr Sanction Limits
-                    </div>
+                  <div className="shrink-0">
                     <button
                       type="button"
-                      onClick={() => setIsFundingModalOpen(true)}
-                      className="px-5 py-2.5 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md hover:shadow-emerald-500/30 flex items-center gap-2 cursor-pointer"
+                      onClick={() => setIsNearbyConsultantOpen(true)}
+                      className="w-full sm:w-auto px-6 py-3.5 bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2.5 cursor-pointer"
                     >
-                      <Coins className="w-4 h-4 text-emerald-300" />
-                      <span>Request Funding Assistance</span>
+                      <PhoneCall className="w-4 h-4 text-emerald-200" />
+                      <span>Connect to Nearby CA / Consultant</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
+              </div>
 
+              {/* Project Assessment Disclaimer */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 leading-relaxed space-y-1">
+                <div className="font-bold text-slate-800">{OFFICIAL_DISCLAIMERS.assessment.title}</div>
+                {OFFICIAL_DISCLAIMERS.assessment.paragraphs.map((p, idx) => (
+                  <p key={idx}>{p}</p>
+                ))}
               </div>
 
             </div>
@@ -4906,47 +4929,38 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
       {/* Membership Plans Modal */}
       <MembershipPlansModal
         isOpen={isMembershipModalOpen}
-        onClose={() => setIsMembershipModalOpen(false)}
+        onClose={() => {
+          setIsMembershipModalOpen(false);
+          setMembershipSelectedPlanId(null);
+        }}
         currentUser={activeUser}
         onOpenAuth={onOpenAuth}
         onOpenConsultation={onOpenConsultation}
         initialReason={membershipModalReason}
+        initialPlanId={membershipSelectedPlanId}
       />
 
-      {/* DPR Request Modal */}
-      <DPRRequestModal
-        isOpen={isDPRModalOpen}
-        onClose={() => setIsDPRModalOpen(false)}
-        projectName={formData.projectName || formData.industry || 'Greenfield Project'}
-        industry={formData.industry || 'Manufacturing'}
-        totalCostCr={cost > 0 ? cost.toFixed(2) : (formData.totalCostCr || '10.00')}
-        loanRequiredCr={
-          (cost > 0 && contrib >= 0)
-            ? Math.max(0, cost - contrib).toFixed(2)
-            : (formData.loanRequiredCr || financials.termLoanCr || '7.50')
-        }
-        user={activeUser}
-        onSubmitSuccess={(msg) => {
-          setActionToast(msg);
-          setTimeout(() => setActionToast(null), 6000);
+      {/* Nearby CA / Consultant Discovery Modal */}
+      <NearbyConsultantModal
+        isOpen={isNearbyConsultantOpen}
+        onClose={() => setIsNearbyConsultantOpen(false)}
+        currentUser={activeUser}
+        project={{
+          id: editingProject?.id || editingProject?._id || createdProjectIdRef.current || createdProjectId || undefined,
+          projectName: formData.projectName || formData.industry || 'Greenfield Project',
+          location: formData.location,
+          industry: formData.industry,
+          totalCostCr: cost > 0 ? cost.toFixed(2) : (formData.totalCostCr || '10.00'),
         }}
-      />
-
-      {/* Funding Request Modal */}
-      <FundingRequestModal
-        isOpen={isFundingModalOpen}
-        onClose={() => setIsFundingModalOpen(false)}
-        projectName={formData.projectName || formData.industry || 'Greenfield Project'}
-        industry={formData.industry || 'Manufacturing'}
-        totalCostCr={cost > 0 ? cost.toFixed(2) : (formData.totalCostCr || '10.00')}
-        loanRequiredCr={
-          (cost > 0 && contrib >= 0)
-            ? Math.max(0, cost - contrib).toFixed(2)
-            : (formData.loanRequiredCr || financials.termLoanCr || '7.50')
-        }
-        user={activeUser}
-        onSubmitSuccess={(msg) => {
-          setActionToast(msg);
+        onOpenAuth={onOpenAuth}
+        onOpenMembership={(reason, planId) => {
+          setIsNearbyConsultantOpen(false);
+          setMembershipModalReason(reason || '');
+          setMembershipSelectedPlanId(planId || null);
+          setIsMembershipModalOpen(true);
+        }}
+        onIntroductionCreated={() => {
+          setActionToast('Consultation introduction request submitted! Our team and your selected consultant will coordinate next steps.');
           setTimeout(() => setActionToast(null), 6000);
         }}
       />
@@ -4957,7 +4971,10 @@ export const ProjectAssessmentPage: React.FC<ProjectAssessmentPageProps> = ({
         onClose={() => setIsPromoterFundAssistanceModalOpen(false)}
         project={{
           id: editingProject?.id || createdProjectIdRef.current || createdProjectId || undefined,
+          clientProjectId: clientProjectIdRef.current,
           projectName: formData.projectName || formData.industry || 'Greenfield Project',
+          industry: formData.industry || 'Manufacturing',
+          location: formData.location,
           totalCostCr: cost > 0 ? cost : (parseFloat(formData.totalCostCr) || 10),
           loanRequiredCr: (cost > 0 && contrib >= 0) ? Math.max(0, cost - contrib) : (parseFloat(formData.loanRequiredCr) || 7.5),
           promoterContribCr: contrib > 0 ? contrib : (parseFloat(formData.promoterContribCr) || 2.5),

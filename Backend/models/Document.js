@@ -12,6 +12,7 @@ const documentSchema = new mongoose.Schema(
     },
     originalName: { type: String, required: true, trim: true },
     storageName: { type: String, required: true, unique: true },
+    storageProvider: { type: String, enum: ['local', 's3'], default: 'local' },
     mimeType: { type: String, required: true },
     size: { type: Number, required: true },
   },

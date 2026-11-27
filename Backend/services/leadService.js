@@ -4,7 +4,11 @@ import mongoose from 'mongoose';
 import { isDBConnected } from '../config/db.js';
 import { isAuthorizedAdminEmail } from '../utils/memoryUserStore.js';
 import { escapeRegex } from '../middleware/validateMiddleware.js';
-import { sendLeadAssessmentConfirmationEmail, sendDprStatusEmail } from '../utils/emailService.js';
+import {
+  sendLeadAssessmentConfirmationEmail,
+  sendDprStatusEmail,
+  sendPromoterFundAssistanceEmails,
+} from '../utils/emailService.js';
 import config from '../config/env.js';
 import { getMemoryProjects } from './projectService.js';
 import notificationService from './notificationService.js';
@@ -1011,6 +1015,172 @@ export const clearAllLeads = async (requester) => {
   return { message: 'All leads cleared successfully' };
 };
 
+export const requestPromoterFundAssistance = async (payload = {}, requester = null) => {
+  const cleanEmail = normalizeEmail(payload.email || requester?.email);
+  const cleanName = String(payload.fullName || requester?.name || 'Promoter').trim();
+  const cleanMobile = String(payload.mobile || payload.phone || requester?.phone || '9999999999').trim();
+  const projectName = String(payload.projectName || 'Greenfield Project').trim();
+  const clientProjectId = String(payload.clientProjectId || '').trim();
+  const existingRecordId = String(payload.projectId || payload.leadId || '').trim();
+  const requiredAmountCr = String(payload.requiredAmountCr || '').trim();
+  const assistanceType = String(payload.assistanceType || 'Equity Co-Investment / Angel Syndication').trim();
+  const notes = String(payload.notes || '').trim();
+
+  const requestObj = {
+    requiredAmountCr,
+    assistanceType,
+    notes,
+    tagged: true,
+    tagLabel: 'Promoter Fund Assistance',
+    submittedAt: new Date().toISOString(),
+  };
+
+  let leadRecord = null;
+  let leadOwnerEmail = String(payload.leadOwnerEmail || '').trim().toLowerCase();
+
+  if (isDBConnected()) {
+    try {
+      if (existingRecordId && mongoose.Types.ObjectId.isValid(existingRecordId)) {
+        leadRecord = await Lead.findById(existingRecordId);
+      }
+      if (!leadRecord && clientProjectId) {
+        leadRecord = await Lead.findOne({ clientProjectId });
+      }
+      if (!leadRecord && cleanEmail) {
+        leadRecord = await Lead.findOne({ email: cleanEmail }).sort({ updatedAt: -1 });
+      }
+
+      if (leadRecord) {
+        const ownerCandidates = [
+          leadRecord.assignedCA,
+          leadRecord.consultationAssignedTo,
+          leadRecord.dprAssignedTo,
+        ].filter((v) => v && String(v).includes('@'));
+        if (!leadOwnerEmail && ownerCandidates.length > 0) {
+          leadOwnerEmail = String(ownerCandidates[0]).trim().toLowerCase();
+        }
+        const tags = Array.isArray(leadRecord.leadTags) ? [...leadRecord.leadTags] : [];
+        if (!tags.includes('Promoter Fund Assistance')) tags.push('Promoter Fund Assistance');
+
+        leadRecord.promoterContributionAvailable = 'No';
+        leadRecord.promoterFundAssistanceStatus = 'Request Submitted (Tagged)';
+        leadRecord.promoterFundAssistanceTagged = true;
+        leadRecord.promoterFundAssistanceRequest = requestObj;
+        leadRecord.leadTags = tags;
+        await leadRecord.save();
+      } else {
+        leadRecord = await Lead.create({
+          userId: requester?._id || undefined,
+          clientProjectId,
+          fullName: cleanName,
+          mobile: cleanMobile,
+          email: cleanEmail || 'promoter@inisio.in',
+          projectName,
+          industry: payload.industry || '',
+          location: payload.location || '',
+          totalCostCr: payload.totalCostCr || '',
+          loanRequiredCr: payload.loanRequiredCr || '',
+          promoterContribCr: payload.promoterContribCr || '',
+          source: 'Promoter Fund Assistance Request',
+          status: 'Promoter Fund Assistance Tagged',
+          promoterContributionAvailable: 'No',
+          promoterFundAssistanceStatus: 'Request Submitted (Tagged)',
+          promoterFundAssistanceTagged: true,
+          promoterFundAssistanceRequest: requestObj,
+          leadTags: ['Promoter Fund Assistance'],
+          notes: `Equity Support Needed: ₹${requiredAmountCr} Cr (${assistanceType})`,
+        });
+      }
+    } catch (err) {
+      console.warn('[LeadService] DB error in requestPromoterFundAssistance:', err.message);
+    }
+  }
+
+  if (!leadRecord) {
+    const idx = memoryLeads.findIndex(
+      (l) =>
+        (existingRecordId && String(l._id) === existingRecordId) ||
+        (clientProjectId && l.clientProjectId === clientProjectId) ||
+        (cleanEmail && normalizeEmail(l.email) === cleanEmail)
+    );
+
+    if (idx !== -1) {
+      const existing = memoryLeads[idx];
+      const ownerCandidates = [
+        existing.assignedCA,
+        existing.consultationAssignedTo,
+        existing.dprAssignedTo,
+      ].filter((v) => v && String(v).includes('@'));
+      if (!leadOwnerEmail && ownerCandidates.length > 0) {
+        leadOwnerEmail = String(ownerCandidates[0]).trim().toLowerCase();
+      }
+      const tags = Array.isArray(existing.leadTags) ? [...existing.leadTags] : [];
+      if (!tags.includes('Promoter Fund Assistance')) tags.push('Promoter Fund Assistance');
+      memoryLeads[idx] = {
+        ...existing,
+        promoterContributionAvailable: 'No',
+        promoterFundAssistanceStatus: 'Request Submitted (Tagged)',
+        promoterFundAssistanceTagged: true,
+        promoterFundAssistanceRequest: requestObj,
+        leadTags: tags,
+        updatedAt: new Date(),
+      };
+      leadRecord = memoryLeads[idx];
+    } else {
+      leadRecord = {
+        _id: `lead_pfa_${Date.now()}`,
+        userId: requester?._id || null,
+        clientProjectId,
+        fullName: cleanName,
+        mobile: cleanMobile,
+        email: cleanEmail || 'promoter@inisio.in',
+        projectName,
+        source: 'Promoter Fund Assistance Request',
+        status: 'Promoter Fund Assistance Tagged',
+        promoterContributionAvailable: 'No',
+        promoterFundAssistanceStatus: 'Request Submitted (Tagged)',
+        promoterFundAssistanceTagged: true,
+        promoterFundAssistanceRequest: requestObj,
+        leadTags: ['Promoter Fund Assistance'],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      memoryLeads.unshift(leadRecord);
+    }
+  }
+
+  if (!leadOwnerEmail) {
+    leadOwnerEmail = (process.env.ADMIN_EMAIL || config.ADMIN_EMAIL || '').trim().toLowerCase();
+  }
+
+  await notificationService.createNotification({
+    type: 'PROMOTER_FUND_ASSISTANCE',
+    title: 'Tagged Lead: Promoter Fund Assistance',
+    message: `${cleanName} requested ₹${requiredAmountCr} Cr equity support (${assistanceType}) for ${projectName}. Separate notifications sent to Promoter & Lead Owner.`,
+    userEmail: cleanEmail,
+    userName: cleanName,
+    projectName,
+  }).catch(() => {});
+
+  const emailResult = await sendPromoterFundAssistanceEmails({
+    promoterEmail: cleanEmail,
+    promoterName: cleanName,
+    promoterPhone: cleanMobile,
+    leadOwnerEmail,
+    projectName,
+    requiredAmountCr,
+    assistanceType,
+    notes,
+  }).catch(() => ({ dispatchedCount: 0 }));
+
+  return {
+    lead: leadRecord,
+    tagged: true,
+    tag: 'Promoter Fund Assistance',
+    emailDispatch: emailResult,
+  };
+};
+
 export default {
   getMemoryLeads,
   getAllLeads,
@@ -1021,4 +1191,5 @@ export default {
   updateLeadProgress,
   deleteLead,
   clearAllLeads,
+  requestPromoterFundAssistance,
 };

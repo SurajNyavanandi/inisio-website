@@ -1,39 +1,23 @@
 import {
   createOrder,
   verifyPayment as verifyRazorpayPayment,
+  verifyAndProcessWebhook,
   getUserPayments,
   getPaymentDetails,
 } from '../services/razorpayService.js';
 import { getRazorpayConfig } from '../config/razorpay.js';
 import { sendSuccess, sendError } from '../utils/responseHandler.js';
+import { MEMBERSHIP_PLANS_LIST, GST_RATE } from '../utils/membershipPlans.js';
+import { checkUserAssessmentQuota } from '../utils/assessmentQuota.js';
+import { getMemoryLeads } from '../services/leadService.js';
+import { getMemoryProjects } from '../services/projectService.js';
+import notificationService from '../services/notificationService.js';
 import logger from '../utils/logger.js';
 
-export const MEMBERSHIP_PLANS = [
-  {
-    id: 'free_starter',
-    name: 'Free Starter',
-    amountInr: 0,
-    period: 'forever',
-    assessmentsIncluded: 1,
-  },
-  {
-    id: 'plus_pack',
-    name: 'Plus Pack',
-    amountInr: 299,
-    period: 'pack',
-    assessmentsIncluded: 5,
-  },
-  {
-    id: 'pro_growth',
-    name: 'Pro Growth',
-    amountInr: 899,
-    period: '6 months',
-    assessmentsIncluded: null,
-  },
-];
+export const MEMBERSHIP_PLANS = MEMBERSHIP_PLANS_LIST;
 
 /**
- * @desc Get public payment gateway config (Key ID, currency, test mode status)
+ * @desc Get public payment gateway config (Key ID, currency, test mode status, GST-separated plans)
  * @route GET /api/payments/config
  * @access Public
  */
@@ -47,12 +31,46 @@ export const getGatewayConfig = async (req, res, next) => {
         isConfigured: config.isConfigured,
         isTestMode: config.isTestMode,
         currency: 'INR',
-        merchantName: 'Inisio Greenfield Consultancy',
+        gstRate: GST_RATE,
+        gstPercentage: Math.round(GST_RATE * 100),
+        merchantName: 'Inisio Advisory Platform',
         themeColor: '#2563EB',
-        plans: MEMBERSHIP_PLANS,
+        plans: MEMBERSHIP_PLANS_LIST,
       },
       'Payment gateway configuration retrieved'
     );
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc Get authoritative membership summary, quota counts & expiry alert status for logged-in user
+ * @route GET /api/payments/membership-summary
+ * @access Authenticated / Optional
+ */
+export const getMembershipSummary = async (req, res, next) => {
+  try {
+    const summary = await checkUserAssessmentQuota({
+      user: req.user || null,
+      email: req.query?.email || req.user?.email || '',
+      mobile: req.query?.mobile || req.user?.phone || '',
+      memoryLeads: getMemoryLeads(),
+      memoryProjects: getMemoryProjects(),
+    });
+
+    // Notify promoter in-app before expiry if expiring soon
+    if (summary.isExpiringSoon && (req.user?.email || req.query?.email)) {
+      const targetEmail = String(req.user?.email || req.query?.email).toLowerCase().trim();
+      notificationService.createNotification({
+        type: 'MEMBERSHIP_EXPIRY_NOTICE',
+        title: 'Membership Expiring Soon',
+        message: `Your ${summary.membershipTier} plan expires in ${summary.daysRemaining} day(s). Your project records remain safe; renew anytime to retain paid benefits.`,
+        userEmail: targetEmail,
+      }).catch(() => {});
+    }
+
+    return sendSuccess(res, summary, 'Membership summary retrieved');
   } catch (error) {
     next(error);
   }
@@ -73,8 +91,10 @@ export const createCheckoutOrder = async (req, res, next) => {
       userPhone,
       itemType,
       itemId,
+      planId,
       planName,
       billingCycle,
+      consentAccepted,
       notes,
     } = req.body;
 
@@ -82,31 +102,29 @@ export const createCheckoutOrder = async (req, res, next) => {
     const name = req.user?.name || userName;
     const phone = req.user?.phone || userPhone;
 
-    if (!amount) {
-      return sendError(res, 'Payment amount is required', 400);
-    }
-
     const order = await createOrder({
       amount,
       currency,
       userEmail: email,
       userName: name,
       userPhone: phone,
-      itemType,
+      itemType: itemType || 'membership',
       itemId,
+      planId,
       planName,
       billingCycle,
+      consentAccepted,
       notes,
     });
 
-    return sendSuccess(res, order, 'Razorpay order created successfully', 201);
+    return sendSuccess(res, order, 'Checkout order created successfully', 201);
   } catch (error) {
     next(error);
   }
 };
 
 /**
- * @desc Verify Razorpay payment signature & confirm fulfillment
+ * @desc Verify Razorpay payment signature & activate membership
  * @route POST /api/payments/verify-signature
  * @access Public / Authenticated
  */
@@ -117,6 +135,7 @@ export const verifyPaymentSignature = async (req, res, next) => {
       razorpay_payment_id,
       razorpay_signature,
       userEmail,
+      planId,
       planName,
       paymentMethod,
     } = req.body;
@@ -132,11 +151,12 @@ export const verifyPaymentSignature = async (req, res, next) => {
       razorpay_payment_id,
       razorpay_signature,
       userEmail: email,
+      planId,
       planName,
       paymentMethod,
     });
 
-    return sendSuccess(res, result, 'Payment signature verified and purchase fulfilled', 200);
+    return sendSuccess(res, result, 'Payment verified and membership activated', 200);
   } catch (error) {
     next(error);
   }
@@ -145,7 +165,7 @@ export const verifyPaymentSignature = async (req, res, next) => {
 /**
  * @desc Get payment / transaction history
  * @route GET /api/payments/history
- * @access Public / Authenticated
+ * @access Authenticated
  */
 export const getPaymentHistory = async (req, res, next) => {
   try {
@@ -174,11 +194,10 @@ export const getPaymentById = async (req, res, next) => {
       return sendError(res, 'Payment transaction not found', 404);
     }
 
-    // Verify ownership (prevent IDOR)
     const isPrivileged = ['admin', 'superadmin', 'admin1', 'admin2', 'admin3'].includes(req.user?.role);
     const isOwner = Boolean(
       (payment.userEmail && req.user?.email && payment.userEmail.toLowerCase() === req.user.email.toLowerCase()) ||
-      (payment.userId && req.user?._id && String(payment.userId) === String(req.user._id))
+        (payment.userId && req.user?._id && String(payment.userId) === String(req.user._id))
     );
 
     if (!isPrivileged && !isOwner) {
@@ -191,38 +210,30 @@ export const getPaymentById = async (req, res, next) => {
 };
 
 /**
- * @desc Razorpay Webhook Handler
+ * @desc Razorpay Webhook Handler (receives raw body buffer via express.raw)
  * @route POST /api/payments/webhook
- * @access Public (Webhook Signature Verified)
+ * @access Public (Strict HMAC-SHA256 timingSafeEqual Signature Verified)
  */
 export const handleWebhook = async (req, res, next) => {
   try {
     const webhookSignature = req.headers['x-razorpay-signature'];
-    const config = getRazorpayConfig();
-
-    if (config.webhook_secret && webhookSignature) {
-      const crypto = await import('crypto');
-      const expectedSignature = crypto.default
-        .createHmac('sha256', config.webhook_secret)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-
-      if (expectedSignature !== webhookSignature) {
-        return res.status(400).json({ status: 'invalid_signature' });
-      }
-    }
-
-    const event = req.body.event;
-    logger.info(`[Razorpay Webhook] Received event: ${event}`);
-
-    return res.status(200).json({ status: 'ok', eventReceived: event });
+    const result = await verifyAndProcessWebhook({
+      rawBody: req.body,
+      signature: webhookSignature,
+    });
+    logger.info(`[Razorpay Webhook] Processed event: ${result.eventReceived}`);
+    return res.status(200).json(result);
   } catch (error) {
+    if (error.statusCode === 400) {
+      return res.status(400).json({ status: 'invalid_signature', message: error.message });
+    }
     next(error);
   }
 };
 
 export default {
   getGatewayConfig,
+  getMembershipSummary,
   createCheckoutOrder,
   verifyPaymentSignature,
   getPaymentHistory,

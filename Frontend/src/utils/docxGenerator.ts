@@ -521,6 +521,14 @@ export async function buildProjectTeaserDocxBlob(
     );
   }
 
+  if (r.workingCapitalAssessedNum !== null && r.workingCapitalAssessedNum > 0) {
+    children.push(
+      buildKeyValueTable([
+        ['Working Capital Assessed', fmtCr(r.workingCapitalAssessedNum)],
+      ])
+    );
+  }
+
   // 5. Preferred Bank & Next Steps
   children.push(sectionHeading('5. PREFERRED BANK & NEXT STEPS'));
   if (r.bankRows.length > 0) {

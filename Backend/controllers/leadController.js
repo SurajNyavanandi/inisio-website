@@ -73,6 +73,20 @@ export const updateLeadProgress = async (req, res, next) => {
   }
 };
 
+export const requestPromoterFundAssistance = async (req, res, next) => {
+  try {
+    const result = await leadService.requestPromoterFundAssistance(req.body, req.user || null);
+    return sendSuccess(
+      res,
+      result,
+      'Promoter fund assistance request tagged and emails dispatched to promoter and lead owner',
+      201
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   getLeads,
   createLead,
@@ -82,4 +96,5 @@ export default {
   clearAllLeads,
   assignLead,
   updateLeadProgress,
+  requestPromoterFundAssistance,
 };

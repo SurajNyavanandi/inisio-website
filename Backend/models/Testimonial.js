@@ -7,6 +7,35 @@ const testimonialSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    recordType: {
+      type: String,
+      enum: ['case_study', 'testimonial'],
+      default: 'case_study',
+    },
+    projectType: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    fundingRequirement: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    advisoryScope: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    advisoryPartner: {
+      type: String,
+      default: 'Prosync Consulting (Featured Advisory Partner)',
+      trim: true,
+    },
+    writtenPermission: {
+      type: Boolean,
+      default: false,
+    },
     name: {
       type: String,
       required: true,
@@ -36,7 +65,7 @@ const testimonialSchema = new mongoose.Schema(
     },
     rating: {
       type: Number,
-      default: 5,
+      default: 0,
     },
     active: {
       type: Boolean,

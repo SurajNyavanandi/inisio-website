@@ -6,25 +6,30 @@ import cache from '../utils/cache.js';
 let memoryTestimonials = [...DEFAULT_TESTIMONIALS];
 
 export const getAllTestimonials = async (industry) => {
-  const cacheKey = `testimonials_${industry || 'all'}`;
+  const cacheKey = `testimonials_v2_${industry || 'all'}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
   let results = memoryTestimonials.filter((t) => t.active);
   if (industry && industry !== 'All') {
-    results = results.filter((t) => t.industry === industry);
+    const target = industry.toLowerCase();
+    results = results.filter((t) => String(t.industry || '').toLowerCase() === target || String(t.industry || '').toLowerCase().includes(target));
   }
 
   if (isDBConnected()) {
     try {
       const query = { active: true };
-      if (industry && industry !== 'All') {
-        query.industry = industry;
-      }
       const list = await Testimonial.find(query).sort({ createdAt: -1 }).lean();
-      if (list && list.length > 0) results = list;
+      const verifiedList = list.filter((t) => t.recordType === 'case_study' || t.writtenPermission === true);
+      if (verifiedList.length > 0) {
+        results = verifiedList;
+        if (industry && industry !== 'All') {
+          const target = industry.toLowerCase();
+          results = results.filter((t) => String(t.industry || '').toLowerCase() === target || String(t.industry || '').toLowerCase().includes(target));
+        }
+      }
     } catch (err) {
-      console.warn('MongoDB query failed in getAllTestimonials, using memory fallback:', err.message);
+      console.warn('MongoDB query failed in getAllTestimonials, using compliant defaults:', err.message);
     }
   }
 

@@ -34,10 +34,20 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     projectType: '',
     investmentAmount: '',
     loanRequirement: '',
+    location: '',
+    projectStage: '',
     message: '',
   });
 
-  const [sectors, setSectors] = useState<string[]>([]);
+  const [sectors, setSectors] = useState<string[]>([
+    'Manufacturing',
+    'Food Processing & Cold Chain',
+    'Healthcare & Hospitals',
+    'Solar & Renewable Energy',
+    'Infrastructure & Warehousing',
+    'Textiles & Apparel',
+    'Other Sector',
+  ]);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,9 +61,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
           setSectors(names);
         }
       })
-      .catch((err) => {
-        console.error('Failed to load industries in contact section:', err);
-      });
+      .catch(() => {});
 
     return () => {
       isMounted = false;
@@ -72,44 +80,30 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
     }
     setSubmitted(true);
 
-    // 1. Send to Backend Express API / MongoDB contact collection
     api.contact
       .sendMessage({
         fullName: formData.fullName || 'Contact Inquiry',
         email: formData.email,
         phone: formData.phone,
-        message: `Sector: ${formData.projectType || 'N/A'} | Capex: ₹${formData.investmentAmount || '0'} Cr | Loan: ₹${formData.loanRequirement || '0'} Cr | Message: ${formData.message || 'N/A'}`,
-        subject: `Project Inquiry - ${formData.projectType || 'Greenfield'}`,
+        message: `Sector: ${formData.projectType || 'N/A'} | Capex: ₹${formData.investmentAmount || '0'} Cr | Loan: ₹${formData.loanRequirement || '0'} Cr | Location: ${formData.location || 'India'} | Stage: ${formData.projectStage || 'N/A'} | Summary: ${formData.message || 'N/A'}`,
+        subject: `Project Consultation Request - ${formData.projectType || 'Greenfield'}`,
       })
       .catch(() => undefined);
 
-    // 2. Save into Live Admin Lead Store (shows on Admin Dashboard immediately)
     await saveLeadRecord({
       fullName: formData.fullName || 'Contact Lead',
       mobile: formData.phone || 'N/A',
       email: formData.email || 'N/A',
-      projectName: `${formData.projectType || 'Greenfield'} Project Inquiry`,
+      projectName: `${formData.projectType || 'Greenfield'} Consultation Request`,
       industry: formData.projectType || 'General Sector',
-      location: 'India',
+      location: formData.location || 'India',
       totalCostCr: formData.investmentAmount || 'N/A',
       loanRequiredCr: formData.loanRequirement || 'N/A',
-      source: 'Contact Form Submitted',
+      stage: formData.projectStage || 'Preliminary Review',
+      source: 'Project Consultation Request',
       downloadedPDF: false,
       notes: formData.message,
     });
-
-    // 3. Open WhatsApp chat with pre-filled message
-    const text =
-      `*NEW CONTACT & ADVISORY BRIEF* 📩\n\n` +
-      `• Name: ${formData.fullName}\n` +
-      `• Phone: ${formData.phone}\n` +
-      `• Email: ${formData.email}\n` +
-      `• Sector/Industry: ${formData.projectType}\n` +
-      `• Investment/Capex: ₹ ${formData.investmentAmount} Cr\n` +
-      `• Required Loan: ₹ ${formData.loanRequirement} Cr\n` +
-      (formData.message ? `• Summary/Notes: ${formData.message}` : '');
-
-    window.open(`https://wa.me/916302026462?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
@@ -122,51 +116,51 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
         <Reveal className="text-center max-w-3xl mx-auto space-y-3">
           <p className="text-xs font-semibold tracking-wide text-blue-700 inline-flex items-center justify-center gap-2 font-inter">
             <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span>Senior Advisory Desk · Greenfield Capital</span>
+            <span>Contact Inisio · Project Consultation</span>
           </p>
           {isStandalone ? (
             <h1
               className="font-manrope text-3xl sm:text-4xl font-extrabold text-slate-900 leading-[1.15] tracking-tight"
               style={{ textWrap: 'balance' }}
             >
-              Contact Inisio Capital Advisory | Hyderabad Desk
+              Request a Project Consultation
             </h1>
           ) : (
             <h2
               className="font-manrope text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 leading-[1.15] tracking-tight"
               style={{ textWrap: 'balance' }}
             >
-              Book Your Free Advisory Call
+              Request a Project Consultation
             </h2>
           )}
           <p className="font-inter text-sm sm:text-base text-slate-600 leading-relaxed">
-            Discuss your greenfield project feasibility, Detailed Project Report (DPR), CMA modeling, and bank loan syndication with Inisio Capital&apos;s senior advisory desk in Madhapur, Hyderabad, serving promoters across Telangana and India.
+            Connect with project finance professionals for feasibility, DPR, CMA, TEV and debt funding requirements.
           </p>
         </Reveal>
 
-        {/* Two-Column Zig-Zag Layout (Info Cards Left, Form Card Right) */}
+        {/* Two-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-10 items-stretch">
-          {/* Left Column: Contact Info Cards */}
+          {/* Left Column: Contact Inisio */}
           <Reveal className="lg:col-span-5 flex flex-col justify-between gap-4 font-inter text-left">
             <div className="space-y-4">
               {isStandalone ? (
                 <h2 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                  Inisio Advisory Headquarters
+                  Contact Inisio
                 </h2>
               ) : (
                 <h3 className="font-manrope text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                  Inisio Advisory Headquarters
+                  Contact Inisio
                 </h3>
               )}
 
               <div className="space-y-3.5">
-                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex items-start gap-3.5">
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 transition-all duration-200 flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
                     <MapPin className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-manrope font-bold text-slate-900 block text-sm">
-                      Corporate Address
+                      Corporate office – Madhapur, Hyderabad
                     </span>
                     <p className="text-slate-600 text-xs sm:text-sm leading-relaxed">
                       2nd Floor, Plot 24 &amp; 25, Kakatiya Hills, Road No 9, Madhapur, Hyderabad, Telangana - 500081
@@ -174,13 +168,13 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex items-start gap-3.5">
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 transition-all duration-200 flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
                     <PhoneCall className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-manrope font-bold text-slate-900 block text-sm">
-                      Consultation Helpline
+                      Consultation helpline
                     </span>
                     <a
                       href="tel:+916302026462"
@@ -191,7 +185,7 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex items-start gap-3.5">
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 transition-all duration-200 flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
                     <Mail className="w-5 h-5 text-blue-600" />
                   </div>
@@ -199,7 +193,6 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                     <span className="font-manrope font-bold text-slate-900 block text-sm">
                       Direct Email
                     </span>
-                    {/* TODO: Confirm official contact email (advisory@inisio.in here vs contact@inisio.com in Footer) */}
                     <a
                       href="mailto:advisory@inisio.in"
                       className="text-slate-900 font-semibold hover:text-blue-700 hover:underline text-sm"
@@ -209,38 +202,36 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 hover:-translate-y-0.5 transition-all duration-200 flex items-start gap-3.5">
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] hover:border-blue-300/90 transition-all duration-200 flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
                     <Clock className="w-5 h-5 text-blue-600" />
                   </div>
                   <div className="space-y-0.5">
                     <span className="font-manrope font-bold text-slate-900 block text-sm">
-                      Working Hours
+                      Working hours
                     </span>
-                    {/* TODO: Confirm official office hours (9:00 AM - 7:00 PM here vs 9:30 AM - 6:30 PM in Footer & index.html) */}
                     <p className="text-slate-600 text-xs sm:text-sm">
-                      Monday - Saturday | 9:00 AM - 7:00 PM IST
+                      Monday - Saturday | 9:30 AM - 6:30 PM IST
                     </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Confidentiality Guarantee */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.05)] space-y-1.5 text-left">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
                 <span className="font-manrope font-bold text-sm text-slate-900">
-                  100% Confidentiality Guaranteed
+                  Preliminary Consultation Notice
                 </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Strict Non-Disclosure Agreement (NDA) applied for all greenfield briefs and proprietary financials.
+                Free initial consultation request. Subject to availability and preliminary review. No funding assurance or loan sanction guarantee.
               </p>
             </div>
           </Reveal>
 
-          {/* Right Column: Contact Form Card */}
+          {/* Right Column: Project Consultation Request Form */}
           <Reveal delay={0.08} className="lg:col-span-7">
             <div className="h-full bg-white rounded-3xl p-6 sm:p-8 lg:p-10 border border-slate-200/90 shadow-[0_12px_36px_-18px_rgba(15,23,42,0.12)] text-left">
               {submitted ? (
@@ -249,27 +240,27 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                     <CheckCircle2 className="w-8 h-8" />
                   </div>
                   <FormHeading className="text-2xl font-bold text-slate-900 font-manrope">
-                    Consultation Booked Successfully!
+                    Consultation Request Received
                   </FormHeading>
                   <p className="text-base text-slate-600 font-inter max-w-md mx-auto leading-relaxed">
-                    Thank you, <strong>{formData.fullName}</strong>. A Senior Greenfield Advisor will review your project brief and reach out within 2 business hours.
+                    Thank you, <strong>{formData.fullName}</strong>. Your project consultation request has been logged for preliminary review, subject to availability.
                   </p>
                   <button
                     type="button"
                     onClick={() => setSubmitted(false)}
                     className="min-h-[44px] px-6 py-3 text-sm font-semibold text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
                   >
-                    Submit Another Project Brief
+                    Submit Another Request
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="space-y-5 font-inter">
+                <form onSubmit={handleSubmit} className="space-y-4 font-inter">
                   <div className="border-b border-slate-100 pb-4">
                     <FormHeading className="text-lg sm:text-xl font-bold text-slate-900 font-manrope">
-                      Project Consultation Form
+                      Project Consultation Request
                     </FormHeading>
                     <p className="text-xs sm:text-sm text-slate-500 mt-1">
-                      Fill in your project requirements to request an underwriting review.
+                      Share your project requirements to help us understand your needs and identify the appropriate advisory support.
                     </p>
                   </div>
 
@@ -283,13 +274,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Full Name */}
                     <div className="space-y-1.5">
-                      <label
-                        htmlFor="contact-full-name"
-                        className="text-xs font-semibold text-slate-700 block"
-                      >
-                        Full Name *
+                      <label htmlFor="contact-full-name" className="text-xs font-semibold text-slate-700 block">
+                        Name *
                       </label>
                       <input
                         id="contact-full-name"
@@ -302,13 +289,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       />
                     </div>
 
-                    {/* Email */}
                     <div className="space-y-1.5">
-                      <label
-                        htmlFor="contact-email"
-                        className="text-xs font-semibold text-slate-700 block"
-                      >
-                        Email Address *
+                      <label htmlFor="contact-email" className="text-xs font-semibold text-slate-700 block">
+                        Email *
                       </label>
                       <input
                         id="contact-email"
@@ -323,13 +306,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Phone Number */}
                     <div className="space-y-1.5">
-                      <label
-                        htmlFor="contact-phone"
-                        className="text-xs font-semibold text-slate-700 block"
-                      >
-                        Phone Number *
+                      <label htmlFor="contact-phone" className="text-xs font-semibold text-slate-700 block">
+                        Mobile *
                       </label>
                       <input
                         id="contact-phone"
@@ -349,10 +328,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       />
                     </div>
 
-                    {/* Project Type */}
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-slate-700 block">
-                        Project Type / Sector *
+                        Sector
                       </label>
                       <UISelect
                         value={formData.projectType}
@@ -365,13 +343,9 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Investment Amount */}
                     <div className="space-y-1.5">
-                      <label
-                        htmlFor="contact-investment"
-                        className="text-xs font-semibold text-slate-700 block"
-                      >
-                        Total Project Capex (₹ Cr) *
+                      <label htmlFor="contact-investment" className="text-xs font-semibold text-slate-700 block">
+                        Project Cost (₹ Cr) *
                       </label>
                       <input
                         id="contact-investment"
@@ -386,12 +360,8 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                       />
                     </div>
 
-                    {/* Loan Requirement */}
                     <div className="space-y-1.5">
-                      <label
-                        htmlFor="contact-loan"
-                        className="text-xs font-semibold text-slate-700 block"
-                      >
+                      <label htmlFor="contact-loan" className="text-xs font-semibold text-slate-700 block">
                         Loan Requirement (₹ Cr) *
                       </label>
                       <input
@@ -408,32 +378,67 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
                     </div>
                   </div>
 
-                  {/* Message */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="contact-location" className="text-xs font-semibold text-slate-700 block">
+                        Location (City, State)
+                      </label>
+                      <input
+                        id="contact-location"
+                        type="text"
+                        placeholder="e.g. Hyderabad, Telangana"
+                        value={formData.location}
+                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                        className="w-full min-h-[44px] px-4 py-2.5 text-sm bg-slate-50/50 focus:bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700 block">
+                        Project Stage
+                      </label>
+                      <UISelect
+                        value={formData.projectStage}
+                        onValueChange={(val) => setFormData({ ...formData, projectStage: val })}
+                        placeholder="Select Project Stage"
+                        options={[
+                          'Idea / Concept Stage',
+                          'Land Identification / Acquisition',
+                          'DPR / CMA Preparation Needed',
+                          'TEV Study / Financial Modeling',
+                          'Ready to Approach Lenders',
+                          'Expansion of Existing Unit',
+                        ]}
+                        triggerClassName="h-11 bg-slate-50/50 border-slate-200 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-1.5">
-                    <label
-                      htmlFor="contact-message"
-                      className="text-xs font-semibold text-slate-700 block"
-                    >
-                      Project Summary / Notes
+                    <label htmlFor="contact-message" className="text-xs font-semibold text-slate-700 block">
+                      Project Summary
                     </label>
                     <textarea
                       id="contact-message"
-                      rows={4}
-                      placeholder="Enter details about land status, equipment suppliers, or target disbursement timeline..."
+                      rows={3}
+                      placeholder="Briefly describe your project requirements, land status, or support needed..."
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                       className="w-full px-4 py-3 text-sm bg-slate-50/50 focus:bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all resize-none"
                     />
                   </div>
 
-                  {/* Submit CTA */}
                   <button
                     type="submit"
                     className="w-full min-h-[46px] py-3.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] rounded-xl shadow-[0_10px_24px_-10px_rgba(37,99,235,0.65)] transition-all cursor-pointer inline-flex items-center justify-center gap-2 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
                   >
                     <Send className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-                    <span>Book Free Advisory Call</span>
+                    <span>Request a Project Consultation</span>
                   </button>
+
+                  <p className="text-[11px] text-slate-500 text-center pt-1">
+                    Free initial consultation request · Subject to availability and preliminary review. No funding assurance.
+                  </p>
                 </form>
               )}
             </div>
@@ -447,42 +452,28 @@ export const ContactSection: React.FC<ContactSectionProps> = ({
               onClick={(e) => { e.preventDefault(); onNavigateToPage('assessment'); }}
               className="px-4 py-2 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
             >
-              Free Bankability Scorecard
+              Start Free Assessment
+            </a>
+            <a
+              href="/pricing"
+              onClick={(e) => { e.preventDefault(); onNavigateToPage('pricing'); }}
+              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Promoter Membership Plans
             </a>
             <a
               href="/how-it-works"
               onClick={(e) => { e.preventDefault(); onNavigateToPage('how-it-works'); }}
               className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
             >
-              6-Step Funding Process
-            </a>
-            <a
-              href="/about"
-              onClick={(e) => { e.preventDefault(); onNavigateToPage('about'); }}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              Why Choose Inisio Capital
-            </a>
-            <a
-              href="/industries"
-              onClick={(e) => { e.preventDefault(); onNavigateToPage('industries'); }}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              Explore Priority Sectors
-            </a>
-            <a
-              href="/blogs"
-              onClick={(e) => { e.preventDefault(); onNavigateToPage('blogs'); }}
-              className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              Advisory Blogs &amp; Research
+              Your Project Journey
             </a>
             <a
               href="/faq"
               onClick={(e) => { e.preventDefault(); onNavigateToPage('faq'); }}
               className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
             >
-              Greenfield Funding FAQs
+              Project Appraisal FAQs
             </a>
           </nav>
         )}

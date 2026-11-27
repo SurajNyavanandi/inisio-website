@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import crypto from 'crypto';
+import { fileTypeFromFile } from 'file-type';
 import config from '../config/env.js';
 import { sendError } from '../utils/responseHandler.js';
 
@@ -11,7 +12,7 @@ export const storageRoot = path.resolve(
 );
 fs.mkdirSync(storageRoot, { recursive: true });
 
-const ALLOWED_MIME_TYPES = new Set([
+export const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -19,12 +20,14 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/zip',
+  'application/x-cfb',
   'image/jpeg',
   'image/png',
   'image/webp',
 ]);
 
-const ALLOWED_EXTENSIONS = new Set([
+export const ALLOWED_EXTENSIONS = new Set([
   '.pdf',
   '.doc',
   '.docx',
@@ -62,33 +65,20 @@ export const upload = multer({
 });
 
 /**
- * Validates actual binary content (magic numbers) of uploaded file
+ * Validates actual binary content (MIME magic signature) of uploaded file using `file-type`.
  */
 export const verifyFileContent = async (req, res, next) => {
   if (!req.file) return next();
 
   const filePath = req.file.path;
   try {
-    const fd = await fs.promises.open(filePath, 'r');
-    const buffer = Buffer.alloc(8);
-    await fd.read(buffer, 0, 8, 0);
-    await fd.close();
-
-    const hex = buffer.toString('hex');
-    const isPdf = buffer.toString('utf8', 0, 4) === '%PDF';
-    const isJpeg = hex.startsWith('ffd8ff');
-    const isPng = hex.startsWith('89504e470d0a1a0a');
-    const isZipOrOffice = hex.startsWith('504b0304'); // docx, xlsx, pptx
-    const isLegacyOffice = hex.startsWith('d0cf11e0a1b11ae1'); // doc, xls, ppt
-
-    if (!isPdf && !isJpeg && !isPng && !isZipOrOffice && !isLegacyOffice) {
-      // Remove malicious/tampered file immediately
+    const detected = await fileTypeFromFile(filePath);
+    if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
       await fs.promises.unlink(filePath).catch(() => {});
-      return sendError(res, 'Uploaded file content does not match allowed binary format.', 400);
+      return sendError(res, 'Uploaded file binary signature does not match an allowed format.', 400);
     }
-
     next();
-  } catch (err) {
+  } catch {
     await fs.promises.unlink(filePath).catch(() => {});
     return sendError(res, 'Failed to inspect uploaded file content.', 400);
   }

@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Lead from '../models/Lead.js';
 import Project from '../models/Project.js';
+import CaProfile from '../models/CaProfile.js';
 import Consultation from '../models/Consultation.js';
 import { isDBConnected } from '../config/db.js';
 import { sendSuccess, sendError } from '../utils/responseHandler.js';
@@ -70,7 +71,6 @@ export const authenticateCaAdmin = async (req, res, next) => {
 
     const setupMessage =
       'No password has been set for this CA Admin account yet. Click "Forgot / Set Password?" to receive a 6-digit code via email and create your password.';
-    const isTestPassword = isAdminTestPasswordMatch(password);
 
     if (isDBConnected()) {
       let existingUser = await User.findOne({ email: cleanEmail }).select('+password');
@@ -81,38 +81,14 @@ export const authenticateCaAdmin = async (req, res, next) => {
         });
       }
 
-      if (!existingUser) {
-        if (!isTestPassword) {
-          return res.status(401).json({
-            success: false,
-            requiresPasswordSetup: true,
-            message: setupMessage,
-          });
-        }
-        existingUser = await User.create({
-          name: 'CA Operations Admin',
-          email: cleanEmail,
-          password: String(password),
-          role: 'ca_admin',
-          company: 'Inisio CA Network Administration',
-          phone: process.env.CA_ADMIN_PHONE || '',
-          isVerified: true,
-          passwordInitialized: true,
+      if (!existingUser || existingUser.passwordInitialized === false) {
+        return res.status(401).json({
+          success: false,
+          requiresPasswordSetup: true,
+          message: setupMessage,
         });
-      } else if (existingUser.passwordInitialized === false) {
-        if (!isTestPassword) {
-          return res.status(401).json({
-            success: false,
-            requiresPasswordSetup: true,
-            message: setupMessage,
-          });
-        }
-        existingUser.password = String(password);
-        existingUser.passwordInitialized = true;
-        existingUser.isVerified = true;
-        await existingUser.save();
       } else {
-        const isMatch = (await existingUser.matchPassword(password)) || isTestPassword;
+        const isMatch = await existingUser.matchPassword(password);
         if (!isMatch) {
           return res.status(401).json({
             success: false,
@@ -157,37 +133,14 @@ export const authenticateCaAdmin = async (req, res, next) => {
       });
     }
 
-    if (!memUser) {
-      if (!isTestPassword) {
-        return res.status(401).json({
-          success: false,
-          requiresPasswordSetup: true,
-          message: setupMessage,
-        });
-      }
-      memUser = addMemoryUser({
-        name: 'CA Operations Admin',
-        email: cleanEmail,
-        password: bcrypt.hashSync(String(password), 10),
-        passwordInitialized: true,
-        role: 'ca_admin',
-        company: 'Inisio CA Network Administration',
-        phone: process.env.CA_ADMIN_PHONE || '',
-        isVerified: true,
+    if (!memUser || memUser.passwordInitialized === false) {
+      return res.status(401).json({
+        success: false,
+        requiresPasswordSetup: true,
+        message: setupMessage,
       });
-    } else if (memUser.passwordInitialized === false) {
-      if (!isTestPassword) {
-        return res.status(401).json({
-          success: false,
-          requiresPasswordSetup: true,
-          message: setupMessage,
-        });
-      }
-      memUser.password = bcrypt.hashSync(String(password), 10);
-      memUser.passwordInitialized = true;
-      memUser.isVerified = true;
     } else {
-      const isMatch = (await bcrypt.compare(password, memUser.password)) || isTestPassword;
+      const isMatch = await bcrypt.compare(password, memUser.password);
       if (!isMatch) {
         return res.status(401).json({
           success: false,
@@ -438,114 +391,206 @@ export const getCaAdminLeads = async (req, res, next) => {
 };
 
 /**
- * Controller for "Contact Nearest Consultant":
- * Match project location to the closest DPR & financial consultants based on available model fields.
- * NOTE: User model only contains user.company and user.lastLogin.city / state.
+ * Controller for "Find a CA / Consultant" & "Nearest Consultant" Discovery:
+ * Only returns genuinely onboarded & available professionals (activated CaProfiles, verified CA / DPR users,
+ * plus Featured Advisory Partner Prosync Consulting when requested).
  */
 export const getNearestConsultants = async (req, res, next) => {
   try {
-    const { projectLocation = '', projectCategory = '' } = req.query;
+    const {
+      projectLocation = '',
+      projectCategory = '',
+      service = '',
+      city = '',
+      state = '',
+      sector = '',
+      includeProsync = 'true',
+    } = req.query;
 
-    const queryCityState = (projectLocation || '').toLowerCase();
+    const queryLoc = [projectLocation, city, state].filter(Boolean).join(' ').toLowerCase();
+    const queryService = String(service || '').trim().toLowerCase();
+    const querySector = String(sector || projectCategory || '').trim().toLowerCase();
 
-    // Available consultants list
-    const consultants = [
-      {
-        id: 'cons_01',
-        name: 'Er. Sandeep Mukherjee, M.E. (Civil)',
-        email: 'consultant.dpr@inisio.com',
-        phone: '+91 98200 44556',
-        firm: 'Inisio Technical Advisory Desk',
-        specialization: 'Manufacturing, Heavy Infrastructure & Chemicals',
-        city: 'Mumbai',
-        state: 'Maharashtra',
-        region: 'West',
-        rating: 4.9,
-        completedDprs: 48,
-      },
-      {
-        id: 'cons_02',
-        name: 'Dr. K. Ramanathan, Ph.D. (Food Tech)',
-        email: 'dpr.south@inisio.com',
-        phone: '+91 98400 77889',
-        firm: 'Southern Industrial Infrastructure Consultants',
-        specialization: 'Agro & Food Processing, Cold Storage, Ports',
-        city: 'Chennai',
-        state: 'Tamil Nadu',
-        region: 'South',
-        rating: 4.8,
-        completedDprs: 36,
-      },
-      {
-        id: 'cons_03',
-        name: 'Er. Gurpreet Singh Bawa',
-        email: 'gurpreet.bawa@delhidpr.org',
-        phone: '+91 98110 33221',
-        firm: 'North India Techno-Economic Advisory',
-        specialization: 'Steel, Renewable Energy & Auto Components',
-        city: 'New Delhi',
-        state: 'Delhi',
-        region: 'North',
-        rating: 4.7,
-        completedDprs: 29,
-      },
-      {
-        id: 'cons_04',
-        name: 'Er. Rajeshwar Rao, B.Tech (Mech)',
-        email: 'rao.dpr@hydconsult.com',
-        phone: '+91 98480 66554',
-        firm: 'Deccan Project Engineering Consultancy',
-        specialization: 'Pharma API, Warehousing & Electronics',
-        city: 'Hyderabad',
-        state: 'Telangana',
-        region: 'South / Central',
-        rating: 4.9,
-        completedDprs: 42,
-      },
-      {
-        id: 'cons_05',
-        name: 'Er. Bhaskar Sengupta, M.Tech',
-        email: 'b.sengupta@kolkataconsult.in',
-        phone: '+91 98300 11998',
-        firm: 'Eastern Mineral & Infrastructure Partners',
-        specialization: 'Mining, Logistics Hubs, Paper & Pulp',
-        city: 'Kolkata',
-        state: 'West Bengal',
-        region: 'East',
-        rating: 4.6,
-        completedDprs: 24,
-      },
+    const pool = [];
+    const seenEmails = new Set();
+
+    const SERVICE_CATEGORIES = [
+      'CMA & Financial Analysis',
+      'DPR Preparation',
+      'TEV Studies',
+      'Debt Syndication',
     ];
 
-    // Score and rank consultants by location match
-    const ranked = consultants.map((c) => {
-      let matchScore = 50; // base score
-      const cCity = c.city.toLowerCase();
-      const cState = c.state.toLowerCase();
-      const cSpec = c.specialization.toLowerCase();
+    const pushProfile = (raw) => {
+      const email = String(raw.email || '').trim().toLowerCase();
+      if (!email || seenEmails.has(email)) return;
+      seenEmails.add(email);
+      pool.push(raw);
+    };
 
-      if (queryCityState) {
-        if (queryCityState.includes(cCity)) matchScore += 45;
-        else if (queryCityState.includes(cState)) matchScore += 30;
+    // 1. Load onboarded & activated CaProfiles from MongoDB or memory store
+    let caProfiles = [];
+    if (isDBConnected()) {
+      try {
+        caProfiles = await CaProfile.find({ status: 'activated' }).lean();
+      } catch (e) {
+        console.warn('[caAdminController] DB error reading CaProfile directory:', e.message);
       }
-      if (projectCategory && cSpec.includes(projectCategory.toLowerCase())) {
-        matchScore += 25;
+    } else {
+      caProfiles = (memoryCaProfiles || []).filter(
+        (p) => String(p.status || '').toLowerCase() === 'activated'
+      );
+    }
+
+    for (const p of caProfiles) {
+      pushProfile({
+        id: String(p._id),
+        name: p.name || 'Chartered Accountant',
+        email: p.email,
+        phone: p.phone || '',
+        firm: p.firmName || 'Independent CA Practice',
+        role: 'ca',
+        servicesOffered: p.servicesOffered || ['CMA & Financial Analysis', 'DPR Preparation'],
+        specialization: p.notes || 'CMA Data, Financial Analysis & Project Advisory',
+        experience: p.experience || 'Verified ICAI Member',
+        city: p.city || 'Hyderabad',
+        state: p.state || 'Telangana',
+        isFeaturedPartner: false,
+        onboarded: true,
+        feeNote: 'Consultants independently communicate their professional fees and engagement terms.',
+      });
+    }
+
+    // 2. Load verified CA & DPR Consultant User accounts from DB / memoryUserStore
+    let userProfessionals = [];
+    if (isDBConnected()) {
+      try {
+        userProfessionals = await User.find({
+          role: { $in: ['ca', 'dpr', 'dpr_consultant'] },
+          isVerified: true,
+        })
+          .select('name email phone company role lastLogin createdAt')
+          .lean();
+      } catch (e) {
+        console.warn('[caAdminController] DB error reading User professionals:', e.message);
       }
+    }
+    if (userProfessionals.length === 0) {
+      userProfessionals = (getMemoryUsers() || []).filter(
+        (u) => ['ca', 'dpr', 'dpr_consultant'].includes(u.role) && u.isVerified !== false
+      );
+    }
+
+    for (const u of userProfessionals) {
+      const isDpr = u.role === 'dpr' || u.role === 'dpr_consultant';
+      pushProfile({
+        id: String(u._id || u.email),
+        name: u.name || (isDpr ? 'Project Technical Consultant' : 'Chartered Accountant'),
+        email: u.email,
+        phone: u.phone || '',
+        firm: u.company || (isDpr ? 'Independent Technical Consultancy' : 'Independent CA Advisory'),
+        role: u.role,
+        servicesOffered: isDpr
+          ? ['DPR Preparation', 'TEV Studies']
+          : ['CMA & Financial Analysis', 'Debt Syndication'],
+        specialization: isDpr
+          ? 'DPR Preparation, TEV Studies & Technical Feasibility'
+          : 'CMA & Financial Analysis, Debt Structuring & Audit Review',
+        experience: 'Onboarded Platform Professional',
+        city: u.lastLogin?.city || 'Hyderabad',
+        state: u.lastLogin?.state || 'Telangana',
+        isFeaturedPartner: false,
+        onboarded: true,
+        feeNote: 'Consultants independently communicate their professional fees and engagement terms.',
+      });
+    }
+
+    // 3. Featured Advisory Partner: Prosync Consulting (explicitly identified separately)
+    const featuredPartner = {
+      id: 'featured_prosync_consulting',
+      name: 'Prosync Consulting',
+      email: process.env.PROSYNC_DESK_EMAIL || 'advisory@inisio.in',
+      phone: '+91 63020 26462',
+      firm: 'Featured Advisory Partner',
+      role: 'prosync',
+      servicesOffered: ['Debt Syndication', 'CMA & Financial Analysis', 'DPR Preparation', 'TEV Studies'],
+      specialization: 'Project Finance Structuring, Debt Syndication & Institutional Advisory',
+      experience: 'Featured Advisory Partner · Pan-India Assignments',
+      city: 'Hyderabad',
+      state: 'Telangana',
+      isFeaturedPartner: true,
+      onboarded: true,
+      feeNote: 'Any advisory engagement with Prosync Consulting is governed by a separate engagement agreement and fee terms.',
+    };
+
+    // Score, filter, and compute area counts cleanly
+    const evaluateMatch = (item) => {
+      const cCity = String(item.city || '').toLowerCase();
+      const cState = String(item.state || '').toLowerCase();
+      const cSpec = String(item.specialization || '').toLowerCase();
+      const cServices = (item.servicesOffered || []).map((s) => String(s).toLowerCase());
+
+      let matchesService = true;
+      if (queryService && queryService !== 'all') {
+        matchesService = cServices.some((s) => s.includes(queryService) || queryService.includes(s)) || cSpec.includes(queryService);
+      }
+
+      let matchesSector = true;
+      if (querySector && querySector !== 'all') {
+        matchesSector = cSpec.includes(querySector) || item.isFeaturedPartner;
+      }
+
+      let matchesLocation = true;
+      if (city && city.toLowerCase() !== 'all') {
+        matchesLocation = cCity.includes(city.toLowerCase()) || String(item.state || '').toLowerCase().includes(city.toLowerCase());
+      } else if (state && state.toLowerCase() !== 'all') {
+        matchesLocation = cState.includes(state.toLowerCase());
+      }
+
+      let matchScore = 50;
+      let areaMatch = false;
+      if (queryLoc) {
+        if (cCity && queryLoc.includes(cCity)) {
+          matchScore += 45;
+          areaMatch = true;
+        } else if (cState && queryLoc.includes(cState)) {
+          matchScore += 30;
+          areaMatch = true;
+        }
+      }
+      if (queryService && matchesService) matchScore += 15;
+      if (querySector && matchesSector) matchScore += 15;
 
       return {
-        ...c,
+        ...item,
+        matchesFilter: matchesService && matchesSector && matchesLocation,
+        areaMatch,
         matchScore: Math.min(matchScore, 100),
         isClosest: false,
       };
-    });
+    };
 
-    ranked.sort((a, b) => b.matchScore - a.matchScore);
-    if (ranked.length > 0) ranked[0].isClosest = true;
+    const evaluatedPool = pool.map(evaluateMatch).filter((c) => c.matchesFilter);
+    evaluatedPool.sort((a, b) => b.matchScore - a.matchScore);
+    if (evaluatedPool.length > 0 && (queryLoc || evaluatedPool[0].areaMatch)) {
+      evaluatedPool[0].isClosest = true;
+    }
+
+    const areaCount = queryLoc
+      ? evaluatedPool.filter((c) => c.areaMatch).length
+      : evaluatedPool.length;
 
     return sendSuccess(res, {
       projectLocation,
-      consultants: ranked,
-      message: `Found ${ranked.length} verified technical consultants matching project criteria.`,
+      serviceCategories: SERVICE_CATEGORIES,
+      featuredPartner: includeProsync !== 'false' ? featuredPartner : null,
+      areaAvailableCount: areaCount,
+      totalAvailableCount: evaluatedPool.length,
+      consultants: evaluatedPool,
+      message:
+        evaluatedPool.length > 0
+          ? `Found ${evaluatedPool.length} onboarded professional(s) available.`
+          : 'No independent professionals currently match those exact filters. You may adjust filters or request an introduction to Prosync Consulting (Featured Advisory Partner).',
     });
   } catch (error) {
     next(error);

@@ -193,8 +193,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if (!newPassword || newPassword.length < 6) {
-      setError('New password must be at least 6 characters');
+    if (!newPassword || newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
       setLoading(false);
       return;
     }
@@ -268,8 +268,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    if ((mode === 'signup' || mode === 'login') && (!password || password.length < 6)) {
-      setError('Password must be at least 6 characters');
+    if (mode === 'signup') {
+      if (!password || password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+        setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+        setLoading(false);
+        return;
+      }
+    } else if (mode === 'login' && (!password || password.length < 1)) {
+      setError('Please enter your password');
       setLoading(false);
       return;
     }
