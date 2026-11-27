@@ -128,10 +128,21 @@ export const CAAdminDashboard: React.FC<CAAdminDashboardProps> = ({
         return { email: user.email, token: user.token };
       }
       const saved = localStorage.getItem(STORAGE_KEY_CA_ADMIN_SESSION);
-      if (saved) return JSON.parse(saved);
+      if (saved && saved !== 'true') {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email && validateCaAdminEmail(parsed.email)) {
+          return parsed;
+        }
+      }
     } catch {}
     return null;
   });
+
+  useEffect(() => {
+    if (user && user.role === 'ca_admin') {
+      setCaAdminSession({ email: user.email, token: user.token });
+    }
+  }, [user]);
 
   const [authView, setAuthView] = useState<'login' | 'forgot' | 'reset'>('login');
   const [loginEmail, setLoginEmail] = useState('');

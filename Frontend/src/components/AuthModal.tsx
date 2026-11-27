@@ -3,6 +3,7 @@ import { AuthUser, UserRole } from '../types';
 import { validateIndianMobileNumber } from '../utils/validation';
 import { getAutoFillOtp } from '../utils/otpService';
 import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
+import { resolveApiUrl } from '../utils/apiClient';
 import { UISelect } from './ui/Select';
 import {
   X,
@@ -110,8 +111,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
-      const response = await fetch('/api/auth/verify-email', {
+      const response = await fetch(resolveApiUrl('/auth/verify-email'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, otp: cleanOtp }),
       });
@@ -148,9 +150,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setError('');
     setResendingOtp(true);
     try {
-      const endpoint = mode === 'reset-password' ? '/api/auth/forgot-password' : '/api/auth/send-verification';
-      const response = await fetch(endpoint, {
+      const endpoint = mode === 'reset-password' ? '/auth/forgot-password' : '/auth/send-verification';
+      const response = await fetch(resolveApiUrl(endpoint), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
@@ -206,8 +209,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(resolveApiUrl('/auth/reset-password'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: cleanEmail,
@@ -294,8 +298,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       try {
-        const response = await fetch('/api/auth/forgot-password', {
+        const response = await fetch(resolveApiUrl('/auth/forgot-password'), {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: cleanEmail }),
           signal: controller.signal,
@@ -328,13 +333,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     try {
-      const endpoint = mode === 'signup' ? '/api/auth/register' : '/api/auth/login';
+      const endpoint = mode === 'signup' ? '/auth/register' : '/auth/login';
       const body = mode === 'signup' 
         ? { email: cleanEmail, password, name: name || cleanEmail.split('@')[0], phone, company, role }
         : { email: cleanEmail, password };
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(resolveApiUrl(endpoint), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         signal: controller.signal,

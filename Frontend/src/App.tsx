@@ -424,7 +424,10 @@ export default function App() {
     } else if (role === 'ca_admin') {
       targetTab = 'ca-admin-dashboard';
       targetPath = '/ca-admin';
-      localStorage.setItem('inisio_ca_admin_session', 'true');
+      localStorage.setItem(
+        'inisio_ca_admin_session',
+        JSON.stringify({ email: user.email, token: user.token })
+      );
     } else if (role === 'ca') {
       targetTab = 'ca-dashboard';
       targetPath = '/ca-dashboard';
@@ -451,6 +454,8 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem('inisio_active_user');
     localStorage.removeItem('inisio_auth_token');
+    localStorage.removeItem('inisio_active_admin_session');
+    localStorage.removeItem('inisio_ca_admin_session');
     setActiveTab('home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

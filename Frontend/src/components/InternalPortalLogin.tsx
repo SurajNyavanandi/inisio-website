@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Mail, ArrowRight, ShieldCheck, ArrowLeft, Loader2, KeyRound, CheckCircle2, RotateCw, Eye, EyeOff } from 'lucide-react';
 import { AuthUser } from '../types';
-import api from '../utils/apiClient';
+import api, { resolveApiUrl } from '../utils/apiClient';
 import { validateAdminEmail, validateCaAdminEmail } from '../config/adminAccess';
 import { maskEmail, maskEmailsInText } from '../utils/privacyMask';
 
@@ -91,8 +91,9 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(resolveApiUrl('/auth/forgot-password'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail }),
       });
@@ -127,8 +128,8 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
       setError('Please enter the 6-digit code sent to your email.');
       return;
     }
-    if (!newPassword || newPassword.length < 6) {
-      setError('New password must be at least 6 characters.');
+    if (!newPassword || newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword) || !/[^A-Za-z0-9]/.test(newPassword)) {
+      setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -138,8 +139,9 @@ export const InternalPortalLogin: React.FC<InternalPortalLoginProps> = ({
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(resolveApiUrl('/auth/reset-password'), {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: cleanEmail, otp: cleanOtp, newPassword }),
       });

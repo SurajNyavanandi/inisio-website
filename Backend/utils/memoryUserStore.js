@@ -69,15 +69,15 @@ export const isAuthorizedCaAdminGmail = (email) => {
 };
 
 export const getAdminTestPassword = () => {
-  if (config.isProduction || process.env.NODE_ENV === 'production') {
+  if (config.isProduction || process.env.NODE_ENV === 'production' || process.env.ALLOW_ADMIN_DEFAULT_PASSWORD === 'false') {
     return null;
   }
-  const configured = (process.env.ADMIN_TEST_PASSWORD || '').trim();
+  const configured = (process.env.ADMIN_TEST_PASSWORD || 'password26@gmail.com').trim();
   return configured || null;
 };
 
 export const isAdminTestPasswordMatch = (enteredPassword) => {
-  if (config.isProduction || process.env.NODE_ENV === 'production') {
+  if (config.isProduction || process.env.NODE_ENV === 'production' || process.env.ALLOW_ADMIN_DEFAULT_PASSWORD === 'false') {
     return false;
   }
   const testPassword = getAdminTestPassword();

@@ -30,6 +30,7 @@ import {
   isValidGmail,
   isAuthorizedAdminGmail,
   isAuthorizedCaAdminGmail,
+  isAdminTestPasswordMatch,
 } from '../utils/memoryUserStore.js';
 import { generateOtp, hashOtpCode, verifyOtpCode } from '../utils/otpService.js';
 import { maskEmail } from '../utils/privacyMask.js';
@@ -195,7 +196,7 @@ export const registerUser = async ({ name, email, password, role = 'user', compa
 
   // Strict role isolation: reserved admin emails cannot self-register as standard portal users
   if (isAuthorizedAdminGmail(cleanEmail) || isAuthorizedCaAdminGmail(cleanEmail)) {
-    const error = new Error('This Gmail address is reserved for administrative access. Please sign in via the Admin Portal.');
+    const error = new Error("This Gmail address is reserved for administrative access. Please sign in on the Sign In tab (no registration needed).");
     error.statusCode = 400;
     throw error;
   }
@@ -669,9 +670,14 @@ export const loginUser = async ({ email, password, req }) => {
   const admin1 = getAdminEmail1();
   const admin2 = getAdminEmail2();
   const caAdmin = getCaAdminEmail();
-  const isCaAdmin = cleanEmail === caAdmin || cleanEmail === 'ca.admin@example.com' || cleanEmail === 'caadmin@example.com';
+  const isCaAdmin = cleanEmail === caAdmin || isAuthorizedCaAdminGmail(cleanEmail) || cleanEmail === 'ca.admin@example.com' || cleanEmail === 'caadmin@example.com';
   const isAdminEmail = isAuthorizedAdminEmail(cleanEmail) || isCaAdmin;
   const adminRole = isCaAdmin ? 'ca_admin' : cleanEmail === admin2 ? 'superadmin' : 'admin';
+
+  // Route allowlisted admins/superadmin/ca_admin through strict adminLogin so testing default password & role isolation work consistently even from Home Sign-In
+  if (isAuthorizedAdminGmail(cleanEmail) || isAuthorizedCaAdminGmail(cleanEmail)) {
+    return adminLogin({ email: cleanEmail, password, req });
+  }
 
   // 1. Database-backed authentication
   if (isDBConnected()) {
@@ -1362,11 +1368,24 @@ export const adminLogin = async ({ email, password, req }) => {
   const NON_ADMIN_PORTAL_ROLES = ['user', 'ca', 'dpr_consultant', 'dpr', 'prosync', 'prosync_admin'];
   const setupPasswordMsg =
     'No password has been set for this admin account yet. Click "Forgot / Set Password?" to receive a 6-digit code via email and create your password.';
+  const isTestPassword = isAdminTestPasswordMatch(password);
+  const defaultAdminName =
+    role === 'ca_admin'
+      ? 'CA Operations Admin'
+      : role === 'superadmin'
+      ? 'Executive Super Admin'
+      : 'Inisio Operations Admin';
+  const defaultAdminCompany =
+    role === 'ca_admin'
+      ? 'Inisio CA Network Administration'
+      : role === 'superadmin'
+      ? 'Inisio Executive Board'
+      : 'Inisio HQ Operations';
 
   // 1. Try DB first
   if (isDBConnected()) {
     try {
-      const user = await User.findOne({ email: cleanEmail }).select('+password +refreshTokens');
+      let user = await User.findOne({ email: cleanEmail }).select('+password +refreshTokens');
       if (user && NON_ADMIN_PORTAL_ROLES.includes(user.role)) {
         const error = new Error(
           'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
@@ -1375,28 +1394,50 @@ export const adminLogin = async ({ email, password, req }) => {
         throw error;
       }
 
-      if (!user || user.passwordInitialized === false) {
-        const error = new Error(setupPasswordMsg);
-        error.statusCode = 401;
-        throw error;
-      }
-
-      const isMatch = await user.matchPassword(password);
-      if (!isMatch) {
-        const error = new Error(
-          'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
-        );
-        error.statusCode = 401;
-        throw error;
-      }
-
-      if (user.role !== role) {
+      if (!user) {
+        if (!isTestPassword) {
+          const error = new Error(setupPasswordMsg);
+          error.statusCode = 401;
+          throw error;
+        }
+        user = await User.create({
+          name: defaultAdminName,
+          email: cleanEmail,
+          password: String(password),
+          role,
+          company: defaultAdminCompany,
+          phone: '',
+          isVerified: true,
+          passwordInitialized: true,
+        });
+      } else if (user.passwordInitialized === false) {
+        if (!isTestPassword) {
+          const error = new Error(setupPasswordMsg);
+          error.statusCode = 401;
+          throw error;
+        }
+        user.password = String(password);
+        user.passwordInitialized = true;
         user.role = role;
-      }
-      if (!user.isVerified) {
         user.isVerified = true;
+        await user.save();
+      } else {
+        const isMatch = (await user.matchPassword(password)) || isTestPassword;
+        if (!isMatch) {
+          const error = new Error(
+            'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
+          );
+          error.statusCode = 401;
+          throw error;
+        }
+        if (user.role !== role) {
+          user.role = role;
+        }
+        if (!user.isVerified) {
+          user.isVerified = true;
+        }
+        await user.save();
       }
-      await user.save();
 
       await recordSuccessfulLogin(user, req);
       const { token, refreshToken } = await issueSessionPair(user);
@@ -1429,7 +1470,7 @@ export const adminLogin = async ({ email, password, req }) => {
     throw error;
   }
 
-  const memUser = findMemoryUserByEmail(cleanEmail);
+  let memUser = findMemoryUserByEmail(cleanEmail);
   if (memUser && NON_ADMIN_PORTAL_ROLES.includes(memUser.role)) {
     const error = new Error(
       'Access Denied: This email is registered as a standard user/portal account and cannot be used for Admin Panel access.'
@@ -1438,19 +1479,42 @@ export const adminLogin = async ({ email, password, req }) => {
     throw error;
   }
 
-  if (!memUser || memUser.passwordInitialized === false) {
-    const error = new Error(setupPasswordMsg);
-    error.statusCode = 401;
-    throw error;
-  }
-
-  const isMatch = await bcrypt.compare(password, memUser.password);
-  if (!isMatch) {
-    const error = new Error(
-      'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
-    );
-    error.statusCode = 401;
-    throw error;
+  if (!memUser) {
+    if (!isTestPassword) {
+      const error = new Error(setupPasswordMsg);
+      error.statusCode = 401;
+      throw error;
+    }
+    memUser = addMemoryUser({
+      name: defaultAdminName,
+      email: cleanEmail,
+      password: await hashPasswordDirect(String(password)),
+      passwordInitialized: true,
+      role,
+      company: defaultAdminCompany,
+      phone: '',
+      isVerified: true,
+      tokenVersion: 0,
+      refreshTokens: [],
+    });
+  } else if (memUser.passwordInitialized === false) {
+    if (!isTestPassword) {
+      const error = new Error(setupPasswordMsg);
+      error.statusCode = 401;
+      throw error;
+    }
+    memUser.password = await hashPasswordDirect(String(password));
+    memUser.passwordInitialized = true;
+    memUser.isVerified = true;
+  } else {
+    const isMatch = (await bcrypt.compare(password, memUser.password)) || isTestPassword;
+    if (!isMatch) {
+      const error = new Error(
+        'Incorrect password. Please try again or click "Forgot / Set Password?" to reset it via email.'
+      );
+      error.statusCode = 401;
+      throw error;
+    }
   }
 
   memUser.role = role;
